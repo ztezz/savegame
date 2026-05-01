@@ -27,6 +27,7 @@ const UsersTab: React.FC<UsersTabProps> = ({ users, handleOpenUserModal, handleD
             <thead className="bg-slate-50 border-b border-slate-100 text-[10px] uppercase font-black text-slate-400 tracking-widest">
               <tr>
                 <th className="px-6 py-4">Tên tài khoản</th>
+                <th className="px-6 py-4">Tên đăng nhập</th>
                 <th className="px-6 py-4">Vai trò</th>
                 <th className="px-6 py-4">Trạng thái</th>
                 <th className="px-6 py-4 text-right">Hành động</th>
@@ -40,9 +41,14 @@ const UsersTab: React.FC<UsersTabProps> = ({ users, handleOpenUserModal, handleD
                       {(user.username || user.name || 'U').charAt(0)}
                     </div>
                     <div>
-                      <p className="text-sm font-bold">{user.username || user.name}</p>
+                      <p className="text-sm font-bold">{user.name || user.username}</p>
                       <p className="text-[10px] text-slate-400">{user.email}</p>
                     </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <code className="text-[11px] bg-slate-100 text-slate-700 font-mono font-bold px-2 py-1 rounded border border-slate-200">
+                      {user.username}
+                    </code>
                   </td>
                   <td className="px-6 py-4">
                     <span className={`text-[10px] font-black uppercase px-2 py-1 rounded ${user.role === 'Admin' ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-slate-50 text-slate-500 border border-slate-100'}`}>

@@ -367,7 +367,18 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 }}
                   >
-                    <label className="text-[11px] uppercase tracking-widest font-black text-slate-400 ml-1">Tên người dùng</label>
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] uppercase tracking-widest font-black text-slate-400 ml-1">Tên đăng nhập</label>
+                      {username && (
+                        <motion.span 
+                          className="text-[10px] bg-indigo-100 text-indigo-700 font-bold px-2 py-1 rounded-lg"
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                        >
+                          👤 {username}
+                        </motion.span>
+                      )}
+                    </div>
                     <motion.div 
                       className="relative"
                       whileFocus="focused"
@@ -378,7 +389,7 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
                         required
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        placeholder="Tên người dùng"
+                        placeholder="Nhập tên đăng nhập"
                         className="w-full pl-12 pr-4 py-4 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all placeholder:text-slate-300 font-medium"
                         whileFocus={{ scale: 1.02 }}
                       />

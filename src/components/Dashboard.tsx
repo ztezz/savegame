@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import api, { uploadWithProgress } from '../utils/api';
-import { Search, Plus } from 'lucide-react';
+import { Search, Plus, User, LogOut } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 
 // Sub-components
@@ -21,6 +21,7 @@ const DeleteConfirmModal = lazy(() => import('./dashboard/Modals/DeleteConfirmMo
 const UploadModal = lazy(() => import('./dashboard/Modals/UploadModal'));
 const UserModal = lazy(() => import('./dashboard/Modals/UserModal'));
 const RenameGameModal = lazy(() => import('./dashboard/Modals/RenameGameModal'));
+const ChangePasswordModal = lazy(() => import('./dashboard/Modals/ChangePasswordModal'));
 
 // Types and Constants
 import { GameSave, UserAccount, CATEGORIES } from './dashboard/types';
@@ -30,6 +31,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   const [loading, setLoading] = useState(true);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
   const [newGameName, setNewGameName] = useState('');
   const [newGameCategory, setNewGameCategory] = useState('Other');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -74,6 +76,10 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   const [userRole, setUserRole] = useState<'Admin' | 'User'>('User');
   const [userStatus, setUserStatus] = useState<'Active' | 'Locked'>('Active');
   const [userPassword, setUserPassword] = useState('');
+
+  // Change Password State
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [changePasswordLoading, setChangePasswordLoading] = useState(false);
 
   const handleOpenNew = () => {
     setNewGameName('');
@@ -186,6 +192,31 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
       } catch (err) {
         alert('Xoá thất bại');
       }
+    }
+  };
+
+  const handleChangePassword = async (oldPassword: string, newPassword: string, confirmPassword: string) => {
+    if (newPassword !== confirmPassword) {
+      showToast('Mật khẩu mới và xác nhận không khớp!', 'error');
+      return;
+    }
+    if (newPassword.length < 6) {
+      showToast('Mật khẩu phải có ít nhất 6 ký tự!', 'error');
+      return;
+    }
+
+    setChangePasswordLoading(true);
+    try {
+      await api.post('/auth/change-password', {
+        oldPassword,
+        newPassword
+      });
+      showToast('Đổi mật khẩu thành công!', 'success');
+      setShowChangePasswordModal(false);
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Đổi mật khẩu thất bại', 'error');
+    } finally {
+      setChangePasswordLoading(false);
     }
   };
 
@@ -461,7 +492,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} currentUser={currentUser} onLogout={onLogout} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} currentUser={currentUser} onLogout={onLogout} onOpenChangePassword={() => setShowChangePasswordModal(true)} />
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -520,6 +551,42 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
                 ĐẨY BẢN LƯU MỚI
               </button>
             )}
+            
+            {/* User Profile Button */}
+            <div className="relative">
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors group"
+              >
+                <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                  {currentUser?.username?.charAt(0).toUpperCase() || 'U'}
+                </div>
+                <div className="hidden sm:block text-left">
+                  <p className="text-xs font-bold text-slate-900 leading-tight">{currentUser?.username || 'User'}</p>
+                  <p className="text-[10px] text-slate-500 leading-tight">{currentUser?.role || 'User'}</p>
+                </div>
+              </button>
+              
+              {/* User Menu Dropdown */}
+              {showUserMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
+                  <div className="px-4 py-3 border-b border-slate-100">
+                    <p className="text-sm font-bold text-slate-900">{currentUser?.username || 'User'}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{currentUser?.role || 'User'}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      onLogout();
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Đăng xuất
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </header>
 
@@ -667,6 +734,15 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
           setUserRole={setUserRole}
           userStatus={userStatus}
           setUserStatus={setUserStatus}
+        />
+      </Suspense>
+
+      <Suspense fallback={null}>
+        <ChangePasswordModal
+          show={showChangePasswordModal}
+          onClose={() => setShowChangePasswordModal(false)}
+          onSubmit={handleChangePassword}
+          loading={changePasswordLoading}
         />
       </Suspense>
     </div>
