@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Upload, Download, Trash2, KeyRound, Plus, X, FileCheck, Pencil } from 'lucide-react';
-import api from '../../../utils/api';
+import { Upload, Download, Trash2, KeyRound, Plus, X, FileCheck, Pencil, CheckCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import api, { uploadWithProgress } from '../../../utils/api';
 import EditActivationModal from '../Modals/EditActivationModal';
 
 export interface ActivationFile {
@@ -24,6 +25,8 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ activationFiles, onRefres
   const [note, setNote] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedActivationForEdit, setSelectedActivationForEdit] = useState<ActivationFile | null>(null);
@@ -31,21 +34,35 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ activationFiles, onRefres
   const handleUpload = async () => {
     if (!gameName.trim() || !selectedFile) return;
     setUploading(true);
+    setUploadProgress(0);
+    
     try {
       const formData = new FormData();
       formData.append('activationfile', selectedFile);
       formData.append('gameName', gameName.trim());
       formData.append('note', note.trim());
-      await api.post('/activation/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
+      
+      await uploadWithProgress('/activation/upload', formData, (progress) => {
+        setUploadProgress(progress);
       });
-      setShowUploadModal(false);
-      setGameName('');
-      setNote('');
-      setSelectedFile(null);
-      onRefresh();
+      
+      // Set to 100% and show success
+      setUploadProgress(100);
+      setShowSuccess(true);
+      
+      // Auto close after 2 seconds
+      setTimeout(() => {
+        setShowUploadModal(false);
+        setGameName('');
+        setNote('');
+        setSelectedFile(null);
+        setUploadProgress(null);
+        setShowSuccess(false);
+        onRefresh();
+      }, 2000);
     } catch (err) {
       alert('Upload thất bại!');
+      setUploadProgress(null);
     } finally {
       setUploading(false);
     }
@@ -230,6 +247,63 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ activationFiles, onRefres
                   className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                 />
               </div>
+
+              {/* Progress Bar */}
+              {uploadProgress !== null && (
+                <div className="space-y-2 bg-amber-50 p-4 rounded-xl border border-amber-200">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-bold text-amber-900 uppercase tracking-widest">
+                      {uploadProgress === 100 ? '✓ Hoàn tất' : `Đang tải: ${uploadProgress}%`}
+                    </p>
+                    <span className="text-xs font-mono font-bold text-amber-700">{uploadProgress}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-amber-200 rounded-full overflow-hidden">
+                    <motion.div 
+                      initial={{ width: 0 }}
+                      animate={{ width: `${uploadProgress}%` }}
+                      transition={{ type: 'spring', stiffness: 100 }}
+                      className="h-full bg-gradient-to-r from-amber-500 to-amber-600 rounded-full shadow-lg"
+                    />
+                  </div>
+                  <p className="text-[10px] text-amber-700 text-center flex items-center justify-center gap-1">
+                    {uploadProgress < 50 ? (
+                      <>
+                        <span className="inline-block w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
+                        Đang chuẩn bị...
+                      </>
+                    ) : uploadProgress < 100 ? (
+                      <>
+                        <span className="inline-block w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
+                        Đang gửi lên (chờ tối đa 30 phút)...
+                      </>
+                    ) : (
+                      <>
+                        <span className="inline-block w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                        Xử lý server...
+                      </>
+                    )}
+                  </p>
+                </div>
+              )}
+
+              {/* Success Message */}
+              <AnimatePresence>
+                {showSuccess && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.9 }}
+                    className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3"
+                  >
+                    <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm font-bold text-emerald-900">Tải lên thành công!</p>
+                      <p className="text-xs text-emerald-700">File kích hoạt đã được lưu.</p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <button
                 onClick={handleUpload}
                 disabled={!gameName.trim() || !selectedFile || uploading}

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import api from '../utils/api';
+import api, { uploadWithProgress } from '../utils/api';
 import { Search, Plus } from 'lucide-react';
 import JSZip from 'jszip';
 
@@ -332,16 +332,11 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
 
     try {
       if (!isFolderUpload) setUploadProgress(0);
-      await api.post('/save/upload', formData, {
-        onUploadProgress: (progressEvent) => {
-          const percent = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 100));
-          if (isFolderUpload) {
-            setUploadProgress(50 + Math.floor(percent / 2));
-          } else {
-            setUploadProgress(percent);
-          }
-        }
+      
+      await uploadWithProgress('/save/upload', formData, (progress) => {
+        setUploadProgress(progress);
       });
+      
       // Set to 100% to trigger success notification
       setUploadProgress(100);
       

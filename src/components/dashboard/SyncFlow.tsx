@@ -18,19 +18,41 @@ const SyncFlow: React.FC<SyncFlowProps> = ({ uploadProgress }) => {
       <div className="space-y-4">
          <div className="flex items-center justify-between text-xs font-mono font-bold tracking-tighter">
            <p className="flex items-center gap-2 truncate">
-              <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
-              {uploadProgress ? 'ĐANG TẢI LÊN: STATE_DAT' : 'TRẠNG THÁI: CHỜ'}
+              <span className={`w-2 h-2 rounded-full ${
+                uploadProgress === -1 
+                  ? 'bg-red-500 animate-pulse' 
+                  : 'bg-white animate-pulse'
+              }`}></span>
+              {uploadProgress === -1 
+                ? 'TRẠNG THÁI: STALLED' 
+                : uploadProgress ? (
+                uploadProgress === 100 ? 'TRẠNG THÁI: HOÀN TẤT' : 'ĐANG TẢI LÊN: STATE_DAT'
+              ) : 'TRẠNG THÁI: CHỜ'}
            </p>
-           <p>{uploadProgress || 0}%</p>
+           <p className={`font-black ${uploadProgress === -1 ? 'text-red-300' : ''}`}>
+             {uploadProgress === -1 ? 'ERR' : uploadProgress || 0}%
+           </p>
          </div>
          <div className="w-full h-3 bg-indigo-900/40 rounded-full overflow-hidden border border-white/10 p-0.5">
            <div 
-             className="h-full bg-white rounded-full transition-all duration-500 shadow-[0_0_12px_#fff]"
-             style={{ width: `${uploadProgress || 0}%` }}
+             className={`h-full rounded-full transition-all duration-500 ${
+               uploadProgress === -1
+                 ? 'bg-red-500 shadow-[0_0_12px_#ef4444] animate-pulse'
+                 : uploadProgress === 100 
+                 ? 'bg-emerald-400 shadow-emerald-400/50' 
+                 : 'bg-white shadow-white/50'
+             }`}
+             style={{ width: `${Math.max(uploadProgress === -1 ? 0 : uploadProgress || 0, 0)}%` }}
            ></div>
          </div>
          <p className="text-[10px] leading-relaxed opacity-70 italic font-medium">
-           Đang thực thi chiến lược tải lên vào bộ nhớ cục bộ... Độ trễ: 24ms
+           {uploadProgress === -1 
+             ? '❌ Upload stalled! Kiểm tra kết nối mạng'
+             : uploadProgress && uploadProgress < 100 
+             ? '⏳ Đang thực thi... Vui lòng chờ đợi, đừng đóng tab'
+             : uploadProgress === 100
+             ? '✓ Tải lên thành công, xử lý server...'
+             : 'Độ trễ: 24ms'}
          </p>
       </div>
     </div>

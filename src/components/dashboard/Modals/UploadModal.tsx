@@ -143,11 +143,26 @@ const UploadModal: React.FC<UploadModalProps> = ({
                         initial={{ width: 0 }}
                         animate={{ width: `${uploadProgress}%` }}
                         transition={{ type: 'spring', stiffness: 100 }}
-                        className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full shadow-lg"
+                        className="h-full rounded-full shadow-lg bg-gradient-to-r from-indigo-500 to-indigo-600"
                       />
                     </div>
-                    <p className="text-[10px] text-slate-500 text-center">
-                      {uploadProgress < 50 ? 'Đang chuẩn bị tệp...' : uploadProgress < 100 ? 'Đang gửi lên máy chủ...' : 'Xử lý trên máy chủ...'}
+                    <p className="text-[10px] text-center flex items-center justify-center gap-1 text-slate-600">
+                      {uploadProgress < 50 ? (
+                        <>
+                          <span className="inline-block w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse"></span>
+                          Đang chuẩn bị tệp...
+                        </>
+                      ) : uploadProgress < 100 ? (
+                        <>
+                          <span className="inline-block w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse"></span>
+                          Đang gửi lên máy chủ (tối đa 30 phút)...
+                        </>
+                      ) : (
+                        <>
+                          <span className="inline-block w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+                          Xử lý trên máy chủ...
+                        </>
+                      )}
                     </p>
                   </div>
                 )}
