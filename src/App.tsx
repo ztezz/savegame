@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
+import ToastContainer from './components/ToastContainer';
+import { ToastProvider } from './context/ToastContext';
 
 export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
@@ -19,12 +21,15 @@ export default function App() {
   };
 
   return (
-    <div className="font-sans text-slate-900 bg-white min-h-screen">
-      {token ? (
-        <Dashboard onLogout={handleLogout} currentUser={user} />
-      ) : (
-        <Auth onLogin={handleLogin} />
-      )}
-    </div>
+    <ToastProvider>
+      <div className="font-sans text-slate-900 bg-white min-h-screen">
+        {token ? (
+          <Dashboard onLogout={handleLogout} currentUser={user} />
+        ) : (
+          <Auth onLogin={handleLogin} />
+        )}
+        <ToastContainer />
+      </div>
+    </ToastProvider>
   );
 }

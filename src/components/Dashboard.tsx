@@ -2,6 +2,7 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import api, { uploadWithProgress } from '../utils/api';
 import { Search, Plus } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 
 // Sub-components
 import Sidebar from './dashboard/Sidebar';
@@ -114,9 +115,9 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
     try {
       await api.put(`/game/${selectedGameForRename.id}`, { gameName, category });
       fetchGames();
-      alert('Cập nhật tên game thành công');
+      showToast('✅ Cập nhật tên game thành công', 'success', 3000);
     } catch (err) {
-      alert('Cập nhật thất bại');
+      showToast('❌ Cập nhật thất bại', 'error', 3000);
     }
   };
 
@@ -365,8 +366,9 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
       setSelectedFiles([]);
       setNewGameName('');
       fetchGames();
+      showToast('✅ Tải lên bản lưu thành công!', 'success', 3000);
     } catch (err) {
-      alert('Tải lên thất bại');
+      showToast('❌ Tải lên thất bại', 'error', 3000);
       console.error(err);
     } finally {
       setUploadProgress(null);
@@ -419,7 +421,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
       if (showHistoryModal && selectedGameForHistory) {
         handleOpenHistory(selectedGameForHistory);
       }
-      alert('✅ Xoá bản lưu thành công!');
+      showToast('✅ Xoá bản lưu thành công!', 'success', 3000);
     } catch (err: any) {
       console.error('❌ Delete error:', err);
       const errorMsg = err.response?.data?.error || err.message || 'Xoá thất bại';
@@ -427,16 +429,18 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
       console.error('Status:', statusCode, 'Message:', errorMsg);
       
       if (statusCode === 401) {
-        alert('❌ Lỗi xác thực: Vui lòng đăng nhập lại');
+        showToast('❌ Lỗi xác thực: Vui lòng đăng nhập lại', 'error', 3000);
       } else if (statusCode === 403) {
-        alert('❌ Bạn không có quyền xoá bản lưu này');
+        showToast('❌ Bạn không có quyền xoá bản lưu này', 'error', 3000);
       } else if (statusCode === 404) {
-        alert('❌ Bản lưu không tồn tại');
+        showToast('❌ Bản lưu không tồn tại', 'error', 3000);
       } else {
-        alert(`❌ ${errorMsg}`);
+        showToast(`❌ ${errorMsg}`, 'error', 3000);
       }
     }
   };
+
+  const { showToast } = useToast();
 
   const formatSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
