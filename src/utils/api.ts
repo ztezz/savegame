@@ -31,6 +31,12 @@ export const uploadWithProgress = async (
     let lastProgressTime = Date.now();
     let lastProgressLoaded = 0;
     
+    // Calculate file size from FormData
+    let totalFileSize = 0;
+    formData.forEach((value) => {
+      if (value instanceof File) totalFileSize += value.size;
+    });
+    
     console.log('🚀 Upload starting:', fullUrl);
     console.log('📦 FormData entries:');
     formData.forEach((value, key) => {
@@ -49,21 +55,37 @@ export const uploadWithProgress = async (
     const simulateTimer = setTimeout(simulateProgress, 2000);
 
     // Track upload progress
+    let zeroProgressCount = 0;
     xhr.upload.addEventListener('progress', (e) => {
       hasRealProgress = true;
       clearTimeout(simulateTimer);
       const currentTime = Date.now();
-      const timeDiff = Math.max(currentTime - lastProgressTime, 1); // At least 1ms to avoid division by zero
+      const timeDiff = Math.max(currentTime - lastProgressTime, 1);
       const loadedDiff = e.loaded - lastProgressLoaded;
       lastProgressTime = currentTime;
       lastProgressLoaded = e.loaded;
+      
+      // Detect stalled within progress (no new data)
+      if (loadedDiff === 0) {
+        zeroProgressCount++;
+        if (zeroProgressCount > 10) {
+          console.error('❌ Upload stalled - no new data for 10+ progress events, aborting');
+          xhr.abort();
+          reject(new Error('Upload stalled - no new data received'));
+          return;
+        }
+      } else {
+        zeroProgressCount = 0;
+      }
       
       if (e.lengthComputable) {
         const percentComplete = Math.round((e.loaded / e.total) * 100);
         const sizeInMB = (e.loaded / (1024 * 1024)).toFixed(1);
         const totalMB = (e.total / (1024 * 1024)).toFixed(1);
-        const speedKBps = (loadedDiff / 1024 / (timeDiff / 1000)).toFixed(0);
-        const etaSeconds = timeDiff > 0 ? Math.round((e.total - e.loaded) / (loadedDiff / (timeDiff / 1000)) / 1000) : 0;
+        const speedBytesPerSec = loadedDiff > 0 ? loadedDiff / (timeDiff / 1000) : 0;
+        const speedKBps = (speedBytesPerSec / 1024).toFixed(0);
+        const remaining = e.total - e.loaded;
+        const etaSeconds = speedBytesPerSec > 0 ? Math.round(remaining / speedBytesPerSec) : 0;
         
         console.log(`📤 Upload: ${percentComplete}% (${sizeInMB}/${totalMB} MB) @ ${speedKBps}KB/s ETA: ${etaSeconds}s`);
         onProgress(Math.min(percentComplete, 99));
@@ -79,18 +101,20 @@ export const uploadWithProgress = async (
       lastProgressTime = Date.now();
     });
 
-    // Detect stalled upload (no progress for 60 seconds)
-    conlearTimeout(stallTimeout);
-      cst stallTimeout = setTimeout(() => {
+    // Dynamic stall timeout: longer for larger files
+    // At least 180 seconds (3 min), plus 1 second per 5MB
+    const stallTimeoutMs = Math.max(180000, (totalFileSize / (5 * 1024 * 1024)) * 1000);
+    const stallTimeout = setTimeout(() => {
       if (!hasRealProgress) {
-        console.error('❌ Upload stalled - no progress for 60 seconds, aborting');
+        console.error(`❌ Upload stalled - no progress for ${stallTimeoutMs / 1000} seconds, aborting`);
         xhr.abort();
         reject(new Error('Upload stalled - no data received from server'));
       }
-    }, 60000);
+    }, stallTimeoutMs);
 
     xhr.addEventListener('load', () => {
       clearTimeout(simulateTimer);
+      clearTimeout(stallTimeout);
       console.log(`✅ Response received: ${xhr.status}`);
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
@@ -108,6 +132,7 @@ export const uploadWithProgress = async (
     });
 
     xhr.addEventListener('error', (err) => {
+      clearTimeout(simulateTimer);
       clearTimeout(stallTimeout);
       console.error('❌ Upload error:', err);
       reject(new Error('Upload failed - Network error'));
@@ -122,23 +147,122 @@ export const uploadWithProgress = async (
 
     xhr.addEventListener('timeout', () => {
       clearTimeout(simulateTimer);
-      clearTimeout(stallTimeoutt', () => {
-      clearTimeout(simulateTimer);
+      clearTimeout(stallTimeout);
       console.error('❌ Upload timeout - Request took too long');
-      reject(new Error('Upload timeout - Request took too long (>30 min)'));
+      reject(new Error('Upload timeout - Request took too long'));
     });
 
+    // Dynamic timeout: longer for larger files
+    // Base 30 minutes + 1 minute per 100MB
+    const timeoutMs = 30 * 60 * 1000 + (totalFileSize / (100 * 1024 * 1024)) * 60 * 1000;
+    
     xhr.open('POST', fullUrl);
-    xhr.timeout = 1800000; // 30 minutes timeout
+    xhr.timeout = timeoutMs;
     
     if (token) {
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       console.log('🔐 Token set');
     }
 
-    console.log('📮 Sending upload... (timeout: 30 min)');
+    console.log(`📮 Sending upload... (timeout: ${timeoutMs / 1000 / 60}min for ${(totalFileSize / (1024 * 1024)).toFixed(1)}MB)`);
     xhr.send(formData);
   });
+};
+
+export const uploadWithChunks = async (
+  file: File,
+  metadata: { gameName: string; note?: string },
+  onProgress: (progress: number) => void
+): Promise<any> => {
+  const baseURL = import.meta.env.VITE_API_URL 
+    ? `${import.meta.env.VITE_API_URL}/api` 
+    : '/api';
+  const token = localStorage.getItem('token');
+  
+  if (!token) {
+    throw new Error('No authentication token');
+  }
+
+  const CHUNK_SIZE = 20 * 1024 * 1024; // 20MB chunks
+  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+  
+  console.log(`🚀 Chunked upload starting: ${file.name} (${(file.size / (1024 * 1024)).toFixed(1)}MB, ${totalChunks} chunks)`);
+
+  try {
+    // Step 1: Initialize upload session
+    const initRes = await fetch(`${baseURL}/activation/upload/init`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        fileName: file.name,
+        fileSize: file.size,
+        gameName: metadata.gameName,
+        note: metadata.note || ''
+      })
+    });
+
+    if (!initRes.ok) {
+      throw new Error(`Failed to initialize upload: ${initRes.statusText}`);
+    }
+
+    const { sessionId } = await initRes.json();
+    console.log(`📝 Upload session created: ${sessionId}`);
+
+    // Step 2: Upload chunks
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE, file.size);
+      const chunk = file.slice(start, end);
+      
+      console.log(`📤 Uploading chunk ${i + 1}/${totalChunks} (${(chunk.size / (1024 * 1024)).toFixed(1)}MB)...`);
+
+      const chunkRes = await fetch(
+        `${baseURL}/activation/upload/chunk?sessionId=${sessionId}&chunkIndex=${i}&totalChunks=${totalChunks}`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/octet-stream'
+          },
+          body: chunk // Send raw binary data
+        }
+      );
+
+      if (!chunkRes.ok) {
+        throw new Error(`Failed to upload chunk ${i + 1}: ${chunkRes.statusText}`);
+      }
+
+      const progress = Math.round(((i + 1) / totalChunks) * 100);
+      onProgress(Math.min(progress, 99));
+      console.log(`✅ Chunk ${i + 1}/${totalChunks} uploaded (${progress}%)`);
+    }
+
+    // Step 3: Finalize upload
+    console.log(`🔗 Finalizing upload...`);
+    const finalizeRes = await fetch(`${baseURL}/activation/upload/finalize`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ sessionId })
+    });
+
+    if (!finalizeRes.ok) {
+      throw new Error(`Failed to finalize upload: ${finalizeRes.statusText}`);
+    }
+
+    const result = await finalizeRes.json();
+    onProgress(100);
+    console.log(`✅ Upload completed successfully!`, result);
+    return result;
+  } catch (err) {
+    console.error('❌ Upload failed:', err);
+    throw err;
+  }
 };
 
 export default api;

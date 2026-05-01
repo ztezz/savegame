@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Upload, Download, Trash2, KeyRound, Plus, X, FileCheck, Pencil, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import api, { uploadWithProgress } from '../../../utils/api';
+import api, { uploadWithChunks } from '../../../utils/api';
 import EditActivationModal from '../Modals/EditActivationModal';
 
 export interface ActivationFile {
@@ -37,14 +37,13 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ activationFiles, onRefres
     setUploadProgress(0);
     
     try {
-      const formData = new FormData();
-      formData.append('activationfile', selectedFile);
-      formData.append('gameName', gameName.trim());
-      formData.append('note', note.trim());
-      
-      await uploadWithProgress('/activation/upload', formData, (progress) => {
-        setUploadProgress(progress);
-      });
+      await uploadWithChunks(
+        selectedFile,
+        { gameName: gameName.trim(), note: note.trim() },
+        (progress) => {
+          setUploadProgress(progress);
+        }
+      );
       
       // Set to 100% and show success
       setUploadProgress(100);
@@ -61,7 +60,7 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ activationFiles, onRefres
         onRefresh();
       }, 2000);
     } catch (err) {
-      alert('Upload thất bại!');
+      alert('Upload thất bại! ' + (err instanceof Error ? err.message : String(err)));
       setUploadProgress(null);
     } finally {
       setUploading(false);
