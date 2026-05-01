@@ -12,6 +12,21 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Error interceptor for better logging
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    console.error('❌ API Error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      message: error.message,
+      url: error.config?.url,
+      method: error.config?.method?.toUpperCase()
+    });
+    return Promise.reject(error);
+  }
+);
+
 // Upload with real progress tracking using XMLHttpRequest
 export const uploadWithProgress = async (
   url: string,
@@ -263,6 +278,70 @@ export const uploadWithChunks = async (
     console.error('❌ Upload failed:', err);
     throw err;
   }
+};
+
+export const downloadWithProgress = async (
+  url: string,
+  fileName: string,
+  onProgress: (progress: number) => void
+): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const token = localStorage.getItem('token');
+    const baseURL = import.meta.env.VITE_API_URL 
+      ? `${import.meta.env.VITE_API_URL}/api` 
+      : '/api';
+    
+    const fullUrl = `${baseURL}${url}`;
+    console.log(`📥 Download starting: ${fullUrl}`);
+
+    xhr.addEventListener('loadstart', () => {
+      console.log('📥 Download started');
+      onProgress(0);
+    });
+
+    xhr.addEventListener('progress', (event) => {
+      if (event.lengthComputable) {
+        const percentComplete = Math.round((event.loaded / event.total) * 100);
+        onProgress(percentComplete);
+        console.log(`📥 Downloaded: ${percentComplete}% (${(event.loaded / (1024 * 1024)).toFixed(1)}MB / ${(event.total / (1024 * 1024)).toFixed(1)}MB)`);
+      }
+    });
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status === 200) {
+        const blob = xhr.response;
+        const blobUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(blobUrl);
+        onProgress(100);
+        console.log(`✅ Download completed: ${fileName}`);
+        resolve();
+      } else {
+        reject(new Error(`HTTP ${xhr.status}`));
+      }
+    });
+
+    xhr.addEventListener('error', () => {
+      reject(new Error('Network error'));
+    });
+
+    xhr.addEventListener('abort', () => {
+      reject(new Error('Download aborted'));
+    });
+
+    xhr.responseType = 'blob';
+    xhr.open('GET', fullUrl);
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+    xhr.send();
+  });
 };
 
 export default api;

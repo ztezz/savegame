@@ -103,9 +103,22 @@ const LibraryTab: React.FC<LibraryTabProps> = ({
                            <Download className="w-4 h-4" />
                          </button>
                          <button 
-                           onClick={() => game.latestSave && handleDelete(game.latestSave.id)}
-                           className="p-2 text-slate-400 hover:text-red-500 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all"
-                           title="Delete"
+                           onClick={() => {
+                             if (!game.latestSave) {
+                               alert('❌ Game này chưa có bản lưu. Vui lòng upload một file trước khi xoá.');
+                               console.warn('⚠️ No latestSave found for game', game.gameName);
+                               return;
+                             }
+                             console.log('🗑️ Delete button clicked, saveId:', game.latestSave.id);
+                             handleDelete(game.latestSave.id);
+                           }}
+                           disabled={!game.latestSave}
+                           className={`p-2 rounded-lg border border-transparent transition-all ${
+                             game.latestSave 
+                               ? 'text-slate-400 hover:text-red-500 hover:bg-white hover:border-slate-200 cursor-pointer' 
+                               : 'text-slate-200 cursor-not-allowed opacity-50'
+                           }`}
+                           title={game.latestSave ? "Delete save file" : "Không có bản lưu để xoá"}
                          >
                            <Trash2 className="w-4 h-4" />
                          </button>

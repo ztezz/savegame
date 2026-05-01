@@ -1,27 +1,25 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import api, { uploadWithProgress } from '../utils/api';
 import { Search, Plus } from 'lucide-react';
-import JSZip from 'jszip';
 
 // Sub-components
 import Sidebar from './dashboard/Sidebar';
-import OverviewTab from './dashboard/Tabs/OverviewTab';
-import LibraryTab from './dashboard/Tabs/LibraryTab';
-import DevicesTab from './dashboard/Tabs/DevicesTab';
-import UsersTab from './dashboard/Tabs/UsersTab';
-import SettingsTab from './dashboard/Tabs/SettingsTab';
-import ActivationTab from './dashboard/Tabs/ActivationTab';
-import { DownloadApp } from './DownloadApp';
+const OverviewTab = lazy(() => import('./dashboard/Tabs/OverviewTab'));
+const LibraryTab = lazy(() => import('./dashboard/Tabs/LibraryTab'));
+const DevicesTab = lazy(() => import('./dashboard/Tabs/DevicesTab'));
+const UsersTab = lazy(() => import('./dashboard/Tabs/UsersTab'));
+const SettingsTab = lazy(() => import('./dashboard/Tabs/SettingsTab'));
+const ActivationTab = lazy(() => import('./dashboard/Tabs/ActivationTab'));
+const DownloadApp = lazy(() => import('./DownloadApp').then(m => ({ default: m.DownloadApp })));
 import { ActivationFile } from './dashboard/Tabs/ActivationTab';
 
-
 // Modals
-import HistoryModal from './dashboard/Modals/HistoryModal';
-import DeleteConfirmModal from './dashboard/Modals/DeleteConfirmModal';
-import UploadModal from './dashboard/Modals/UploadModal';
-import UserModal from './dashboard/Modals/UserModal';
-import RenameGameModal from './dashboard/Modals/RenameGameModal';
+const HistoryModal = lazy(() => import('./dashboard/Modals/HistoryModal'));
+const DeleteConfirmModal = lazy(() => import('./dashboard/Modals/DeleteConfirmModal'));
+const UploadModal = lazy(() => import('./dashboard/Modals/UploadModal'));
+const UserModal = lazy(() => import('./dashboard/Modals/UserModal'));
+const RenameGameModal = lazy(() => import('./dashboard/Modals/RenameGameModal'));
 
 // Types and Constants
 import { GameSave, UserAccount, CATEGORIES } from './dashboard/types';
@@ -83,12 +81,14 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   };
 
   const handleOpenUpdate = (game: GameSave) => {
+    console.log('📤 handleOpenUpdate clicked', game.gameName);
     setNewGameName(game.gameName);
     setNewGameCategory(game.category);
     setShowUploadModal(true);
   };
 
   const handleOpenHistory = async (game: GameSave) => {
+    console.log('🕐 handleOpenHistory clicked', game.gameName);
     setSelectedGameForHistory(game);
     setHistoryLoading(true);
     setShowHistoryModal(true);
@@ -104,6 +104,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   };
 
   const handleOpenRenameModal = (game: GameSave) => {
+    console.log('✏️ handleOpenRenameModal clicked', game.gameName);
     setSelectedGameForRename(game);
     setShowRenameModal(true);
   };
@@ -189,19 +190,33 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
 
   const fetchGames = async () => {
     try {
+      console.log('📋 Fetching games list...');
       const res = await api.get('/save/list');
+      console.log('📋 Games fetched:', res.data.length, 'games');
+      res.data.forEach((g: any) => {
+        console.log(`  - ${g.gameName}: ${g.latestSave ? `save #${g.latestSave.id}` : 'no save'}`);
+      });
       setGames(res.data);
+      console.log('✅ Games state updated');
     } catch (err) {
-      console.error(err);
+      console.error('❌ Error fetching games:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
+    // Only fetch games immediately for quick dashboard load
     fetchGames();
-    fetchSyncLogs();
-    fetchActivationFiles();
+  }, []);
+
+  useEffect(() => {
+    // Lazy load sync logs and activation after main content renders
+    const timer = setTimeout(() => {
+      fetchSyncLogs();
+      fetchActivationFiles();
+    }, 800);
+    return () => clearTimeout(timer);
   }, []);
 
   const fetchActivationFiles = async () => {
@@ -314,6 +329,8 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
     const formData = new FormData();
     if (isFolderUpload) {
       setUploadProgress(1);
+      // Lazy load JSZip only when needed
+      const { default: JSZip } = await import('jszip');
       const zip = new JSZip();
       selectedFiles.forEach((file: any) => {
         const path = file.webkitRelativePath || file.name;
@@ -357,6 +374,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   };
 
   const handleDownload = async (saveId: number) => {
+    console.log('📥 handleDownload clicked, saveId:', saveId);
     try {
       const response = await api.get(`/save/download/${saveId}`, { responseType: 'blob' });
       const contentDisposition = response.headers['content-disposition'];
@@ -382,6 +400,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   };
 
   const handleDelete = async (saveId: number) => {
+    console.log('🗑️ handleDelete clicked, saveId:', saveId);
     setDeleteId(saveId);
     setShowDeleteConfirm(true);
   };
@@ -389,15 +408,33 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   const confirmDelete = async () => {
     if (!deleteId) return;
     try {
-      await api.delete(`/save/${deleteId}`);
+      console.log(`🗑️ Deleting save ${deleteId}...`);
+      const response = await api.delete(`/save/${deleteId}`);
+      console.log('✅ Delete response:', response.data);
+      console.log('🔄 Calling fetchGames to refresh list...');
       setShowDeleteConfirm(false);
       setDeleteId(null);
-      fetchGames();
+      await fetchGames();
+      console.log('✅ fetchGames completed');
       if (showHistoryModal && selectedGameForHistory) {
         handleOpenHistory(selectedGameForHistory);
       }
-    } catch (err) {
-      alert('Xoá thất bại');
+      alert('✅ Xoá bản lưu thành công!');
+    } catch (err: any) {
+      console.error('❌ Delete error:', err);
+      const errorMsg = err.response?.data?.error || err.message || 'Xoá thất bại';
+      const statusCode = err.response?.status;
+      console.error('Status:', statusCode, 'Message:', errorMsg);
+      
+      if (statusCode === 401) {
+        alert('❌ Lỗi xác thực: Vui lòng đăng nhập lại');
+      } else if (statusCode === 403) {
+        alert('❌ Bạn không có quyền xoá bản lưu này');
+      } else if (statusCode === 404) {
+        alert('❌ Bản lưu không tồn tại');
+      } else {
+        alert(`❌ ${errorMsg}`);
+      }
     }
   };
 
@@ -410,6 +447,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   };
 
   const filteredGames = games
+    .filter(g => g.latestSave) // ✅ Only show games WITH save files
     .filter(g => (filterCategory === 'All' || g.category === filterCategory))
     .filter(g => g.gameName.toLowerCase().includes(searchTerm.toLowerCase()))
     .sort((a, b) => {
@@ -483,124 +521,150 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
 
         <div className="flex-1 p-8 grid grid-cols-12 gap-8 overflow-y-auto">
           {activeTab === 'dashboard' && (
-            <OverviewTab 
-              games={games} 
-              setActiveTab={setActiveTab} 
-              handleOpenHistory={handleOpenHistory} 
-              handleDownload={handleDownload} 
-            />
+            <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải...</div>}>
+              <OverviewTab 
+                games={filteredGames}
+                setActiveTab={setActiveTab} 
+                handleOpenHistory={handleOpenHistory} 
+                handleDownload={handleDownload} 
+              />
+            </Suspense>
           )}
 
           {activeTab === 'library' && (
-            <LibraryTab 
-              loading={loading}
-              games={games}
-              filteredGames={filteredGames}
-              handleOpenUpdate={handleOpenUpdate}
-              handleOpenHistory={handleOpenHistory}
-              handleDownload={handleDownload}
-              handleDelete={handleDelete}
-              handleOpenRenameModal={handleOpenRenameModal}
-              formatSize={formatSize}
-            />
+            <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải thư viện...</div>}>
+              <LibraryTab 
+                loading={loading}
+                games={games}
+                filteredGames={filteredGames}
+                handleOpenUpdate={handleOpenUpdate}
+                handleOpenHistory={handleOpenHistory}
+                handleDownload={handleDownload}
+                handleDelete={handleDelete}
+                handleOpenRenameModal={handleOpenRenameModal}
+                formatSize={formatSize}
+              />
+            </Suspense>
           )}
 
-          {activeTab === 'devices' && <DevicesTab />}
+          {activeTab === 'devices' && (
+            <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải...</div>}>
+              <DevicesTab />
+            </Suspense>
+          )}
 
           {activeTab === 'settings' && (
-            <SettingsTab 
-              autoSyncEnabled={autoSyncEnabled}
-              setAutoSyncEnabled={setAutoSyncEnabled}
-              directoryHandle={directoryHandle}
-              handleSelectDirectory={handleSelectDirectory}
-              syncInterval={syncInterval}
-              setSyncInterval={setSyncInterval}
-            />
+            <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải cài đặt...</div>}>
+              <SettingsTab 
+                autoSyncEnabled={autoSyncEnabled}
+                setAutoSyncEnabled={setAutoSyncEnabled}
+                directoryHandle={directoryHandle}
+                handleSelectDirectory={handleSelectDirectory}
+                syncInterval={syncInterval}
+                setSyncInterval={setSyncInterval}
+              />
+            </Suspense>
           )}
 
           {activeTab === 'users' && (
-            <UsersTab 
-              users={users}
-              handleOpenUserModal={handleOpenUserModal}
-              handleDeleteUser={handleDeleteUser}
-            />
+            <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải người dùng...</div>}>
+              <UsersTab 
+                users={users}
+                handleOpenUserModal={handleOpenUserModal}
+                handleDeleteUser={handleDeleteUser}
+              />
+            </Suspense>
           )}
 
           {activeTab === 'activation' && (
-            <ActivationTab
-              activationFiles={activationFiles}
-              onRefresh={fetchActivationFiles}
-              formatSize={formatSize}
-            />
+            <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải activation...</div>}>
+              <ActivationTab
+                activationFiles={activationFiles}
+                onRefresh={fetchActivationFiles}
+                formatSize={formatSize}
+              />
+            </Suspense>
           )}
 
           {activeTab === 'downloads' && (
-            <div className="col-span-12">
-              <DownloadApp />
-            </div>
+            <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải...</div>}>
+              <div className="col-span-12">
+                <DownloadApp />
+              </div>
+            </Suspense>
           )}
 
         </div>
       </main>
 
-      <DeleteConfirmModal 
-        show={showDeleteConfirm}
-        onClose={() => setShowDeleteConfirm(false)}
-        onConfirm={confirmDelete}
-      />
+      <Suspense fallback={null}>
+        <DeleteConfirmModal 
+          show={showDeleteConfirm}
+          onClose={() => setShowDeleteConfirm(false)}
+          onConfirm={confirmDelete}
+        />
+      </Suspense>
 
-      <HistoryModal 
-        show={showHistoryModal}
-        onClose={() => setShowHistoryModal(false)}
-        selectedGame={selectedGameForHistory}
-        history={gameHistory}
-        loading={historyLoading}
-        onDownload={handleDownload}
-        onDelete={handleDelete}
-        formatSize={formatSize}
-      />
+      <Suspense fallback={null}>
+        <HistoryModal 
+          show={showHistoryModal}
+          onClose={() => setShowHistoryModal(false)}
+          selectedGame={selectedGameForHistory}
+          history={gameHistory}
+          loading={historyLoading}
+          onDownload={handleDownload}
+          onDelete={handleDelete}
+          formatSize={formatSize}
+        />
+      </Suspense>
 
-      <UploadModal 
-        show={showUploadModal}
-        onClose={() => setShowUploadModal(false)}
-        onSubmit={handleUpload}
-        newGameName={newGameName}
-        setNewGameName={setNewGameName}
-        newGameCategory={newGameCategory}
-        setNewGameCategory={setNewGameCategory}
-        isFolderUpload={isFolderUpload}
-        setIsFolderUpload={setIsFolderUpload}
-        selectedFile={selectedFile}
-        setSelectedFile={setSelectedFile}
-        selectedFiles={selectedFiles}
-        setSelectedFiles={setSelectedFiles}
-        uploadProgress={uploadProgress}
-      />
+      <Suspense fallback={null}>
+        <UploadModal 
+          show={showUploadModal}
+          onClose={() => setShowUploadModal(false)}
+          onSubmit={handleUpload}
+          newGameName={newGameName}
+          setNewGameName={setNewGameName}
+          newGameCategory={newGameCategory}
+          setNewGameCategory={setNewGameCategory}
+          isFolderUpload={isFolderUpload}
+          setIsFolderUpload={setIsFolderUpload}
+          selectedFile={selectedFile}
+          setSelectedFile={setSelectedFile}
+          selectedFiles={selectedFiles}
+          setSelectedFiles={setSelectedFiles}
+          uploadProgress={uploadProgress}
+        />
+      </Suspense>
 
-      <RenameGameModal
-        show={showRenameModal}
-        onClose={() => setShowRenameModal(false)}
-        onSubmit={handleSaveRename}
-        initialGameName={selectedGameForRename?.gameName || ''}
-        initialCategory={selectedGameForRename?.category || 'Uncategorized'}
-      />
+      <Suspense fallback={null}>
+        <RenameGameModal
+          show={showRenameModal}
+          onClose={() => setShowRenameModal(false)}
+          onSubmit={handleSaveRename}
+          initialGameName={selectedGameForRename?.gameName || ''}
+          initialCategory={selectedGameForRename?.category || 'Uncategorized'}
+        />
+      </Suspense>
 
-      <UserModal 
-        show={showUserModal}
-        onClose={() => setShowUserModal(false)}
-        onSubmit={handleSaveUser}
-        editingUser={editingUser}
-        userName={userName}
-        setUserName={setUserName}
-        userEmail={userEmail}
-        setUserEmail={setUserEmail}
-        userPassword={userPassword}
-        setUserPassword={setUserPassword}
-        userRole={userRole}
-        setUserRole={setUserRole}
-        userStatus={userStatus}
-        setUserStatus={setUserStatus}
-      />
+      <Suspense fallback={null}>
+        <UserModal 
+          show={showUserModal}
+          onClose={() => setShowUserModal(false)}
+          onSubmit={handleSaveUser}
+          editingUser={editingUser}
+          userName={userName}
+          setUserName={setUserName}
+          userEmail={userEmail}
+          setUserEmail={setUserEmail}
+          userPassword={userPassword}
+          setUserPassword={setUserPassword}
+          userRole={userRole}
+          setUserRole={setUserRole}
+          userStatus={userStatus}
+          setUserStatus={setUserStatus}
+        />
+      </Suspense>
     </div>
   );
 }

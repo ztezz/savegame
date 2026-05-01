@@ -16,18 +16,37 @@ export default defineConfig(({ mode }) => {
       },
     },
     server: {
-      port: 3000,
-      host: '0.0.0.0',
+      port: 5173,
+      host: 'localhost',
       proxy: {
         '/api': {
           target: env.VITE_API_URL || 'https://api-savegame.datdaihcm.pro',
           changeOrigin: true,
         },
       },
-      hmr: process.env.DISABLE_HMR !== 'true',
+      hmr: {
+        protocol: 'ws',
+        host: 'localhost',
+        port: 5173,
+      },
     },
     build: {
       outDir: 'dist',
+      minify: 'terser',
+      terserOptions: {
+        compress: {
+          drop_console: true,
+        },
+      },
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            vendor: ['react', 'react-dom', 'react-router-dom'],
+          },
+        },
+      },
+      sourcemap: false,
+      chunkSizeWarningLimit: 1000,
     },
   };
 });
