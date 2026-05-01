@@ -52,16 +52,20 @@ export const uploadWithProgress = async (
     xhr.upload.addEventListener('progress', (e) => {
       hasRealProgress = true;
       clearTimeout(simulateTimer);
-      lastProgressTime = Date.now();
+      const currentTime = Date.now();
+      const timeDiff = Math.max(currentTime - lastProgressTime, 1); // At least 1ms to avoid division by zero
+      const loadedDiff = e.loaded - lastProgressLoaded;
+      lastProgressTime = currentTime;
       lastProgressLoaded = e.loaded;
       
       if (e.lengthComputable) {
         const percentComplete = Math.round((e.loaded / e.total) * 100);
         const sizeInMB = (e.loaded / (1024 * 1024)).toFixed(1);
         const totalMB = (e.total / (1024 * 1024)).toFixed(1);
-        const speedKBps = ((e.loaded - lastProgressLoaded) / 1024 / ((Date.now() - lastProgressTime + 1) / 1000)).toFixed(0);
+        const speedKBps = (loadedDiff / 1024 / (timeDiff / 1000)).toFixed(0);
+        const etaSeconds = timeDiff > 0 ? Math.round((e.total - e.loaded) / (loadedDiff / (timeDiff / 1000)) / 1000) : 0;
         
-        console.log(`📤 Upload: ${percentComplete}% (${sizeInMB}/${totalMB} MB) @ ${speedKBps}KB/s`);
+        console.log(`📤 Upload: ${percentComplete}% (${sizeInMB}/${totalMB} MB) @ ${speedKBps}KB/s ETA: ${etaSeconds}s`);
         onProgress(Math.min(percentComplete, 99));
       } else {
         const sizeInMB = (e.loaded / (1024 * 1024)).toFixed(1);
@@ -72,7 +76,18 @@ export const uploadWithProgress = async (
 
     xhr.addEventListener('loadstart', () => {
       console.log('⏱️ Upload started');
+      lastProgressTime = Date.now();
     });
+
+    // Detect stalled upload (no progress for 60 seconds)
+    conlearTimeout(stallTimeout);
+      cst stallTimeout = setTimeout(() => {
+      if (!hasRealProgress) {
+        console.error('❌ Upload stalled - no progress for 60 seconds, aborting');
+        xhr.abort();
+        reject(new Error('Upload stalled - no data received from server'));
+      }
+    }, 60000);
 
     xhr.addEventListener('load', () => {
       clearTimeout(simulateTimer);
@@ -93,18 +108,21 @@ export const uploadWithProgress = async (
     });
 
     xhr.addEventListener('error', (err) => {
-      clearTimeout(simulateTimer);
+      clearTimeout(stallTimeout);
       console.error('❌ Upload error:', err);
       reject(new Error('Upload failed - Network error'));
     });
 
     xhr.addEventListener('abort', () => {
       clearTimeout(simulateTimer);
+      clearTimeout(stallTimeout);
       console.error('❌ Upload aborted');
       reject(new Error('Upload aborted'));
     });
 
     xhr.addEventListener('timeout', () => {
+      clearTimeout(simulateTimer);
+      clearTimeout(stallTimeoutt', () => {
       clearTimeout(simulateTimer);
       console.error('❌ Upload timeout - Request took too long');
       reject(new Error('Upload timeout - Request took too long (>30 min)'));
