@@ -446,9 +446,28 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('Download error:', err);
-      alert('Tải xuống thất bại');
+      showToast('✅ Tải xuống thành công!', 'success');
+    } catch (err: any) {
+      console.error('❌ Download error:', {
+        status: err.response?.status,
+        data: err.response?.data,
+        message: err.message
+      });
+      
+      let errorMessage = '❌ Tải xuống thất bại';
+      if (err.response?.status === 404) {
+        errorMessage = '❌ Bản lưu không tồn tại. Có thể nó đã bị xóa hoặc không được tìm thấy.';
+        console.log('📋 Save may have been deleted. Refreshing list in 2 seconds...');
+        setTimeout(() => fetchGames(), 2000);
+      } else if (err.response?.status === 403) {
+        errorMessage = '❌ Bạn không có quyền truy cập bản lưu này.';
+      } else if (err.response?.status === 401) {
+        errorMessage = '❌ Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.';
+      } else if (err.response?.data?.error) {
+        errorMessage = `❌ ${err.response.data.error}`;
+      }
+      
+      showToast(errorMessage, 'error');
     }
   };
 
