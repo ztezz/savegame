@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Upload, FolderClosed } from 'lucide-react';
+import { Upload, FolderClosed, CheckCircle } from 'lucide-react';
 import { CATEGORIES } from '../types';
 
 interface UploadModalProps {
@@ -30,6 +30,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
   selectedFiles, setSelectedFiles,
   uploadProgress
 }) => {
+  const [showSuccess, setShowSuccess] = React.useState(false);
   return (
     <AnimatePresence>
       {show && (
@@ -46,7 +47,17 @@ const UploadModal: React.FC<UploadModalProps> = ({
                 <button onClick={onClose} className="text-slate-400 hover:text-slate-900 font-bold text-xs uppercase">Đóng</button>
               </div>
               
-              <form onSubmit={onSubmit} className="space-y-6">
+              <form onSubmit={(e) => {
+                onSubmit(e);
+                // Show success message when upload completes
+                if (uploadProgress === 100) {
+                  setShowSuccess(true);
+                  setTimeout(() => {
+                    setShowSuccess(false);
+                    onClose();
+                  }, 2000);
+                }
+              }} className="space-y-6">
                 <div className="space-y-2">
                   <label className="text-[11px] font-black uppercase text-slate-400 tracking-widest ml-1">Định danh Game mục tiêu</label>
                   <input 
@@ -117,6 +128,47 @@ const UploadModal: React.FC<UploadModalProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* Progress Bar */}
+                {uploadProgress !== null && (
+                  <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold text-slate-700 uppercase tracking-widest">
+                        {uploadProgress === 100 ? '✓ Tải lên hoàn tất' : `Đang tải lên: ${uploadProgress}%`}
+                      </p>
+                      <span className="text-xs font-mono font-bold text-indigo-600">{uploadProgress}%</span>
+                    </div>
+                    <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                      <motion.div 
+                        initial={{ width: 0 }}
+                        animate={{ width: `${uploadProgress}%` }}
+                        transition={{ type: 'spring', stiffness: 100 }}
+                        className="h-full bg-gradient-to-r from-indigo-500 to-indigo-600 rounded-full shadow-lg"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-500 text-center">
+                      {uploadProgress < 50 ? 'Đang chuẩn bị tệp...' : uploadProgress < 100 ? 'Đang gửi lên máy chủ...' : 'Xử lý trên máy chủ...'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Success Message */}
+                <AnimatePresence>
+                  {showSuccess && (
+                    <motion.div
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-center gap-3"
+                    >
+                      <CheckCircle className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm font-bold text-emerald-900">Tải lên thành công!</p>
+                        <p className="text-xs text-emerald-700">Bản lưu của bạn đã được lưu trữ an toàn.</p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 <div className="pt-4 flex gap-3">
                   <button 

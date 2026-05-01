@@ -342,6 +342,12 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
           }
         }
       });
+      // Set to 100% to trigger success notification
+      setUploadProgress(100);
+      
+      // Wait for success notification to show
+      await new Promise(resolve => setTimeout(resolve, 2100));
+      
       setShowUploadModal(false);
       setSelectedFile(null);
       setSelectedFiles([]);
@@ -349,6 +355,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
       fetchGames();
     } catch (err) {
       alert('Tải lên thất bại');
+      console.error(err);
     } finally {
       setUploadProgress(null);
     }
