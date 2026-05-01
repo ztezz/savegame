@@ -8,8 +8,10 @@ interface UserModalProps {
   onClose: () => void;
   onSubmit: (e: React.FormEvent) => void;
   editingUser: UserAccount | null;
-  userName: string;
-  setUserName: (name: string) => void;
+  userUsername: string;
+  setUserUsername: (username: string) => void;
+  userDisplayName: string;
+  setUserDisplayName: (name: string) => void;
   userEmail: string;
   setUserEmail: (email: string) => void;
   userPassword: string;
@@ -22,7 +24,8 @@ interface UserModalProps {
 
 const UserModal: React.FC<UserModalProps> = ({
   show, onClose, onSubmit, editingUser,
-  userName, setUserName,
+  userUsername, setUserUsername,
+  userDisplayName, setUserDisplayName,
   userEmail, setUserEmail,
   userPassword, setUserPassword,
   userRole, setUserRole,
@@ -48,12 +51,24 @@ const UserModal: React.FC<UserModalProps> = ({
               
               <form onSubmit={onSubmit} className="space-y-6">
                 <div className="space-y-2">
+                  <label className="text-[11px] font-black uppercase text-slate-400 tracking-widest ml-1">Tên đăng nhập {editingUser && '(không thể thay đổi)'}</label>
+                  <input 
+                    type="text"
+                    required
+                    value={userUsername}
+                    onChange={(e) => !editingUser && setUserUsername(e.target.value)}
+                    disabled={!!editingUser}
+                    placeholder="username"
+                    className="w-full px-4 py-4 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all font-bold text-sm tracking-tight disabled:bg-slate-50"
+                  />
+                </div>
+                <div className="space-y-2">
                   <label className="text-[11px] font-black uppercase text-slate-400 tracking-widest ml-1">Tên hiển thị</label>
                   <input 
                     type="text"
                     required
-                    value={userName}
-                    onChange={(e) => setUserName(e.target.value)}
+                    value={userDisplayName}
+                    onChange={(e) => setUserDisplayName(e.target.value)}
                     placeholder="Jane Doe"
                     className="w-full px-4 py-4 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all font-bold text-sm tracking-tight"
                   />

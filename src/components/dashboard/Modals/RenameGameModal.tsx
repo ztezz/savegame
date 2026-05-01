@@ -1,20 +1,22 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { CATEGORIES } from '../types';
 
 interface RenameGameModalProps {
   show: boolean;
   onClose: () => void;
-  onSubmit: (gameName: string, category: string) => Promise<void>;
+  onSubmit: (gameName: string, category: string, filePath: string) => Promise<void>;
   initialGameName: string;
   initialCategory: string;
+  initialFilePath: string;
+  categories: string[];
 }
 
 const RenameGameModal: React.FC<RenameGameModalProps> = ({
-  show, onClose, onSubmit, initialGameName, initialCategory
+  show, onClose, onSubmit, initialGameName, initialCategory, initialFilePath, categories
 }) => {
   const [gameName, setGameName] = useState(initialGameName);
   const [category, setCategory] = useState(initialCategory);
+  const [filePath, setFilePath] = useState(initialFilePath);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -23,7 +25,7 @@ const RenameGameModal: React.FC<RenameGameModalProps> = ({
 
     setLoading(true);
     try {
-      await onSubmit(gameName.trim(), category);
+      await onSubmit(gameName.trim(), category, filePath.trim());
       onClose();
     } finally {
       setLoading(false);
@@ -34,8 +36,9 @@ const RenameGameModal: React.FC<RenameGameModalProps> = ({
     if (show) {
       setGameName(initialGameName);
       setCategory(initialCategory);
+      setFilePath(initialFilePath);
     }
-  }, [show, initialGameName, initialCategory]);
+  }, [show, initialGameName, initialCategory, initialFilePath]);
 
   return (
     <AnimatePresence>
@@ -74,8 +77,19 @@ const RenameGameModal: React.FC<RenameGameModalProps> = ({
                     onChange={(e) => setCategory(e.target.value)}
                     className="w-full px-4 py-4 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all font-bold text-sm tracking-tight"
                   >
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[11px] font-black uppercase text-slate-400 tracking-widest ml-1">Đường dẫn File Save (Tùy chọn)</label>
+                  <input 
+                    type="text"
+                    value={filePath}
+                    onChange={(e) => setFilePath(e.target.value)}
+                    placeholder="vd: C:\\Users\\Documents\\SaveGames\\game.save"
+                    className="w-full px-4 py-4 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all font-bold text-sm tracking-tight"
+                  />
                 </div>
 
                 <div className="flex gap-3 pt-4">

@@ -6,9 +6,10 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
+type TabType = 'dashboard' | 'library' | 'devices' | 'settings' | 'users' | 'activation' | 'downloads' | 'category';
 interface SidebarProps {
-  activeTab: string;
-  setActiveTab: (tab: any) => void;
+  activeTab: TabType;
+  setActiveTab: (tab: TabType) => void;
   currentUser: any;
   onLogout: () => void;
   onOpenChangePassword?: () => void;
@@ -40,6 +41,13 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, currentUser,
         >
           <Library className="w-4 h-4" />
           Thư viện Game
+        </button>
+        <button 
+          onClick={() => setActiveTab('category')}
+          className={`w-full flex items-center gap-3 p-3 rounded-xl text-sm font-semibold transition-all ${activeTab === 'category' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+        >
+          <Library className="w-4 h-4" />
+          Quản lý thể loại
         </button>
         <button 
           onClick={() => setActiveTab('devices')}

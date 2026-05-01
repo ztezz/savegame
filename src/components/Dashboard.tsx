@@ -3,6 +3,7 @@ import React, { useState, useEffect, lazy, Suspense } from 'react';
 import api, { uploadWithProgress } from '../utils/api';
 import { Search, Plus, User, LogOut } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import { useDynamicCategories } from '../hooks/useDynamicCategories';
 
 // Sub-components
 import Sidebar from './dashboard/Sidebar';
@@ -13,6 +14,7 @@ const UsersTab = lazy(() => import('./dashboard/Tabs/UsersTab'));
 const SettingsTab = lazy(() => import('./dashboard/Tabs/SettingsTab'));
 const ActivationTab = lazy(() => import('./dashboard/Tabs/ActivationTab'));
 const DownloadApp = lazy(() => import('./DownloadApp').then(m => ({ default: m.DownloadApp })));
+const CategoryTab = lazy(() => import('./dashboard/Tabs/CategoryTab'));
 import { ActivationFile } from './dashboard/Tabs/ActivationTab';
 
 // Modals
@@ -24,9 +26,10 @@ const RenameGameModal = lazy(() => import('./dashboard/Modals/RenameGameModal'))
 const ChangePasswordModal = lazy(() => import('./dashboard/Modals/ChangePasswordModal'));
 
 // Types and Constants
-import { GameSave, UserAccount, CATEGORIES } from './dashboard/types';
+import { GameSave, UserAccount } from './dashboard/types';
 
 export default function Dashboard({ onLogout, currentUser }: { onLogout: () => void, currentUser: any }) {
+  const { categories, fetchCategories: refetchCategories } = useDynamicCategories();
   const [games, setGames] = useState<GameSave[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
@@ -34,13 +37,14 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [newGameName, setNewGameName] = useState('');
   const [newGameCategory, setNewGameCategory] = useState('Other');
+  const [newGameFilePath, setNewGameFilePath] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isFolderUpload, setIsFolderUpload] = useState(false);
   const [filterCategory, setFilterCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'category'>('name');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'library' | 'devices' | 'settings' | 'users' | 'activation' | 'downloads'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'library' | 'devices' | 'settings' | 'users' | 'activation' | 'downloads' | 'category'>('dashboard');
   
   // Activation Files State
   const [activationFiles, setActivationFiles] = useState<ActivationFile[]>([]);
@@ -71,7 +75,8 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   const [users, setUsers] = useState<UserAccount[]>([]);
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserAccount | null>(null);
-  const [userName, setUserName] = useState('');
+  const [userUsername, setUserUsername] = useState('');
+  const [userDisplayName, setUserDisplayName] = useState('');
   const [userEmail, setUserEmail] = useState('');
   const [userRole, setUserRole] = useState<'Admin' | 'User'>('User');
   const [userStatus, setUserStatus] = useState<'Active' | 'Locked'>('Active');
@@ -84,6 +89,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   const handleOpenNew = () => {
     setNewGameName('');
     setNewGameCategory('Other');
+    setNewGameFilePath('');
     setShowUploadModal(true);
   };
 
@@ -91,6 +97,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
     console.log('📤 handleOpenUpdate clicked', game.gameName);
     setNewGameName(game.gameName);
     setNewGameCategory(game.category);
+    setNewGameFilePath(game.latestSave?.filePath || '');
     setShowUploadModal(true);
   };
 
@@ -116,12 +123,19 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
     setShowRenameModal(true);
   };
 
-  const handleSaveRename = async (gameName: string, category: string) => {
-    if (!selectedGameForRename) return;
+  const handleSaveRename = async (gameName: string, category: string, filePath: string) => {
+    if (!selectedGameForRename || !selectedGameForRename.latestSave) return;
     try {
+      // Update game name and category
       await api.put(`/game/${selectedGameForRename.id}`, { gameName, category });
+      
+      // Update save file path if provided
+      if (filePath) {
+        await api.put(`/save/${selectedGameForRename.latestSave.id}`, { filePath });
+      }
+      
       fetchGames();
-      showToast('✅ Cập nhật tên game thành công', 'success', 3000);
+      showToast('✅ Cập nhật thành công', 'success', 3000);
     } catch (err) {
       showToast('❌ Cập nhật thất bại', 'error', 3000);
     }
@@ -130,13 +144,15 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   const handleOpenUserModal = (user?: UserAccount) => {
     if (user) {
       setEditingUser(user);
-      setUserName(user.username || user.name || '');
+      setUserUsername(user.username);
+      setUserDisplayName(user.display_name || user.name || user.username);
       setUserEmail(user.email);
       setUserRole(user.role);
       setUserStatus(user.status);
     } else {
       setEditingUser(null);
-      setUserName('');
+      setUserUsername('');
+      setUserDisplayName('');
       setUserEmail('');
       setUserRole('User');
       setUserStatus('Active');
@@ -165,7 +181,8 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
     e.preventDefault();
     try {
       const userData = {
-        username: userName,
+        username: editingUser ? editingUser.username : userUsername,
+        display_name: userDisplayName || userUsername,
         email: userEmail,
         role: userRole,
         status: userStatus,
@@ -378,6 +395,9 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
     formData.append('gameName', newGameName);
     formData.append('category', newGameCategory);
     formData.append('deviceName', 'Web Dashboard');
+    if (newGameFilePath) {
+      formData.append('customFilePath', newGameFilePath);
+    }
 
     try {
       if (!isFolderUpload) setUploadProgress(0);
@@ -492,7 +512,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} currentUser={currentUser} onLogout={onLogout} onOpenChangePassword={() => setShowChangePasswordModal(true)} />
+      <Sidebar activeTab={activeTab} setActiveTab={(tab) => setActiveTab(tab as any)} currentUser={currentUser} onLogout={onLogout} onOpenChangePassword={() => setShowChangePasswordModal(true)} />
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -517,7 +537,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
                   onChange={(e) => setFilterCategory(e.target.value)}
                 >
                   <option value="All">Tất cả thể loại</option>
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <select 
                   className="text-xs bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none"
@@ -618,6 +638,12 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
             </Suspense>
           )}
 
+          {activeTab === 'category' && (
+            <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải thể loại...</div>}>
+              <CategoryTab onCategoryUpdated={refetchCategories} />
+            </Suspense>
+          )}
+
           {activeTab === 'devices' && (
             <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải...</div>}>
               <DevicesTab />
@@ -698,6 +724,8 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
           setNewGameName={setNewGameName}
           newGameCategory={newGameCategory}
           setNewGameCategory={setNewGameCategory}
+          newGameFilePath={newGameFilePath}
+          setNewGameFilePath={setNewGameFilePath}
           isFolderUpload={isFolderUpload}
           setIsFolderUpload={setIsFolderUpload}
           selectedFile={selectedFile}
@@ -705,6 +733,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
           selectedFiles={selectedFiles}
           setSelectedFiles={setSelectedFiles}
           uploadProgress={uploadProgress}
+          categories={categories}
         />
       </Suspense>
 
@@ -715,6 +744,8 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
           onSubmit={handleSaveRename}
           initialGameName={selectedGameForRename?.gameName || ''}
           initialCategory={selectedGameForRename?.category || 'Uncategorized'}
+          initialFilePath={selectedGameForRename?.latestSave?.filePath || ''}
+          categories={categories}
         />
       </Suspense>
 
@@ -724,8 +755,10 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
           onClose={() => setShowUserModal(false)}
           onSubmit={handleSaveUser}
           editingUser={editingUser}
-          userName={userName}
-          setUserName={setUserName}
+          userUsername={userUsername}
+          setUserUsername={setUserUsername}
+          userDisplayName={userDisplayName}
+          setUserDisplayName={setUserDisplayName}
           userEmail={userEmail}
           setUserEmail={setUserEmail}
           userPassword={userPassword}

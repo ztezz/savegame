@@ -1,7 +1,9 @@
 
-import React from 'react';
-import { Gamepad2, Clock, Upload, Download, Trash2, Pencil } from 'lucide-react';
+import React, { useState } from 'react';
+import { Gamepad2, Clock, Upload, Download, Trash2, Pencil, Copy } from 'lucide-react';
 import { GameSave } from '../types';
+import { copyToClipboard } from '../../../utils/clipboard';
+import { useToast } from '../../../context/ToastContext';
 
 interface LibraryTabProps {
   loading: boolean;
@@ -19,6 +21,20 @@ const LibraryTab: React.FC<LibraryTabProps> = ({
   loading, games, filteredGames, 
   handleOpenUpdate, handleOpenHistory, handleDownload, handleDelete, handleOpenRenameModal, formatSize
 }) => {
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+  const { showToast } = useToast();
+
+  const handleCopyPath = async (filePath: string, gameId: number) => {
+    const success = await copyToClipboard(filePath);
+    if (success) {
+      setCopiedId(gameId);
+      showToast(`✅ Đã copy: ${filePath}`, 'success');
+      setTimeout(() => setCopiedId(null), 2000);
+    } else {
+      showToast('❌ Sao chép thất bại', 'error');
+    }
+  };
+
   return (
     <div className="col-span-12 space-y-8">
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm flex flex-col">
@@ -94,6 +110,20 @@ const LibraryTab: React.FC<LibraryTabProps> = ({
                            title="Chỉnh sửa tên game"
                          >
                            <Pencil className="w-4 h-4" />
+                         </button>
+                         <button 
+                           onClick={() => game.latestSave && handleCopyPath(game.latestSave.filePath, game.id)}
+                           disabled={!game.latestSave}
+                           className={`p-2 rounded-lg border transition-all ${
+                             copiedId === game.id
+                               ? 'text-green-600 bg-green-50 border-green-200'
+                               : game.latestSave
+                               ? 'text-slate-400 hover:text-green-600 hover:bg-white border-transparent hover:border-slate-200'
+                               : 'text-slate-200 opacity-50 cursor-not-allowed'
+                           }`}
+                           title={game.latestSave ? 'Copy file path' : 'No file available'}
+                         >
+                           <Copy className="w-4 h-4" />
                          </button>
                          <button 
                            onClick={() => game.latestSave && handleDownload(game.latestSave.id)}

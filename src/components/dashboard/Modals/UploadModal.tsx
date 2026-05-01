@@ -2,7 +2,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Upload, FolderClosed, CheckCircle } from 'lucide-react';
-import { CATEGORIES } from '../types';
 
 interface UploadModalProps {
   show: boolean;
@@ -12,6 +11,8 @@ interface UploadModalProps {
   setNewGameName: (name: string) => void;
   newGameCategory: string;
   setNewGameCategory: (category: string) => void;
+  newGameFilePath: string;
+  setNewGameFilePath: (path: string) => void;
   isFolderUpload: boolean;
   setIsFolderUpload: (isFolder: boolean) => void;
   selectedFile: File | null;
@@ -19,16 +20,19 @@ interface UploadModalProps {
   selectedFiles: File[];
   setSelectedFiles: (files: File[]) => void;
   uploadProgress: number | null;
+  categories: string[];
 }
 
 const UploadModal: React.FC<UploadModalProps> = ({
   show, onClose, onSubmit, 
   newGameName, setNewGameName, 
   newGameCategory, setNewGameCategory,
+  newGameFilePath, setNewGameFilePath,
   isFolderUpload, setIsFolderUpload,
   selectedFile, setSelectedFile,
   selectedFiles, setSelectedFiles,
-  uploadProgress
+  uploadProgress,
+  categories
 }) => {
   const [showSuccess, setShowSuccess] = React.useState(false);
   return (
@@ -76,8 +80,18 @@ const UploadModal: React.FC<UploadModalProps> = ({
                     onChange={(e) => setNewGameCategory(e.target.value)}
                     className="w-full px-4 py-4 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all font-bold text-sm tracking-tight"
                   >
-                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-black uppercase text-slate-400 tracking-widest ml-1">Đường dẫn File Save (Tùy chọn)</label>
+                  <input 
+                    type="text"
+                    value={newGameFilePath}
+                    onChange={(e) => setNewGameFilePath(e.target.value)}
+                    placeholder="vd: C:\\Users\\Documents\\SaveGames\\game.save"
+                    className="w-full px-4 py-4 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all font-bold text-sm tracking-tight"
+                  />
                 </div>
                 <div className="space-y-4">
                   <div className="flex gap-2">

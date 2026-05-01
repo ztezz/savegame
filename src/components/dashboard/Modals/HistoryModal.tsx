@@ -1,8 +1,10 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Clock, Download, Trash2 } from 'lucide-react';
+import { Clock, Download, Trash2, Copy } from 'lucide-react';
 import { GameSave } from '../types';
+import { copyToClipboard } from '../../../utils/clipboard';
+import { useToast } from '../../../context/ToastContext';
 
 interface HistoryModalProps {
   show: boolean;
@@ -18,6 +20,20 @@ interface HistoryModalProps {
 const HistoryModal: React.FC<HistoryModalProps> = ({ 
   show, onClose, selectedGame, history, loading, onDownload, onDelete, formatSize 
 }) => {
+  const [copiedId, setCopiedId] = useState<number | null>(null);
+  const { showToast } = useToast();
+
+  const handleCopyPath = async (filePath: string, versionId: number) => {
+    const success = await copyToClipboard(filePath);
+    if (success) {
+      setCopiedId(versionId);
+      showToast(`✅ Đã copy: ${filePath}`, 'success');
+      setTimeout(() => setCopiedId(null), 2000);
+    } else {
+      showToast('❌ Sao chép thất bại', 'error');
+    }
+  };
+
   return (
     <AnimatePresence>
       {show && (
@@ -66,6 +82,17 @@ const HistoryModal: React.FC<HistoryModalProps> = ({
                           </td>
                           <td className="px-6 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
+                              <button 
+                                onClick={() => handleCopyPath(v.filePath, v.id)}
+                                className={`p-2 rounded-lg border transition-all ${
+                                  copiedId === v.id
+                                    ? 'text-green-600 bg-green-50 border-green-200'
+                                    : 'text-slate-400 hover:text-green-600 hover:bg-white border-transparent hover:border-slate-200'
+                                }`}
+                                title="Copy file path"
+                              >
+                                <Copy className="w-4 h-4" />
+                              </button>
                               <button 
                                 onClick={() => onDownload(v.id)}
                                 className="p-2 text-indigo-600 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition-all shadow-sm"

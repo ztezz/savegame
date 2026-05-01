@@ -17,6 +17,7 @@ export interface GameSave {
     version: number;
     fileSize: number;
     createdAt: string;
+    filePath: string;
   };
   versions: number;
 }
@@ -24,6 +25,7 @@ export interface GameSave {
 export interface UserAccount {
   id: number;
   username: string;
+  display_name?: string;
   name?: string;
   email: string;
   role: 'Admin' | 'User';
