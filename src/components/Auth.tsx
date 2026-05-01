@@ -116,7 +116,7 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
               transition={{ duration: 2, repeat: Infinity }}
               className="w-2 h-2 bg-emerald-500 rounded-full shadow-[0_0_8px_#10b981]"
             />
-            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">System Online</span>
+            <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Hệ thống trực tuyến</span>
           </motion.div>
         </div>
 
@@ -378,7 +378,7 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
                         required
                         value={username}
                         onChange={(e) => setUsername(e.target.value)}
-                        placeholder="nhap_ten_cua_ban"
+                        placeholder="Tên người dùng"
                         className="w-full pl-12 pr-4 py-4 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all placeholder:text-slate-300 font-medium"
                         whileFocus={{ scale: 1.02 }}
                       />
@@ -391,7 +391,7 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
                   >
-                    <label className="text-[11px] uppercase tracking-widest font-black text-slate-400 ml-1">Giao thức truy cập (Mật khẩu)</label>
+                    <label className="text-[11px] uppercase tracking-widest font-black text-slate-400 ml-1">Mật khẩu</label>
                     <motion.div 
                       className="relative"
                       whileFocus="focused"
@@ -428,7 +428,7 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                   >
-                    <span className="tracking-tight">{loading ? 'Đang xử lý...' : isLogin ? 'Truy cập Hệ thống' : 'Cấp tài khoản'}</span>
+                    <span className="tracking-tight">{loading ? 'Đang xử lý...' : isLogin ? 'Đăng nhập' : 'Đăng ký tài khoản'}</span>
                     {!loading && <motion.div animate={{ x: [0, 3, 0] }} transition={{ duration: 1.5, repeat: Infinity }}>
                       <ArrowRight className="w-4 h-4" />
                     </motion.div>}
@@ -442,7 +442,7 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
                   transition={{ delay: 0.4 }}
                 >
                   <p className="text-xs text-slate-400 text-center">
-                    {isLogin ? "Chưa có tài khoản truy cập?" : "Đã là thành viên của cụm hệ thống?"}
+                    {isLogin ? "Chưa có tài khoản?" : "Đã là thành viên của cụm hệ thống?"}
                   </p>
                   <motion.button 
                     onClick={() => setIsLogin(!isLogin)}
@@ -450,7 +450,7 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
                     whileHover={{ scale: 1.02, backgroundColor: '#f8fafc' }}
                     whileTap={{ scale: 0.98 }}
                   >
-                    {isLogin ? 'Yêu cầu Đăng ký' : 'Quay lại Đăng nhập'}
+                    {isLogin ? 'Đăng ký tài khoản mới' : 'Quay lại Đăng nhập'}
                   </motion.button>
                 </motion.div>
               </motion.div>
