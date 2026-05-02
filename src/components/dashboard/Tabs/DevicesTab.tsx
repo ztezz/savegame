@@ -20,6 +20,8 @@ interface DeviceKey {
   note: string | null;
   created_at: string;
   last_used_at: string | null;
+  last_seen: string | null;
+  is_online: boolean;
 }
 
 const DevicesTab: React.FC = () => {
@@ -324,6 +326,7 @@ const DevicesTab: React.FC = () => {
             <thead className="bg-slate-50 text-[10px] text-slate-400 uppercase tracking-widest">
               <tr className="border-b border-slate-100">
                 <th className="px-6 py-3 font-black">Thiết bị</th>
+                <th className="px-4 py-3 font-black">Trạng thái</th>
                 <th className="px-6 py-3 font-black">Key (ẩn)</th>
                 <th className="px-6 py-3 font-black">Ghi chú</th>
                 <th className="px-6 py-3 font-black">Đăng ký lúc</th>
@@ -335,6 +338,19 @@ const DevicesTab: React.FC = () => {
               {keys.map(k => (
                 <tr key={k.id} className="hover:bg-slate-50/70 transition-colors">
                   <td className="px-6 py-4 font-bold text-slate-800">{k.device_name}</td>
+                  <td className="px-4 py-4">
+                    {k.is_online ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-black uppercase tracking-widest">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        Online
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                        {k.last_seen ? 'Offline' : 'Chưa kết nối'}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-6 py-4 font-mono text-xs text-slate-500">{k.key_preview}</td>
                   <td className="px-6 py-4 text-slate-500 text-xs">{k.note || '—'}</td>
                   <td className="px-6 py-4 text-xs text-slate-400">{fmt(k.created_at)}</td>
