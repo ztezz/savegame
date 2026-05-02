@@ -1,8 +1,17 @@
 ﻿
 import React, { useEffect, useState } from 'react';
-import { Laptop, Plus, Trash2, Copy, Check, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { Laptop, Plus, Trash2, Copy, Check, RefreshCw, ChevronDown, ChevronUp, Download, Monitor, AlertTriangle } from 'lucide-react';
 import api from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
+
+interface AgentInfo {
+  version: string;
+  available: boolean;
+  filename: string;
+}
+
+const AGENT_DOWNLOAD_URL = `${import.meta.env.VITE_API_URL || ''}/api/agent/download`;
+const AGENT_INFO_URL = `${import.meta.env.VITE_API_URL || ''}/api/agent/info`;
 
 interface DeviceKey {
   id: number;
@@ -17,6 +26,7 @@ const DevicesTab: React.FC = () => {
   const { showToast } = useToast();
   const [keys, setKeys] = useState<DeviceKey[]>([]);
   const [loading, setLoading] = useState(true);
+  const [agentInfo, setAgentInfo] = useState<AgentInfo | null>(null);
 
   // Import form (agent-generated key — primary flow)
   const [importDevice, setImportDevice] = useState('');
@@ -43,7 +53,14 @@ const DevicesTab: React.FC = () => {
     }
   };
 
-  useEffect(() => { fetchKeys(); }, []);
+  useEffect(() => {
+    fetchKeys();
+    // Fetch agent download info (no auth required)
+    fetch(AGENT_INFO_URL)
+      .then(r => r.ok ? r.json() : null)
+      .then((data: AgentInfo | null) => { if (data) setAgentInfo(data); })
+      .catch(() => {});
+  }, []);
 
   const handleImport = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -107,16 +124,62 @@ const DevicesTab: React.FC = () => {
   return (
     <div className="col-span-12 space-y-6">
 
+      {/* Download card */}
+      <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 text-white shadow-lg">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-start gap-4">
+            <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center shrink-0">
+              <Monitor className="w-6 h-6 text-sky-300" />
+            </div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-0.5">Phần mềm Windows</p>
+              <h3 className="font-black text-white text-base leading-tight">CloudSave Agent</h3>
+              <p className="text-xs text-slate-400 mt-1">
+                Chạy ngầm trên Windows — tự động đồng bộ game save lên server.
+              </p>
+              <div className="flex items-center gap-3 mt-2 flex-wrap">
+                <span className="text-[10px] font-mono bg-white/10 px-2 py-0.5 rounded text-slate-300">
+                  v{agentInfo?.version ?? '...'}
+                </span>
+                <span className="text-[10px] text-slate-400 flex items-center gap-1">
+                  <Monitor className="w-3 h-3" /> Windows x64 · .exe
+                </span>
+                {agentInfo && !agentInfo.available && (
+                  <span className="text-[10px] text-amber-400 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" /> Chưa có file trên server
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <a
+            href={AGENT_DOWNLOAD_URL}
+            download="restore_agent.exe"
+            className={
+              `flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-black uppercase tracking-widest transition-all shrink-0 ` +
+              (agentInfo?.available === false
+                ? 'bg-slate-600 text-slate-400 cursor-not-allowed pointer-events-none'
+                : 'bg-sky-500 hover:bg-sky-400 text-white shadow-md hover:shadow-sky-500/30')
+            }
+            onClick={e => { if (agentInfo?.available === false) e.preventDefault(); }}
+          >
+            <Download className="w-4 h-4" />
+            Tải về
+          </a>
+        </div>
+      </div>
+
       {/* Hướng dẫn setup */}
       <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-5">
         <h3 className="font-black text-indigo-800 text-sm tracking-tight mb-2 flex items-center gap-2">
           <Laptop className="w-4 h-4" /> CÁCH CÀI AGENT TRÊN MÁY WINDOWS
         </h3>
         <ol className="text-xs text-indigo-700 space-y-1 list-decimal list-inside">
-          <li>Tải agent về máy, tạo file <code className="bg-indigo-100 px-1 rounded">.env</code> chỉ cần 1 dòng: <code className="bg-indigo-100 px-1 rounded">API_BASE_URL=http://địa-chỉ-server:3001</code></li>
-          <li>Chạy agent lần đầu — nó tự sinh key và in ra màn hình console</li>
-          <li>Copy <strong>Tên thiết bị</strong> và <strong>API Key</strong> từ console, dán vào form bên dưới</li>
-          <li>Bấm <strong>Đăng ký</strong> — xong, agent tự kết nối</li>
+          <li>Tải agent ở trên về máy, giải nén (nếu cần) rồi chạy <code className="bg-indigo-100 px-1 rounded">restore_agent.exe</code></li>
+          <li>Lần đầu chạy: agent tự mở trình duyệt — đăng nhập và nhấn <strong>Xác nhận</strong> để liên kết thiết bị</li>
+          <li>Sau khi liên kết thành công, agent tự kết nối và chạy ngầm, đồng bộ save tự động</li>
+          <li>Thiết bị sẽ hiện trong danh sách bên dưới sau khi đăng ký</li>
         </ol>
       </div>
 
