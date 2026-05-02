@@ -13,7 +13,6 @@ const DevicesTab = lazy(() => import('./dashboard/Tabs/DevicesTab'));
 const UsersTab = lazy(() => import('./dashboard/Tabs/UsersTab'));
 const SettingsTab = lazy(() => import('./dashboard/Tabs/SettingsTab'));
 const ActivationTab = lazy(() => import('./dashboard/Tabs/ActivationTab'));
-const DownloadApp = lazy(() => import('./DownloadApp').then(m => ({ default: m.DownloadApp })));
 const CategoryTab = lazy(() => import('./dashboard/Tabs/CategoryTab'));
 import { ActivationFile } from './dashboard/Tabs/ActivationTab';
 
@@ -26,7 +25,7 @@ const RenameGameModal = lazy(() => import('./dashboard/Modals/RenameGameModal'))
 const ChangePasswordModal = lazy(() => import('./dashboard/Modals/ChangePasswordModal'));
 
 // Types and Constants
-import { GameSave, UserAccount } from './dashboard/types';
+import { GameSave, UserAccount, RestoreStatusItem } from './dashboard/types';
 
 export default function Dashboard({ onLogout, currentUser }: { onLogout: () => void, currentUser: any }) {
   const { categories, fetchCategories: refetchCategories } = useDynamicCategories();
@@ -44,7 +43,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   const [filterCategory, setFilterCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'category'>('name');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'library' | 'devices' | 'settings' | 'users' | 'activation' | 'downloads' | 'category'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'library' | 'devices' | 'settings' | 'users' | 'activation' | 'category'>('dashboard');
   
   // Activation Files State
   const [activationFiles, setActivationFiles] = useState<ActivationFile[]>([]);
@@ -54,6 +53,10 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   const [syncInterval, setSyncInterval] = useState(5); // Minutes
   const [directoryHandle, setDirectoryHandle] = useState<any>(null);
   const [syncLogs, setSyncLogs] = useState<any[]>([]);
+  const [devices, setDevices] = useState<string[]>([]);
+  const [targetDevice, setTargetDevice] = useState('');
+  const [restoreStatusMap, setRestoreStatusMap] = useState<Record<number, RestoreStatusItem>>({});
+  const [agentOnlineMap, setAgentOnlineMap] = useState<Record<string, boolean>>({});
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
@@ -263,9 +266,21 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
     // Lazy load sync logs and activation after main content renders
     const timer = setTimeout(() => {
       fetchSyncLogs();
+      fetchDevices();
       fetchActivationFiles();
+      fetchRestoreStatuses();
+      fetchAgentOnlineStatus();
     }, 800);
     return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const poll = setInterval(() => {
+      fetchRestoreStatuses();
+      fetchAgentOnlineStatus();
+    }, 3000);
+
+    return () => clearInterval(poll);
   }, []);
 
   const fetchActivationFiles = async () => {
@@ -281,6 +296,47 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
       setSyncLogs(res.data);
     } catch (err) {
       console.error('Failed to fetch sync logs', err);
+    }
+  };
+
+  const fetchDevices = async () => {
+    try {
+      const res = await api.get('/sync/devices');
+      const list = Array.isArray(res.data) ? res.data : [];
+      setDevices(list);
+      if (!targetDevice && list.length > 0) {
+        setTargetDevice(list[0]);
+      }
+    } catch (err) {
+      console.error('Failed to fetch devices', err);
+    }
+  };
+
+  const fetchRestoreStatuses = async () => {
+    try {
+      const res = await api.get('/sync/restore-status');
+      const list: RestoreStatusItem[] = Array.isArray(res.data) ? res.data : [];
+      const map: Record<number, RestoreStatusItem> = {};
+      list.forEach((item) => {
+        if (typeof item.gameId === 'number') {
+          map[item.gameId] = item;
+        }
+      });
+      setRestoreStatusMap(map);
+    } catch (err) {
+      console.error('Failed to fetch restore statuses', err);
+    }
+  };
+
+  const fetchAgentOnlineStatus = async () => {
+    try {
+      const res = await api.get('/sync/agent-online');
+      const list: { deviceName: string; online: boolean }[] = Array.isArray(res.data) ? res.data : [];
+      const map: Record<string, boolean> = {};
+      list.forEach((item) => { map[item.deviceName] = item.online; });
+      setAgentOnlineMap(map);
+    } catch (err) {
+      console.error('Failed to fetch agent online status', err);
     }
   };
 
@@ -471,6 +527,52 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
     }
   };
 
+  const handleRemoteRestore = async (game: GameSave) => {
+    if (!game.latestSave) {
+      showToast('❌ Game chưa có save để khôi phục', 'error', 2500);
+      return;
+    }
+
+    if (!targetDevice) {
+      showToast('❌ Vui lòng chọn device trước khi khôi phục', 'error', 3000);
+      return;
+    }
+
+    try {
+      await api.post('/restore', {
+        save_id: game.latestSave.id,
+        device_id: targetDevice,
+      });
+      fetchRestoreStatuses();
+      showToast(`✅ Đã gửi lệnh khôi phục cho ${game.gameName} (${targetDevice})`, 'success', 3000);
+    } catch (err: any) {
+      const msg = err.response?.data?.error || 'Không thể gửi lệnh khôi phục';
+      showToast(`❌ ${msg}`, 'error', 3000);
+    }
+  };
+
+  const handleRetryRestore = async (commandId: number) => {
+    try {
+      await api.post(`/sync/commands/${commandId}/retry`);
+      fetchRestoreStatuses();
+      showToast('✅ Đã gửi lệnh retry', 'success', 2500);
+    } catch (err: any) {
+      const msg = err.response?.data?.error || 'Không thể retry';
+      showToast(`❌ ${msg}`, 'error', 3000);
+    }
+  };
+
+  const handleCancelRestore = async (commandId: number) => {
+    try {
+      await api.post(`/sync/commands/${commandId}/cancel`);
+      fetchRestoreStatuses();
+      showToast('✅ Đã hủy lệnh khôi phục', 'success', 2500);
+    } catch (err: any) {
+      const msg = err.response?.data?.error || 'Không thể hủy lệnh';
+      showToast(`❌ ${msg}`, 'error', 3000);
+    }
+  };
+
   const handleDelete = async (saveId: number) => {
     console.log('🗑️ handleDelete clicked, saveId:', saveId);
     setDeleteId(saveId);
@@ -634,7 +736,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
             <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải...</div>}>
               <OverviewTab 
                 games={filteredGames}
-                setActiveTab={setActiveTab} 
+                setActiveTab={(tab) => setActiveTab(tab as any)} 
                 handleOpenHistory={handleOpenHistory} 
                 handleDownload={handleDownload} 
               />
@@ -644,15 +746,25 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
           {activeTab === 'library' && (
             <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải thư viện...</div>}>
               <LibraryTab 
-                loading={loading}
-                games={games}
-                filteredGames={filteredGames}
-                handleOpenUpdate={handleOpenUpdate}
-                handleOpenHistory={handleOpenHistory}
-                handleDownload={handleDownload}
-                handleDelete={handleDelete}
-                handleOpenRenameModal={handleOpenRenameModal}
-                formatSize={formatSize}
+                {...({
+                  loading,
+                  games,
+                  filteredGames,
+                  restoreStatusMap,
+                  agentOnlineMap,
+                  devices,
+                  targetDevice,
+                  setTargetDevice,
+                  handleOpenUpdate,
+                  handleOpenHistory,
+                  handleDownload,
+                  handleRemoteRestore,
+                  handleRetryRestore,
+                  handleCancelRestore,
+                  handleDelete,
+                  handleOpenRenameModal,
+                  formatSize,
+                } as any)}
               />
             </Suspense>
           )}
@@ -702,15 +814,8 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
             </Suspense>
           )}
 
-          {activeTab === 'downloads' && (
-            <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải...</div>}>
-              <div className="col-span-12">
-                <DownloadApp />
-              </div>
-            </Suspense>
-          )}
-
         </div>
+
       </main>
 
       <Suspense fallback={null}>

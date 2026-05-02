@@ -2,11 +2,11 @@
 import React from 'react';
 import { 
   LayoutDashboard, Library, Laptop, 
-  Settings, User, LogOut, KeyRound, Download, Lock
+  Settings, User, LogOut, KeyRound, Lock
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
-type TabType = 'dashboard' | 'library' | 'devices' | 'settings' | 'users' | 'activation' | 'downloads' | 'category';
+type TabType = 'dashboard' | 'library' | 'devices' | 'settings' | 'users' | 'activation' | 'category';
 interface SidebarProps {
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
@@ -62,13 +62,6 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, currentUser,
         >
           <KeyRound className="w-4 h-4" />
           File kích hoạt
-        </button>
-        <button 
-          onClick={() => setActiveTab('downloads')}
-          className={`w-full flex items-center gap-3 p-3 rounded-xl text-sm font-semibold transition-all ${activeTab === 'downloads' ? 'bg-green-600 text-white shadow-lg shadow-green-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
-        >
-          <Download className="w-4 h-4" />
-          Tải Desktop App
         </button>
 
         <div className="text-[10px] text-slate-500 uppercase font-bold px-2 py-1 mt-6 mb-1">Kỹ thuật</div>

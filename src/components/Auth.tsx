@@ -1,18 +1,14 @@
 import React, { useState } from 'react';
 import api from '../utils/api';
-import { Mail, Lock, User, Database, ArrowRight, ShieldCheck, Zap, Download, Eye, EyeOff } from 'lucide-react';
+import { Mail, Lock, User, Database, ArrowRight, ShieldCheck, Zap, Eye, EyeOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useToast } from '../context/ToastContext';
 
 export default function Auth({ onLogin }: { onLogin: (token: string, user: any) => void }) {
   const [isLogin, setIsLogin] = useState(true);
-  const [showDownload, setShowDownload] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [apps, setApps] = useState<any[]>([]);
-  const [appsLoading, setAppsLoading] = useState(false);
-  const [downloading, setDownloading] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const { showToast } = useToast();
 
@@ -39,47 +35,7 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
     }
   };
 
-  const fetchAvailableApps = async () => {
-    try {
-      setAppsLoading(true);
-      const response = await api.get('/download/apps');
-      setApps(response.data);
-    } catch (err) {
-      console.error('Failed to fetch apps:', err);
-      setApps([]);
-    } finally {
-      setAppsLoading(false);
-    }
-  };
 
-  const formatSize = (bytes: number) => {
-    const mb = (bytes / (1024 * 1024)).toFixed(1);
-    return `${mb} MB`;
-  };
-
-  const handleDownload = async (filename: string) => {
-    try {
-      setDownloading(filename);
-      const response = await api.get(`/download/app/${filename}`, {
-        responseType: 'blob'
-      });
-      
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', filename);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
-      showToast('✅ Tải xuống thành công!', 'success', 3000);
-    } catch (err) {
-      showToast('❌ Tải xuống thất bại', 'error', 3000);
-      console.error(err);
-    } finally {
-      setDownloading(null);
-    }
-  };
 
   return (
     <div className="min-h-screen grid lg:grid-cols-2 bg-slate-50 font-sans overflow-hidden">
@@ -214,131 +170,8 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
           transition={{ duration: 0.8 }}
           className="w-full max-w-sm relative z-10"
         >
-          {/* Tab Navigation */}
-          <motion.div 
-            className="flex gap-2 mb-8 bg-slate-100 p-1 rounded-xl"
-            layout
-          >
-            {[
-              { label: 'Đăng nhập', id: 'login' },
-              { label: 'Tải App', id: 'download', icon: Download }
-            ].map((tab) => (
-              <motion.button
-                key={tab.id}
-                onClick={() => {
-                  if (tab.id === 'login') {
-                    setShowDownload(false);
-                    setIsLogin(true);
-                  } else {
-                    setShowDownload(true);
-                    if (apps.length === 0) {
-                      fetchAvailableApps();
-                    }
-                  }
-                }}
-                className={`flex-1 py-3 px-4 rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2 ${
-                  (tab.id === 'login' && !showDownload) || (tab.id === 'download' && showDownload)
-                    ? 'bg-slate-900 text-white shadow-lg' 
-                    : 'text-slate-600'
-                }`}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-              >
-                {tab.icon && <tab.icon className="w-4 h-4" />}
-                {tab.label}
-              </motion.button>
-            ))}
-          </motion.div>
-
           <AnimatePresence mode="wait">
-            {showDownload ? (
-              <motion.div
-                key="download"
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.3 }}
-              >
-                <motion.div className="mb-8">
-                  <h3 className="text-2xl font-black text-slate-900 mb-2">
-                    Tải Desktop App
-                  </h3>
-                  <p className="text-slate-500 text-sm">
-                    Tải CloudSave Client để đồng bộ game saves nhanh chóng
-                  </p>
-                </motion.div>
-
-                {appsLoading ? (
-                  <motion.div 
-                    className="flex items-center justify-center py-8"
-                    animate={{ scale: [1, 1.05, 1] }}
-                    transition={{ duration: 1.5, repeat: Infinity }}
-                  >
-                    <p className="text-slate-500">Đang tải danh sách phiên bản...</p>
-                  </motion.div>
-                ) : apps.length > 0 ? (
-                  <motion.div 
-                    className="space-y-4"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ staggerChildren: 0.1 }}
-                  >
-                    {apps.map((app, idx) => (
-                      <motion.div 
-                        key={app.name}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.1 }}
-                        whileHover={{ scale: 1.02, y: -3 }}
-                        className={`p-4 rounded-xl border-2 transition-all ${
-                          app.type === 'installer' 
-                            ? 'border-green-200 bg-green-50 hover:border-green-400 hover:shadow-lg hover:shadow-green-200/50' 
-                            : 'border-amber-200 bg-amber-50 hover:border-amber-400 hover:shadow-lg hover:shadow-amber-200/50'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between mb-3">
-                          <div>
-                            <h4 className="font-bold text-slate-900">
-                              {app.type === 'installer' ? '📦 Installer' : '🚀 Portable'}
-                            </h4>
-                            <p className="text-xs text-slate-600 mt-1">{app.description}</p>
-                          </div>
-                          <motion.span 
-                            className="text-xs font-mono bg-slate-200 px-2 py-1 rounded"
-                            animate={{ scale: [1, 1.05, 1] }}
-                            transition={{ duration: 2, repeat: Infinity }}
-                          >
-                            {formatSize(app.size)}
-                          </motion.span>
-                        </div>
-                        <motion.button
-                          onClick={() => handleDownload(app.name)}
-                          disabled={downloading === app.name}
-                          className={`w-full py-2 px-4 rounded-lg font-bold text-sm transition-all flex items-center justify-center gap-2 ${
-                            app.type === 'installer'
-                              ? 'bg-green-600 hover:bg-green-700 text-white disabled:opacity-50'
-                              : 'bg-amber-600 hover:bg-amber-700 text-white disabled:opacity-50'
-                          }`}
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                        >
-                          <Download className="w-4 h-4" />
-                          {downloading === app.name ? 'Đang tải...' : 'Tải xuống'}
-                        </motion.button>
-                      </motion.div>
-                    ))}
-                  </motion.div>
-                ) : (
-                  <motion.div 
-                    className="p-6 bg-slate-100 rounded-xl text-center"
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                  >
-                    <p className="text-slate-600">Không có phiên bản nào sẵn sàng</p>
-                  </motion.div>
-                )}
-              </motion.div>
-            ) : (
+            {(
               /* Login/Register Form */
               <motion.div
                 key="form"

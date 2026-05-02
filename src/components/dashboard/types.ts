@@ -33,6 +33,21 @@ export interface UserAccount {
   createdAt: string;
 }
 
+export interface RestoreStatusItem {
+  id: number;
+  gameId: number;
+  saveId: number;
+  gameName: string;
+  status: 'Pending' | 'Running' | 'Done' | 'Failed' | 'Cancelled' | 'Timeout';
+  deviceName?: string | null;
+  errorMessage?: string | null;
+  retryCount?: number;
+  maxRetries?: number;
+  createdAt: string;
+  claimedAt?: string | null;
+  completedAt?: string | null;
+}
+
 export const CATEGORIES = [
   'RPG', 'Action', 'Adventure', 'Simulation', 'Indie', 'Strategy', 'Sports', 'Other'
 ];
