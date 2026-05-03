@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import api, { uploadWithProgress } from '../utils/api';
+import { savesApi } from '../utils/apiClient';
 import { Search, Plus, User, LogOut } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { useDynamicCategories } from '../hooks/useDynamicCategories';
@@ -70,6 +71,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   // Delete Confirmation State
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [bulkDeleteIds, setBulkDeleteIds] = useState<number[]>([]);
 
   // Rename Game State
   const [showRenameModal, setShowRenameModal] = useState(false);
@@ -608,10 +610,32 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   const handleDelete = async (saveId: number) => {
     console.log('🗑️ handleDelete clicked, saveId:', saveId);
     setDeleteId(saveId);
+    setBulkDeleteIds([]);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleBulkDelete = async (saveIds: number[]) => {
+    if (saveIds.length === 0) return;
+    setBulkDeleteIds(saveIds);
+    setDeleteId(null);
     setShowDeleteConfirm(true);
   };
 
   const confirmDelete = async () => {
+    if (bulkDeleteIds.length > 0) {
+      try {
+        const result = await savesApi.deleteMany(bulkDeleteIds);
+        setShowDeleteConfirm(false);
+        setBulkDeleteIds([]);
+        await fetchGames();
+        showToast(`Đã xoá ${result.deleted} bản lưu`, 'success', 3000);
+      } catch (err: any) {
+        const errorMsg = err.response?.data?.error || err.message || 'Xoá thất bại';
+        showToast(errorMsg, 'error', 3000);
+      }
+      return;
+    }
+
     if (!deleteId) return;
     try {
       console.log(`🗑️ Deleting save ${deleteId}...`);
@@ -796,6 +820,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
                   handleRetryRestore,
                   handleCancelRestore,
                   handleDelete,
+                  handleBulkDelete,
                   handleOpenRenameModal,
                   formatSize,
                 } as any)}
@@ -857,6 +882,12 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
           show={showDeleteConfirm}
           onClose={() => setShowDeleteConfirm(false)}
           onConfirm={confirmDelete}
+          title={bulkDeleteIds.length > 0 ? 'Xoá nhiều bản lưu' : undefined}
+          message={
+            bulkDeleteIds.length > 0
+              ? `Bạn có chắc chắn muốn xoá ${bulkDeleteIds.length} bản lưu đã chọn không? Hành động này không thể hoàn tác.`
+              : undefined
+          }
         />
       </Suspense>
 

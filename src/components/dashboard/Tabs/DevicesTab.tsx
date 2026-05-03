@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Laptop, Plus, Trash2, Copy, Check, RefreshCw, ChevronDown, ChevronUp, Download, Monitor, AlertTriangle } from 'lucide-react';
 import api from '../../../utils/api';
+import { deviceKeysApi } from '../../../utils/apiClient';
 import { useToast } from '../../../context/ToastContext';
 
 interface AgentInfo {
@@ -32,6 +33,8 @@ const DevicesTab: React.FC = () => {
   const [agentInfo, setAgentInfo] = useState<AgentInfo | null>(null);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'online' | 'offline'>('all');
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<number[]>([]);
 
   // Import form (agent-generated key — primary flow)
   const [importDevice, setImportDevice] = useState('');
@@ -117,14 +120,9 @@ const DevicesTab: React.FC = () => {
   };
 
   const handleRevoke = async (id: number, name: string) => {
-    if (!confirm(`Thu hồi key của "${name}"?`)) return;
-    try {
-      await api.delete(`/device-keys/${id}`);
-      showToast('✅ Đã thu hồi key', 'success');
-      fetchKeys();
-    } catch {
-      showToast('❌ Thu hồi thất bại', 'error');
-    }
+    setPendingDeleteIds([id]);
+    setSelectedIds([id]);
+    showToast(`Chuẩn bị thu hồi key của ${name}. Nhấn "Xóa đã chọn" để xác nhận.`, 'info', 3500);
   };
 
   const toggleSelected = (id: number) => {
@@ -134,19 +132,20 @@ const DevicesTab: React.FC = () => {
   };
 
   const toggleSelectAll = () => {
-    setSelectedIds((current) => current.length === keys.length ? [] : keys.map((key) => key.id));
+    setSelectedIds((current) => current.length === filteredKeys.length ? [] : filteredKeys.map((key) => key.id));
   };
 
   const handleBulkRevoke = async () => {
-    if (selectedIds.length === 0) return;
-    if (!confirm(`Thu hồi ${selectedIds.length} thiết bị đã chọn? Các agent tương ứng sẽ không thể kết nối bằng key cũ.`)) return;
+    const ids = pendingDeleteIds.length > 0 ? pendingDeleteIds : selectedIds;
+    if (ids.length === 0) return;
 
     setBulkDeleting(true);
     try {
-      const res = await api.delete('/device-keys', { data: { ids: selectedIds } });
-      const deleted = res.data?.deleted ?? selectedIds.length;
+      const res = await deviceKeysApi.deleteMany(ids);
+      const deleted = res.deleted ?? ids.length;
       showToast(`✅ Đã thu hồi ${deleted} thiết bị`, 'success');
       setSelectedIds([]);
+      setPendingDeleteIds([]);
       fetchKeys();
     } catch (err: any) {
       showToast(err.response?.data?.error || '❌ Xóa thiết bị đã chọn thất bại', 'error');
@@ -169,7 +168,14 @@ const DevicesTab: React.FC = () => {
   const fmt = (iso: string | null) =>
     iso ? new Date(iso).toLocaleString('vi-VN') : '—';
 
-  const allSelected = keys.length > 0 && selectedIds.length === keys.length;
+  const filteredKeys = keys.filter((key) => {
+    if (statusFilter === 'online') return key.is_online;
+    if (statusFilter === 'offline') return !key.is_online;
+    return true;
+  });
+  const onlineCount = keys.filter((key) => key.is_online).length;
+  const offlineCount = keys.length - onlineCount;
+  const allSelected = filteredKeys.length > 0 && selectedIds.length === filteredKeys.length;
   const partiallySelected = selectedIds.length > 0 && !allSelected;
 
   return (
@@ -354,17 +360,35 @@ const DevicesTab: React.FC = () => {
 
       {/* Danh sách keys */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+        <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4 flex-wrap">
           <div>
             <h3 className="font-black text-slate-800 text-sm tracking-tight flex items-center gap-2">
               <Laptop className="w-4 h-4 text-indigo-500" />
               THIẾT BỊ ĐÃ ĐĂNG KÝ
             </h3>
+            <div className="flex items-center gap-2 mt-2 text-[10px] font-black uppercase tracking-widest">
+              <span className="px-2 py-1 rounded bg-slate-100 text-slate-600">Tổng: {keys.length}</span>
+              <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Online: {onlineCount}</span>
+              <span className="px-2 py-1 rounded bg-slate-100 text-slate-500">Offline: {offlineCount}</span>
+            </div>
             {selectedIds.length > 0 && (
               <p className="text-xs text-slate-500 mt-1">Đã chọn {selectedIds.length} thiết bị</p>
             )}
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value as 'all' | 'online' | 'offline');
+                setSelectedIds([]);
+                setPendingDeleteIds([]);
+              }}
+              className="text-xs bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none text-slate-700"
+            >
+              <option value="all">Tất cả trạng thái</option>
+              <option value="online">Đang online</option>
+              <option value="offline">Offline/chưa kết nối</option>
+            </select>
             {selectedIds.length > 0 && (
               <button
                 onClick={handleBulkRevoke}
@@ -394,7 +418,7 @@ const DevicesTab: React.FC = () => {
           <div className="p-10 flex justify-center">
             <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : keys.length === 0 ? (
+        ) : filteredKeys.length === 0 ? (
           <div className="p-10 text-center text-slate-400 text-sm italic">Chưa có thiết bị nào được đăng ký.</div>
         ) : (
           <table className="w-full text-sm text-left">
@@ -422,7 +446,7 @@ const DevicesTab: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {keys.map(k => (
+              {filteredKeys.map(k => (
                 <tr key={k.id} className={`hover:bg-slate-50/70 transition-colors ${selectedIds.includes(k.id) ? 'bg-indigo-50/40' : ''}`}>
                   <td className="px-6 py-4">
                     <input
