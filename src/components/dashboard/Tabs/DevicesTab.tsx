@@ -28,6 +28,7 @@ const DevicesTab: React.FC = () => {
   const { showToast } = useToast();
   const [keys, setKeys] = useState<DeviceKey[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [agentInfo, setAgentInfo] = useState<AgentInfo | null>(null);
 
   // Import form (agent-generated key — primary flow)
@@ -52,6 +53,19 @@ const DevicesTab: React.FC = () => {
       showToast('❌ Không thể tải danh sách device key', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const res = await api.get('/device-keys');
+      setKeys(Array.isArray(res.data) ? res.data : []);
+      showToast('✅ Đã làm mới danh sách thiết bị', 'success');
+    } catch {
+      showToast('❌ Không thể làm mới danh sách', 'error');
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -310,8 +324,17 @@ const DevicesTab: React.FC = () => {
             <Laptop className="w-4 h-4 text-indigo-500" />
             THIẾT BỊ ĐÃ ĐĂNG KÝ
           </h3>
-          <button onClick={fetchKeys} className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-lg hover:bg-slate-50 transition-all" title="Làm mới">
-            <RefreshCw className="w-4 h-4" />
+          <button 
+            onClick={handleRefresh} 
+            disabled={refreshing}
+            className={`p-1.5 rounded-lg transition-all ${
+              refreshing 
+                ? 'text-indigo-600 bg-indigo-50' 
+                : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'
+            }`}
+            title="Làm mới danh sách"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
         </div>
 
