@@ -58,19 +58,19 @@ export default function DeviceLinkPage({ linkToken, token, onLogin, onDone }: De
   return (
     <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6">
       <div className="w-full max-w-lg bg-white rounded-2xl border border-slate-200 shadow-lg p-6">
-        <h1 className="text-xl font-black text-slate-900">Link Device</h1>
-        <p className="text-sm text-slate-500 mt-1">Confirm this device to attach it to your current account.</p>
+        <h1 className="text-xl font-black text-slate-900">Liên kết thiết bị</h1>
+        <p className="text-sm text-slate-500 mt-1">Xác nhận thiết bị này để gắn nó vào tài khoản hiện tại của bạn.</p>
 
         <div className="mt-5 p-4 rounded-xl border border-slate-200 bg-slate-50">
-          <div className="text-xs uppercase tracking-widest text-slate-400 font-black">Device Name</div>
-          <div className="text-base font-bold text-slate-800 mt-1">{deviceName || 'Loading...'}</div>
+          <div className="text-xs uppercase tracking-widest text-slate-400 font-black">Tên thiết bị</div>
+          <div className="text-base font-bold text-slate-800 mt-1">{deviceName || 'Đang tải...'}</div>
           {expiresAt && (
-            <div className="text-xs text-slate-500 mt-2">Expires: {new Date(expiresAt).toLocaleString('vi-VN')}</div>
+            <div className="text-xs text-slate-500 mt-2">Hết hạn: {new Date(expiresAt).toLocaleString('vi-VN')}</div>
           )}
         </div>
 
         {status === 'loading' && (
-          <div className="mt-4 text-sm text-slate-500">Loading link session...</div>
+          <div className="mt-4 text-sm text-slate-500">Đang tải phiên liên kết...</div>
         )}
 
         {status === 'pending' && (
@@ -79,19 +79,19 @@ export default function DeviceLinkPage({ linkToken, token, onLogin, onDone }: De
             disabled={confirming}
             className="mt-5 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 disabled:opacity-50"
           >
-            {confirming ? 'Confirming...' : 'Confirm Link To This Account'}
+            {confirming ? 'Đang xác nhận...' : 'Xác nhận liên kết với tài khoản này'}
           </button>
         )}
 
         {status === 'approved' && (
           <div className="mt-5 p-3 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-sm font-semibold">
-            Linked successfully. You can close this page.
+            Liên kết thành công. Bạn có thể đóng trang này.
           </div>
         )}
 
         {status === 'expired' && (
           <div className="mt-5 p-3 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-sm font-semibold">
-            Link session expired. Open the agent again to generate a new link.
+            Phiên liên kết đã hết hạn. Mở agent lại để tạo liên kết mới.
           </div>
         )}
 
@@ -103,8 +103,12 @@ export default function DeviceLinkPage({ linkToken, token, onLogin, onDone }: De
           onClick={onDone}
           className="mt-5 w-full rounded-xl border border-slate-300 text-slate-700 font-semibold py-2 hover:bg-slate-50"
         >
-          Back To App
+          Quay lại ứng dụng
         </button>
+
+        <div className="mt-6 pt-4 border-t border-slate-200 text-center text-xs text-slate-400">
+          © 2026 CloudSave. Tất cả quyền được bảo lưu.
+        </div>
       </div>
     </div>
   );

@@ -10,10 +10,12 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState('');
   const { showToast } = useToast();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     setLoading(true);
     try {
       const endpoint = isLogin ? '/auth/login' : '/auth/register';
@@ -29,7 +31,9 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
         setIsLogin(true);
       }
     } catch (err: any) {
-      showToast(`❌ ${err.response?.data?.error || 'Xác thực thất bại'}`, 'error', 3000);
+      const errorMsg = err.response?.data?.error || 'Xác thực thất bại';
+      setError(errorMsg);
+      showToast(`❌ ${errorMsg}`, 'error', 3000);
     } finally {
       setLoading(false);
     }
@@ -194,6 +198,18 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
                 </motion.div>
 
                 <form onSubmit={handleSubmit} className="space-y-6">
+                  {error && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm font-semibold flex items-start gap-2"
+                    >
+                      <span className="text-lg flex-shrink-0">⚠️</span>
+                      <span>{error}</span>
+                    </motion.div>
+                  )}
+                  
                   <motion.div 
                     className="space-y-2"
                     initial={{ opacity: 0, y: 10 }}
@@ -221,7 +237,7 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
                         type="text"
                         required
                         value={username}
-                        onChange={(e) => setUsername(e.target.value)}
+                        onChange={(e) => { setUsername(e.target.value); setError(''); }}
                         placeholder="Nhập tên đăng nhập"
                         className="w-full pl-12 pr-4 py-4 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all placeholder:text-slate-300 font-medium"
                         whileFocus={{ scale: 1.02 }}
@@ -245,7 +261,7 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
                         type={showPassword ? "text" : "password"}
                         required
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)}
+                        onChange={(e) => { setPassword(e.target.value); setError(''); }}
                         placeholder="••••••••"
                         className="w-full pl-12 pr-12 py-4 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all placeholder:text-slate-300 font-medium"
                         whileFocus={{ scale: 1.02 }}
