@@ -105,10 +105,6 @@ export default function DeviceLinkPage({ linkToken, token, onLogin, onDone }: De
         >
           Quay lại ứng dụng
         </button>
-
-        <div className="mt-6 pt-4 border-t border-slate-200 text-center text-xs text-slate-400">
-          © 2026 CloudSave. Tất cả quyền được bảo lưu.
-        </div>
       </div>
     </div>
   );

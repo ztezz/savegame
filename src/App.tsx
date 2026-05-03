@@ -33,19 +33,28 @@ export default function App() {
 
   return (
     <ToastProvider>
-      <div className="font-sans text-slate-900 bg-white min-h-screen">
-        {deviceLinkToken ? (
-          <DeviceLinkPage
-            linkToken={deviceLinkToken}
-            token={token}
-            onLogin={handleLogin}
-            onDone={handleLeaveDeviceLink}
-          />
-        ) : token ? (
-          <Dashboard onLogout={handleLogout} currentUser={user} />
-        ) : (
-          <Auth onLogin={handleLogin} />
-        )}
+      <div className="font-sans text-slate-900 bg-white min-h-screen flex flex-col">
+        <div className="flex-1">
+          {deviceLinkToken ? (
+            <DeviceLinkPage
+              linkToken={deviceLinkToken}
+              token={token}
+              onLogin={handleLogin}
+              onDone={handleLeaveDeviceLink}
+            />
+          ) : token ? (
+            <Dashboard onLogout={handleLogout} currentUser={user} />
+          ) : (
+            <Auth onLogin={handleLogin} />
+          )}
+        </div>
+        
+        <footer className="border-t border-slate-200 bg-slate-50 py-6 text-center text-xs text-slate-500">
+          <div className="max-w-7xl mx-auto px-4">
+            © 2026 CloudSave Hub. Tất cả quyền được bảo lưu.
+          </div>
+        </footer>
+        
         <ToastContainer />
       </div>
     </ToastProvider>

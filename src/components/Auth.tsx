@@ -16,6 +16,21 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    // Validation
+    if (!username.trim()) {
+      setError('Vui lòng nhập tên đăng nhập');
+      return;
+    }
+    if (!password.trim()) {
+      setError('Vui lòng nhập mật khẩu');
+      return;
+    }
+    if (password.length < 6 && !isLogin) {
+      setError('Mật khẩu phải có ít nhất 6 ký tự');
+      return;
+    }
+
     setLoading(true);
     try {
       const endpoint = isLogin ? '/auth/login' : '/auth/register';
@@ -29,6 +44,8 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
       } else {
         showToast('✅ Đăng ký thành công! Vui lòng đăng nhập.', 'success', 3000);
         setIsLogin(true);
+        setUsername('');
+        setPassword('');
       }
     } catch (err: any) {
       const errorMsg = err.response?.data?.error || 'Xác thực thất bại';
@@ -239,7 +256,9 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
                         value={username}
                         onChange={(e) => { setUsername(e.target.value); setError(''); }}
                         placeholder="Nhập tên đăng nhập"
-                        className="w-full pl-12 pr-4 py-4 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all placeholder:text-slate-300 font-medium"
+                        className={`w-full pl-12 pr-4 py-4 rounded-xl border focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all placeholder:text-slate-300 font-medium ${
+                          error && !username.trim() ? 'border-red-300 bg-red-50' : 'border-slate-200'
+                        }`}
                         whileFocus={{ scale: 1.02 }}
                       />
                     </motion.div>
@@ -263,7 +282,9 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
                         value={password}
                         onChange={(e) => { setPassword(e.target.value); setError(''); }}
                         placeholder="••••••••"
-                        className="w-full pl-12 pr-12 py-4 rounded-xl border border-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all placeholder:text-slate-300 font-medium"
+                        className={`w-full pl-12 pr-12 py-4 rounded-xl border focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all placeholder:text-slate-300 font-medium ${
+                          error && !password.trim() ? 'border-red-300 bg-red-50' : 'border-slate-200'
+                        }`}
                         whileFocus={{ scale: 1.02 }}
                       />
                       <motion.button
