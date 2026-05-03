@@ -30,6 +30,8 @@ const DevicesTab: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [agentInfo, setAgentInfo] = useState<AgentInfo | null>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Import form (agent-generated key — primary flow)
   const [importDevice, setImportDevice] = useState('');
@@ -49,6 +51,7 @@ const DevicesTab: React.FC = () => {
     try {
       const res = await api.get('/device-keys');
       setKeys(Array.isArray(res.data) ? res.data : []);
+      setSelectedIds([]);
     } catch {
       showToast('❌ Không thể tải danh sách device key', 'error');
     } finally {
@@ -61,6 +64,7 @@ const DevicesTab: React.FC = () => {
     try {
       const res = await api.get('/device-keys');
       setKeys(Array.isArray(res.data) ? res.data : []);
+      setSelectedIds([]);
       showToast('✅ Đã làm mới danh sách thiết bị', 'success');
     } catch {
       showToast('❌ Không thể làm mới danh sách', 'error');
@@ -123,6 +127,34 @@ const DevicesTab: React.FC = () => {
     }
   };
 
+  const toggleSelected = (id: number) => {
+    setSelectedIds((current) =>
+      current.includes(id) ? current.filter((selectedId) => selectedId !== id) : [...current, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds((current) => current.length === keys.length ? [] : keys.map((key) => key.id));
+  };
+
+  const handleBulkRevoke = async () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Thu hồi ${selectedIds.length} thiết bị đã chọn? Các agent tương ứng sẽ không thể kết nối bằng key cũ.`)) return;
+
+    setBulkDeleting(true);
+    try {
+      const res = await api.delete('/device-keys', { data: { ids: selectedIds } });
+      const deleted = res.data?.deleted ?? selectedIds.length;
+      showToast(`✅ Đã thu hồi ${deleted} thiết bị`, 'success');
+      setSelectedIds([]);
+      fetchKeys();
+    } catch (err: any) {
+      showToast(err.response?.data?.error || '❌ Xóa thiết bị đã chọn thất bại', 'error');
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   const copyText = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -136,6 +168,9 @@ const DevicesTab: React.FC = () => {
 
   const fmt = (iso: string | null) =>
     iso ? new Date(iso).toLocaleString('vi-VN') : '—';
+
+  const allSelected = keys.length > 0 && selectedIds.length === keys.length;
+  const partiallySelected = selectedIds.length > 0 && !allSelected;
 
   return (
     <div className="col-span-12 space-y-6">
@@ -320,22 +355,39 @@ const DevicesTab: React.FC = () => {
       {/* Danh sách keys */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
         <div className="p-5 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="font-black text-slate-800 text-sm tracking-tight flex items-center gap-2">
-            <Laptop className="w-4 h-4 text-indigo-500" />
-            THIẾT BỊ ĐÃ ĐĂNG KÝ
-          </h3>
-          <button 
-            onClick={handleRefresh} 
-            disabled={refreshing}
-            className={`p-1.5 rounded-lg transition-all ${
-              refreshing 
-                ? 'text-indigo-600 bg-indigo-50' 
-                : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'
-            }`}
-            title="Làm mới danh sách"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-          </button>
+          <div>
+            <h3 className="font-black text-slate-800 text-sm tracking-tight flex items-center gap-2">
+              <Laptop className="w-4 h-4 text-indigo-500" />
+              THIẾT BỊ ĐÃ ĐĂNG KÝ
+            </h3>
+            {selectedIds.length > 0 && (
+              <p className="text-xs text-slate-500 mt-1">Đã chọn {selectedIds.length} thiết bị</p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {selectedIds.length > 0 && (
+              <button
+                onClick={handleBulkRevoke}
+                disabled={bulkDeleting}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-600 text-white text-xs font-black hover:bg-red-700 transition-all disabled:opacity-50"
+              >
+                <Trash2 className="w-4 h-4" />
+                {bulkDeleting ? 'Đang xóa...' : 'Xóa đã chọn'}
+              </button>
+            )}
+            <button 
+              onClick={handleRefresh} 
+              disabled={refreshing}
+              className={`p-1.5 rounded-lg transition-all ${
+                refreshing 
+                  ? 'text-indigo-600 bg-indigo-50' 
+                  : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'
+              }`}
+              title="Làm mới danh sách"
+            >
+              <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -348,6 +400,18 @@ const DevicesTab: React.FC = () => {
           <table className="w-full text-sm text-left">
             <thead className="bg-slate-50 text-[10px] text-slate-400 uppercase tracking-widest">
               <tr className="border-b border-slate-100">
+                <th className="px-6 py-3 font-black w-12">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(input) => {
+                      if (input) input.indeterminate = partiallySelected;
+                    }}
+                    onChange={toggleSelectAll}
+                    aria-label="Chọn tất cả thiết bị"
+                    className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                </th>
                 <th className="px-6 py-3 font-black">Thiết bị</th>
                 <th className="px-4 py-3 font-black">Trạng thái</th>
                 <th className="px-6 py-3 font-black">Key (ẩn)</th>
@@ -359,7 +423,16 @@ const DevicesTab: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-50">
               {keys.map(k => (
-                <tr key={k.id} className="hover:bg-slate-50/70 transition-colors">
+                <tr key={k.id} className={`hover:bg-slate-50/70 transition-colors ${selectedIds.includes(k.id) ? 'bg-indigo-50/40' : ''}`}>
+                  <td className="px-6 py-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(k.id)}
+                      onChange={() => toggleSelected(k.id)}
+                      aria-label={`Chọn thiết bị ${k.device_name}`}
+                      className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                  </td>
                   <td className="px-6 py-4 font-bold text-slate-800">{k.device_name}</td>
                   <td className="px-4 py-4">
                     {k.is_online ? (

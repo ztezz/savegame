@@ -28,6 +28,7 @@ const ChangePasswordModal = lazy(() => import('./dashboard/Modals/ChangePassword
 import { GameSave, UserAccount, RestoreStatusItem } from './dashboard/types';
 
 export default function Dashboard({ onLogout, currentUser }: { onLogout: () => void, currentUser: any }) {
+  const { showToast } = useToast();
   const { categories, fetchCategories: refetchCategories } = useDynamicCategories();
   const [games, setGames] = useState<GameSave[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,6 +89,37 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   // Change Password State
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+
+  const pageTitles: Record<typeof activeTab, { title: string; description: string }> = {
+    dashboard: {
+      title: 'Tổng quan đồng bộ',
+      description: 'Theo dõi trạng thái bản lưu và các hoạt động gần đây.',
+    },
+    library: {
+      title: 'Thư viện bản lưu',
+      description: 'Tìm kiếm, tải xuống, khôi phục và quản lý dữ liệu game.',
+    },
+    devices: {
+      title: 'Thiết bị kết nối',
+      description: 'Quản lý agent, API key và trạng thái liên kết thiết bị.',
+    },
+    settings: {
+      title: 'Cài đặt hệ thống',
+      description: 'Cấu hình đồng bộ tự động và tuỳ chọn vận hành.',
+    },
+    users: {
+      title: 'Tài khoản người dùng',
+      description: 'Quản lý quyền truy cập và trạng thái tài khoản.',
+    },
+    activation: {
+      title: 'File kích hoạt',
+      description: 'Theo dõi và quản lý các file kích hoạt đã tải lên.',
+    },
+    category: {
+      title: 'Quản lý thể loại',
+      description: 'Sắp xếp thư viện game theo nhóm dễ tìm kiếm hơn.',
+    },
+  };
 
   const handleOpenNew = () => {
     setNewGameName('');
@@ -612,8 +644,6 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
     }
   };
 
-  const { showToast } = useToast();
-
   const formatSize = (bytes: number) => {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -637,23 +667,26 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="h-20 bg-white border-b border-slate-200 px-8 flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-4">
-            <h2 className="text-lg font-bold text-slate-800">Cụm đồng bộ VPS Node.js</h2>
+        <header className="min-h-20 bg-white border-b border-slate-200 px-5 lg:px-8 py-4 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 shrink-0">
+          <div className="flex flex-col lg:flex-row lg:items-center gap-4 min-w-0">
+            <div className="min-w-0">
+              <h2 className="text-lg font-black text-slate-900 truncate">{pageTitles[activeTab].title}</h2>
+              <p className="text-xs text-slate-500 mt-1 hidden sm:block">{pageTitles[activeTab].description}</p>
+            </div>
             {activeTab === 'library' && (
-              <>
-                <div className="hidden md:flex items-center bg-slate-50 rounded-full pl-3 pr-1 py-1 border border-slate-100">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center bg-slate-50 rounded-lg pl-3 pr-1 py-1.5 border border-slate-200 min-w-0">
                    <Search className="w-3.5 h-3.5 text-slate-400" />
                    <input 
                      type="text" 
-                     placeholder="Tìm bản lưu..." 
-                     className="bg-transparent border-none focus:ring-0 text-xs px-2 w-48 text-slate-600 font-medium" 
+                     placeholder="Tìm bản lưu" 
+                     className="bg-transparent border-none focus:ring-0 text-xs px-2 w-40 sm:w-56 text-slate-700 font-medium outline-none" 
                      value={searchTerm}
                      onChange={(e) => setSearchTerm(e.target.value)}
                    />
                 </div>
                 <select 
-                  className="text-xs bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none"
+                  className="text-xs bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none text-slate-700"
                   value={filterCategory}
                   onChange={(e) => setFilterCategory(e.target.value)}
                 >
@@ -661,17 +694,17 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
                   {categories.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <select 
-                  className="text-xs bg-white border border-slate-200 rounded-lg px-2 py-1 outline-none"
+                  className="text-xs bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none text-slate-700"
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as any)}
                 >
                   <option value="name">Xếp theo tên</option>
                   <option value="category">Xếp theo thể loại</option>
                 </select>
-              </>
+              </div>
             )}
           </div>
-          <div className="flex items-center gap-6">
+          <div className="flex items-center justify-between xl:justify-end gap-4 lg:gap-6">
             {(activeTab === 'library' || activeTab === 'dashboard') && (
               <>
                 <div className="text-right hidden sm:block">
@@ -686,10 +719,11 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
             {(activeTab === 'library' || activeTab === 'dashboard') && (
               <button 
                 onClick={handleOpenNew}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black shadow-lg shadow-indigo-100 transition-all flex items-center gap-2"
+                className="px-4 sm:px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-black shadow-lg shadow-indigo-100 transition flex items-center gap-2 whitespace-nowrap"
               >
                 <Plus className="w-4 h-4" />
-                ĐẨY BẢN LƯU MỚI
+                <span className="hidden sm:inline">Đẩy bản lưu mới</span>
+                <span className="sm:hidden">Tải lên</span>
               </button>
             )}
             
