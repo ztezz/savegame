@@ -14,12 +14,14 @@ export interface ActivationFile {
 }
 
 interface ActivationTabProps {
+  currentUser: any;
   activationFiles: ActivationFile[];
   onRefresh: () => void;
   formatSize: (bytes: number) => string;
 }
 
-const ActivationTab: React.FC<ActivationTabProps> = ({ activationFiles, onRefresh, formatSize }) => {
+const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFiles, onRefresh, formatSize }) => {
+  const isAdmin = currentUser?.role?.toLowerCase() === 'admin' || currentUser?.username === 'admin';
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [gameName, setGameName] = useState('');
   const [note, setNote] = useState('');
@@ -128,6 +130,7 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ activationFiles, onRefres
           </h3>
           <p className="text-sm text-slate-400 mt-1">Lưu trữ các file crack, key, license hoặc file kích hoạt game của bạn</p>
         </div>
+        {isAdmin && (
         <button
           onClick={() => setShowUploadModal(true)}
           className="px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black shadow-lg shadow-amber-100 transition-all flex items-center gap-2"
@@ -135,6 +138,7 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ activationFiles, onRefres
           <Plus className="w-4 h-4" />
           TẢI LÊN FILE MỚI
         </button>
+        )}
       </div>
 
       {/* Table */}
@@ -167,6 +171,7 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ activationFiles, onRefres
                   <td className="px-6 py-4 text-slate-500 text-xs">{new Date(f.createdAt).toLocaleDateString('vi-VN')}</td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
+                      {isAdmin && (
                       <button
                         onClick={() => handleOpenEditModal(f)}
                         className="p-2 text-amber-500 hover:bg-amber-50 rounded-lg transition-colors"
@@ -174,6 +179,7 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ activationFiles, onRefres
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
+                      )}
                       <div className="relative">
                         <button
                           onClick={() => handleDownload(f)}
@@ -220,6 +226,7 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ activationFiles, onRefres
                           </motion.div>
                         )}
                       </div>
+                      {isAdmin && (
                       <button
                         onClick={() => handleDelete(f.id)}
                         disabled={deletingId === f.id}
@@ -228,6 +235,7 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ activationFiles, onRefres
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -238,7 +246,7 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ activationFiles, onRefres
       </div>
 
       {/* Upload Modal */}
-      {showUploadModal && (
+      {isAdmin && showUploadModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
             <div className="flex items-center justify-between p-6 border-b border-slate-100">

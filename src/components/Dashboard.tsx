@@ -796,7 +796,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
                   >
                     <Lock className="w-4 h-4" />
-                    ??i m?t kh?u
+                    Đổi mật khẩu
                   </button>
                   <button
                     onClick={() => {
@@ -902,6 +902,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
           {activeTab === 'activation' && (
             <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải activation...</div>}>
               <ActivationTab
+                currentUser={currentUser}
                 activationFiles={activationFiles}
                 onRefresh={fetchActivationFiles}
                 formatSize={formatSize}
