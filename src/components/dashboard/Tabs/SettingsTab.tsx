@@ -75,7 +75,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4">
         <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><RefreshCw className="w-4 h-4" />Đồng bộ</h3>
         <label className="flex items-center justify-between text-sm"><span>Auto sync backend</span><input type="checkbox" checked={!!settings.sync.autoSyncEnabled} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,sync:{...s.sync,autoSyncEnabled:e.target.checked}}))} /></label>
-        <label className="block text-sm">Chu k? Đồng bộ (ph?t)
+        <label className="block text-sm">Chu kỳ Đồng bộ (phút)
           <input className="w-full mt-1 border rounded-lg px-3 py-2" type="number" value={settings.sync.syncIntervalMinutes} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,sync:{...s.sync,syncIntervalMinutes:parseInt(e.target.value||'0',10)}}))} />
         </label>
         <div className="pt-2 border-t">
