@@ -879,6 +879,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
           {activeTab === 'settings' && (
             <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải cài đặt...</div>}>
               <SettingsTab 
+                currentUser={currentUser}
                 autoSyncEnabled={autoSyncEnabled}
                 setAutoSyncEnabled={setAutoSyncEnabled}
                 directoryHandle={directoryHandle}
