@@ -13,6 +13,7 @@ const LibraryTab = lazy(() => import('./dashboard/Tabs/LibraryTab'));
 const DevicesTab = lazy(() => import('./dashboard/Tabs/DevicesTab'));
 const UsersTab = lazy(() => import('./dashboard/Tabs/UsersTab'));
 const SettingsTab = lazy(() => import('./dashboard/Tabs/SettingsTab'));
+const AccountTab = lazy(() => import('./dashboard/Tabs/AccountTab'));
 const ActivationTab = lazy(() => import('./dashboard/Tabs/ActivationTab'));
 const CategoryTab = lazy(() => import('./dashboard/Tabs/CategoryTab'));
 import { ActivationFile } from './dashboard/Tabs/ActivationTab';
@@ -45,7 +46,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   const [filterCategory, setFilterCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'category'>('name');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'library' | 'devices' | 'settings' | 'users' | 'activation' | 'category'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'library' | 'devices' | 'settings' | 'users' | 'activation' | 'category' | 'account'>('dashboard');
   
   // Activation Files State
   const [activationFiles, setActivationFiles] = useState<ActivationFile[]>([]);
@@ -196,6 +197,20 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
     }
     setUserPassword('');
     setShowUserModal(true);
+  };
+
+
+  const handleSaveMyProfile = async (payload: { display_name: string; email: string }) => {
+    try {
+      const res = await api.put('/users/me', payload);
+      const nextUser = { ...(currentUser || {}), ...res.data.user };
+      localStorage.setItem('user', JSON.stringify(nextUser));
+      showToast('Cap nhat tai khoan thanh cong', 'success', 2500);
+      window.location.reload();
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Khong the cap nhat tai khoan', 'error', 3000);
+      throw err;
+    }
   };
 
   const fetchUsers = async () => {
@@ -837,6 +852,17 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
           {activeTab === 'devices' && (
             <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải...</div>}>
               <DevicesTab />
+            </Suspense>
+          )}
+
+
+          {activeTab === 'account' && (
+            <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Dang tai tai khoan...</div>}>
+              <AccountTab
+                currentUser={currentUser}
+                onSaveProfile={handleSaveMyProfile}
+                onOpenChangePassword={() => setShowChangePasswordModal(true)}
+              />
             </Suspense>
           )}
 

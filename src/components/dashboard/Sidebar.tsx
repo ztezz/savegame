@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
-type TabType = 'dashboard' | 'library' | 'devices' | 'settings' | 'users' | 'activation' | 'category';
+type TabType = 'dashboard' | 'library' | 'devices' | 'settings' | 'users' | 'activation' | 'category' | 'account';
 interface SidebarProps {
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
