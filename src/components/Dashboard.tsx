@@ -2,7 +2,7 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import api, { uploadWithProgress } from '../utils/api';
 import { savesApi } from '../utils/apiClient';
-import { Search, Plus, User, LogOut } from 'lucide-react';
+import { Search, Plus, User, LogOut, Lock } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { useDynamicCategories } from '../hooks/useDynamicCategories';
 
@@ -788,6 +788,16 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
                     <p className="text-sm font-bold text-slate-900">{currentUser?.username || 'User'}</p>
                     <p className="text-xs text-slate-500 mt-0.5">{currentUser?.role || 'User'}</p>
                   </div>
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      setShowChangePasswordModal(true);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                  >
+                    <Lock className="w-4 h-4" />
+                    ??i m?t kh?u
+                  </button>
                   <button
                     onClick={() => {
                       setShowUserMenu(false);
