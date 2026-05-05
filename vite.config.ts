@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 5173,
-      host: 'localhost',
+      host: true,
       proxy: {
         '/api': {
           target: env.VITE_API_URL || 'https://api-savegame.datdaihcm.pro',
@@ -28,7 +28,6 @@ export default defineConfig(({ mode }) => {
       },
       hmr: {
         protocol: 'ws',
-        host: 'localhost',
         port: 5173,
       },
     },
