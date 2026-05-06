@@ -3,6 +3,8 @@ import { Upload, Download, Trash2, KeyRound, Plus, X, FileCheck, Pencil, CheckCi
 import { motion, AnimatePresence } from 'motion/react';
 import api, { uploadWithChunks, downloadWithProgress } from '../../../utils/api';
 import EditActivationModal from '../Modals/EditActivationModal';
+import DeleteConfirmModal from '../Modals/DeleteConfirmModal';
+import { useToast } from '../../../context/ToastContext';
 
 export interface ActivationFile {
   id: number;
@@ -21,6 +23,7 @@ interface ActivationTabProps {
 }
 
 const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFiles, onRefresh, formatSize }) => {
+  const { showToast } = useToast();
   const isAdmin = currentUser?.role?.toLowerCase() === 'admin' || currentUser?.username === 'admin';
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [gameName, setGameName] = useState('');
@@ -34,6 +37,8 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
   const [selectedActivationForEdit, setSelectedActivationForEdit] = useState<ActivationFile | null>(null);
   const [downloadingFileId, setDownloadingFileId] = useState<number | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
   const handleUpload = async () => {
     if (!gameName.trim() || !selectedFile) return;
@@ -64,7 +69,7 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
         onRefresh();
       }, 2000);
     } catch (err) {
-      alert('Upload thất bại! ' + (err instanceof Error ? err.message : String(err)));
+      showToast(`Upload thất bại: ${err instanceof Error ? err.message : String(err)}`, 'error', 3500);
       setUploadProgress(null);
     } finally {
       setUploading(false);
@@ -81,20 +86,29 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
       setDownloadProgress(null);
       setDownloadingFileId(null);
     } catch (err) {
-      alert('Tải file thất bại! ' + (err instanceof Error ? err.message : String(err)));
+      showToast(`Tải file thất bại: ${err instanceof Error ? err.message : String(err)}`, 'error', 3500);
       setDownloadProgress(null);
       setDownloadingFileId(null);
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Xác nhận xoá file kích hoạt này?')) return;
-    setDeletingId(id);
+    setPendingDeleteId(id);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!pendingDeleteId) return;
+
+    setDeletingId(pendingDeleteId);
     try {
-      await api.delete(`/activation/${id}`);
+      await api.delete(`/activation/${pendingDeleteId}`);
       onRefresh();
+      showToast('Xóa file kích hoạt thành công', 'success', 2500);
+      setShowDeleteConfirm(false);
+      setPendingDeleteId(null);
     } catch {
-      alert('Xoá thất bại!');
+      showToast('Xóa file kích hoạt thất bại', 'error', 3000);
     } finally {
       setDeletingId(null);
     }
@@ -113,9 +127,9 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
         note: newNote
       });
       onRefresh();
-      alert('Cập nhật thành công!');
+      showToast('Cập nhật file kích hoạt thành công', 'success', 2500);
     } catch {
-      alert('Cập nhật thất bại!');
+      showToast('Cập nhật file kích hoạt thất bại', 'error', 3000);
     }
   };
 
@@ -372,6 +386,17 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
         onSubmit={handleSaveEdit}
         initialGameName={selectedActivationForEdit?.gameName || ''}
         initialNote={selectedActivationForEdit?.note || ''}
+      />
+
+      <DeleteConfirmModal
+        show={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false);
+          setPendingDeleteId(null);
+        }}
+        onConfirm={confirmDelete}
+        title="Xác nhận xóa"
+        message="Bạn có chắc chắn muốn xóa file kích hoạt này không? Hành động này không thể hoàn tác."
       />
     </div>
   );
