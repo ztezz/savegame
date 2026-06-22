@@ -36,6 +36,7 @@ RUN npm install --only=production
 
 # Sao chép mã nguồn đã build từ Stage 1 và phân quyền cho node user
 COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --from=builder --chown=node:node /app/server.js ./
 COPY --from=builder --chown=node:node /app/schema.sql* ./
 
 # Cấp quyền sở hữu thư mục /app cho user node
