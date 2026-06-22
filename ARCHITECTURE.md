@@ -1,0 +1,157 @@
+# Backend Architecture Refactoring
+
+## Overview
+The backend has been refactored from a monolithic `server.ts` file into a modular, organized structure for improved maintainability and scalability.
+
+## Project Structure
+
+```
+backend/
+├── server.ts              # Main entry point (imports and initializes all modules)
+├── config/                # Configuration files
+│   ├── database.ts       # PostgreSQL pool configuration
+│   ├── environment.ts    # Environment variables
+│   └── multer.ts         # File upload configuration
+├── database/              # Database related
+│   ├── schema.ts         # Database schema initialization
+│   └── types.ts          # TypeScript interfaces for entities
+├── middleware/            # Express middleware
+│   └── auth.ts           # Authentication and authorization (JWT, isAdmin)
+├── routes/                # API routes (organized by feature)
+│   ├── auth.ts           # POST /api/auth/register, POST /api/auth/login
+│   ├── users.ts          # CRUD operations for user management
+│   ├── saves.ts          # Game save management (upload, download, delete)
+│   ├── games.ts          # Game metadata management
+│   ├── sync.ts           # Sync operations (push, pull, logs)
+│   └── activation.ts     # Activation file chunked upload & management
+├── utils/                 # Utility functions
+│   └── uploads.ts        # Upload session management
+└── package.json
+
+```
+
+## Module Descriptions
+
+### Config (`/config`)
+- **database.ts**: PostgreSQL connection pool setup with fallback to in-memory demo mode
+- **environment.ts**: Centralized environment variables and constants
+- **multer.ts**: File upload middleware configuration
+
+### Database (`/database`)
+- **schema.ts**: Initializes database tables on startup, ensures admin user exists
+- **types.ts**: TypeScript interfaces (User, Game, Save, Device, UploadSession)
+
+### Middleware (`/middleware`)
+- **auth.ts**: 
+  - `authenticateToken`: JWT verification middleware
+  - `isAdmin`: Role-based access control middleware
+
+### Routes (`/routes`)
+Each route file exports a Router and manages a specific feature:
+
+- **auth.ts**: Authentication (register, login)
+- **users.ts**: User management (list, create, update, delete)
+- **saves.ts**: Game save management (upload, list, history, download, delete)
+- **games.ts**: Game metadata (rename, categorize)
+- **sync.ts**: Device sync operations (logs, push, pull)
+- **activation.ts**: Activation file uploads (chunked + single, list, download, delete)
+
+### Utils (`/utils`)
+- **uploads.ts**: Manages chunked upload sessions, cleanup scheduler
+
+## Key Improvements
+
+### 1. **Modularity**
+- Each route is in its own file, making it easy to locate and modify features
+- Config is centralized for easier management
+
+### 2. **Maintainability**
+- Clear separation of concerns (config, middleware, routes, utils)
+- Easy to add new routes or modify existing ones
+
+### 3. **Scalability**
+- Each module can be independently tested
+- Easy to add new features without touching existing code
+
+### 4. **Database Flexibility**
+- Graceful fallback to in-memory mock database for demo mode
+- Easy to switch between PostgreSQL and other databases
+
+### 5. **File Organization**
+- Logical grouping of related files
+- Easier to navigate for developers
+
+## Adding a New Feature
+
+1. **Create a new route file** in `/routes/newfeature.ts`
+2. **Define the Router** and export it
+3. **Import in server.ts** and add with `app.use(newFeatureRouter)`
+4. **Add types** to `/database/types.ts` if needed
+5. **Add middleware** to `/middleware` if required
+
+Example:
+```typescript
+// routes/newfeature.ts
+import { Router } from "express";
+import { authenticateToken } from "../middleware/auth.js";
+
+export const newFeatureRouter = Router();
+
+newFeatureRouter.get("/api/newfeature", authenticateToken, async (req, res) => {
+  res.json({ data: "example" });
+});
+```
+
+Then in `server.ts`:
+```typescript
+import { newFeatureRouter } from "./routes/newfeature.js";
+// ...
+app.use(newFeatureRouter);
+```
+
+## Database Modes
+
+### Production Mode (with Database)
+- Set `DATABASE_URL` or `DB_HOST` environment variables
+- Uses PostgreSQL for persistent storage
+- Admin account created on first run with default password `admin123`
+
+### Demo Mode (without Database)
+- Falls back to in-memory storage if no database configured
+- Useful for testing without database setup
+- Data is lost on server restart
+
+## Running the Server
+
+```bash
+# Development mode (with file watching)
+npm run dev
+
+# Build TypeScript
+npm run build
+
+# Production mode
+npm start
+```
+
+## Error Handling
+
+- All routes include proper error handling
+- Database errors fall back to mock data if in demo mode
+- File upload errors are logged and reported to client
+
+## Security
+
+- JWT token verification on protected routes
+- Role-based access control (Admin-only endpoints)
+- File upload size limits (500MB)
+- SQL injection protection through parameterized queries
+
+## Future Enhancements
+
+- [ ] Add input validation layer
+- [ ] Implement request logging/audit trail
+- [ ] Add rate limiting
+- [ ] Implement caching layer (Redis)
+- [ ] Add comprehensive error codes
+- [ ] Separate admin routes to `/admin` namespace

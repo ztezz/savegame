@@ -2,7 +2,8 @@ node_modules
 "dist/" 
 "dist/" 
 dist/ 
-
+uploads/
+downloads/
 # wrangler files
 .wrangler
 .dev.vars*

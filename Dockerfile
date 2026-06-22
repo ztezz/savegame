@@ -1,11 +1,11 @@
 # ==========================================
-# STAGE 1: Build mã nguồn TypeScript
+# STAGE 1: Build mã nguồn TypeScript của Backend
 # ==========================================
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Sao chép package.json và package-lock.json để cài đặt dependencies
+# Sao chép package.json để cài đặt dependencies
 COPY package*.json tsconfig.json ./
 
 # Cài đặt toàn bộ dependencies bao gồm cả devDependencies (để build TS)
@@ -18,7 +18,7 @@ COPY . .
 RUN npm run build
 
 # ==========================================
-# STAGE 2: Chạy ứng dụng trong môi trường Production
+# STAGE 2: Chạy ứng dụng Backend trong môi trường Production
 # ==========================================
 FROM node:20-alpine
 
@@ -36,7 +36,6 @@ RUN npm install --only=production
 
 # Sao chép mã nguồn đã build từ Stage 1 và phân quyền cho node user
 COPY --from=builder --chown=node:node /app/dist ./dist
-COPY --from=builder --chown=node:node /app/server.js ./
 COPY --from=builder --chown=node:node /app/schema.sql* ./
 
 # Cấp quyền sở hữu thư mục /app cho user node
@@ -51,8 +50,8 @@ ENV PORT=7860
 ENV NODE_ENV=production
 ENV UPLOADS_DIR=/data
 
-# Mở cổng 7860 trong container
+# Mở cổng 7860 trong container (Hugging Face Spaces mặc định chạy cổng 7860)
 EXPOSE 7860
 
-# Khởi chạy server backend
+# Khởi chạy server backend (npm start -> node dist/server.js)
 CMD ["npm", "start"]
