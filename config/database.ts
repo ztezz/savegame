@@ -3,19 +3,23 @@ import { TEST_DB_URL } from "./environment.js";
 
 const { Pool } = pkg;
 
+const cleanStr = (val: string | undefined): string => {
+  return val ? val.trim().replace(/\s+/g, '') : '';
+};
+
 // Database configuration
 const dbConfig = process.env.DATABASE_URL 
-  ? { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } }
+  ? { connectionString: cleanStr(process.env.DATABASE_URL), ssl: { rejectUnauthorized: false } }
   : process.env.DB_HOST 
     ? {
-        host: process.env.DB_HOST,
-        port: parseInt(process.env.DB_PORT || '5432'),
-        user: process.env.DB_USER,
-        password: process.env.DB_PASSWORD,
-        database: process.env.DB_NAME,
+        host: cleanStr(process.env.DB_HOST),
+        port: parseInt(cleanStr(process.env.DB_PORT) || '5432'),
+        user: process.env.DB_USER ? process.env.DB_USER.trim() : '',
+        password: process.env.DB_PASSWORD ? process.env.DB_PASSWORD.trim() : '',
+        database: process.env.DB_NAME ? process.env.DB_NAME.trim() : 'postgres',
         ssl: { rejectUnauthorized: false }
       }
-    : { connectionString: TEST_DB_URL, ssl: { rejectUnauthorized: false } };
+    : { connectionString: cleanStr(TEST_DB_URL), ssl: { rejectUnauthorized: false } };
 
 export const pool = new Pool(dbConfig);
 
