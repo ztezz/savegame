@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "tsx watch server.ts",
     "build": "tsc --outDir dist",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build",
+    "frontend:lint": "npm --prefix frontend run lint"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",
