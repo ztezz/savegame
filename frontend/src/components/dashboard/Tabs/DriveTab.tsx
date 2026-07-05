@@ -102,6 +102,7 @@ const DriveTab: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [progress, setProgress] = useState(0);
   const [selected, setSelected] = useState<Set<SelectionKey>>(new Set());
   const [trashMode, setTrashMode] = useState(false);
@@ -214,6 +215,7 @@ const DriveTab: React.FC = () => {
       showToast(folderCount ? `Đã tải ${uploadFilesInput.length} file trong ${folderCount} thư mục` : `Đã tải ${uploadFilesInput.length} file lên Drive`, 'success');
       setSelectedUploadFiles([]);
       setNote('');
+      setUploadModalOpen(false);
       await fetchFiles();
     } catch (err: any) {
       showToast(err.message.includes('413') ? 'Drive đã vượt dung lượng cho phép. Hãy dọn thùng rác hoặc tăng quota.' : err.message || 'Upload Drive thất bại', 'error');
@@ -458,39 +460,13 @@ const DriveTab: React.FC = () => {
         {searchTerm && <button type="button" onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>}
       </div>
 
-      {!trashMode && <div className="grid grid-cols-1 xl:grid-cols-[1fr_1.8fr] gap-3">
+      {!trashMode && <div className="grid grid-cols-1 xl:grid-cols-[1fr_auto] gap-3">
         <div className="flex gap-2">
           <input className="flex-1 border rounded-xl px-3 py-2 text-sm" value={newFolderName} onChange={(e)=>setNewFolderName(e.target.value)} placeholder="Tên thư mục mới" />
           <button type="button" onClick={createFolder} disabled={!newFolderName.trim()} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold disabled:opacity-50 inline-flex items-center gap-2"><Plus className="w-4 h-4" />Thư mục</button>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,1fr)_minmax(220px,0.8fr)_auto] gap-2">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <label className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black transition ${uploading ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400' : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:border-indigo-300 hover:bg-indigo-100'}`}>
-              <File className="w-4 h-4" />
-              Chọn file
-              <input className="hidden" type="file" multiple disabled={uploading} onChange={(e)=>{ setSelectedUploadFiles(Array.from<File>(e.currentTarget.files || []).map((file) => ({ file, relativePath: file.name }))); e.currentTarget.value = ''; }} />
-            </label>
-            <label className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black transition ${uploading ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400' : 'border-violet-200 bg-violet-50 text-violet-700 hover:border-violet-300 hover:bg-violet-100'}`}>
-              <Folder className="w-4 h-4" />
-              Chọn thư mục
-              <input className="hidden" type="file" multiple disabled={uploading} {...({ webkitdirectory: '', directory: '' } as any)} onChange={(e)=>{ setSelectedUploadFiles(Array.from<File>(e.currentTarget.files || []).map((file) => ({ file, relativePath: (file as WebkitFile).webkitRelativePath || file.name }))); e.currentTarget.value = ''; }} />
-            </label>
-            <p className="sm:col-span-2 min-h-5 truncate text-xs font-semibold text-slate-500">
-              {selectedUploadFiles.length > 0 ? `Đã chọn ${selectedUploadFiles.length} file${selectedUploadFiles[0]?.relativePath ? ` · ${selectedUploadFiles[0].relativePath}` : ''}` : 'Chọn file lẻ hoặc cả thư mục để tải lên Drive.'}
-            </p>
-          </div>
-          <input className="border rounded-xl px-3 py-2 text-sm" value={note} disabled={uploading} onChange={(e)=>setNote(e.target.value)} placeholder="Ghi chú file" />
-          <button type="button" onClick={() => uploadFiles()} disabled={selectedUploadFiles.length === 0 || uploading} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold disabled:opacity-50 inline-flex items-center justify-center gap-2"><UploadCloud className="w-4 h-4" />{uploading ? `${progress}%` : `Tải lên${selectedUploadFiles.length ? ` (${selectedUploadFiles.length})` : ''}`}</button>
-        </div>
+        <button type="button" onClick={() => setUploadModalOpen(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-100 transition hover:bg-indigo-700"><UploadCloud className="w-4 h-4" />Tải lên</button>
       </div>}
-
-      {!trashMode && <div onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={handleDrop} className={`rounded-2xl border-2 border-dashed p-6 text-center transition ${dragging ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
-        <UploadCloud className="w-8 h-8 mx-auto mb-2" />
-        <p className="text-sm font-bold">Kéo thả file hoặc cả thư mục vào đây để upload nhanh</p>
-        <p className="text-xs mt-1">Giữ nguyên cấu trúc thư mục con khi trình duyệt hỗ trợ.</p>
-      </div>}
-
-      {uploading && <div className="h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-indigo-600 transition-all" style={{ width: `${progress}%` }} /></div>}
     </div>
 
     {selectedCount > 0 && <div className="sticky top-3 z-20 bg-slate-950 text-white rounded-2xl px-4 py-3 shadow-xl flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
@@ -527,6 +503,55 @@ const DriveTab: React.FC = () => {
         </div>)}
       </div>}
     </div>
+
+    {uploadModalOpen && <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
+        <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-widest text-indigo-500">Upload Drive</p>
+            <h3 className="font-black text-slate-900">Tải file hoặc thư mục lên Drive</h3>
+            <p className="mt-1 text-xs text-slate-500">Bạn có thể chọn file, chọn cả thư mục hoặc kéo thả trực tiếp vào khung bên dưới.</p>
+          </div>
+          <button type="button" onClick={() => { if (!uploading) { setUploadModalOpen(false); setDragging(false); } }} disabled={uploading} className="p-2 rounded-xl hover:bg-slate-100 disabled:opacity-50"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl border px-4 py-4 text-sm font-black transition ${uploading ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400' : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:border-indigo-300 hover:bg-indigo-100'}`}>
+              <File className="w-5 h-5" />
+              Chọn file
+              <input className="hidden" type="file" multiple disabled={uploading} onChange={(e)=>{ setSelectedUploadFiles(Array.from<File>(e.currentTarget.files || []).map((file) => ({ file, relativePath: file.name }))); e.currentTarget.value = ''; }} />
+            </label>
+            <label className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl border px-4 py-4 text-sm font-black transition ${uploading ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400' : 'border-violet-200 bg-violet-50 text-violet-700 hover:border-violet-300 hover:bg-violet-100'}`}>
+              <Folder className="w-5 h-5" />
+              Chọn thư mục
+              <input className="hidden" type="file" multiple disabled={uploading} {...({ webkitdirectory: '', directory: '' } as any)} onChange={(e)=>{ setSelectedUploadFiles(Array.from<File>(e.currentTarget.files || []).map((file) => ({ file, relativePath: (file as WebkitFile).webkitRelativePath || file.name }))); e.currentTarget.value = ''; }} />
+            </label>
+          </div>
+
+          <div onDragOver={(e) => { e.preventDefault(); if (!uploading) setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={handleDrop} className={`rounded-2xl border-2 border-dashed p-8 text-center transition ${dragging ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
+            <UploadCloud className="w-10 h-10 mx-auto mb-3" />
+            <p className="text-sm font-black">Kéo thả file hoặc cả thư mục vào đây</p>
+            <p className="text-xs mt-1">Giữ nguyên cấu trúc thư mục con khi trình duyệt hỗ trợ.</p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-black uppercase tracking-widest text-slate-500">Đã chọn</p>
+            <p className="mt-1 truncate text-sm font-bold text-slate-800">{selectedUploadFiles.length > 0 ? `${selectedUploadFiles.length} file${selectedUploadFiles[0]?.relativePath ? ` · ${selectedUploadFiles[0].relativePath}` : ''}` : 'Chưa chọn file nào'}</p>
+          </div>
+
+          <input className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50" value={note} disabled={uploading} onChange={(e)=>setNote(e.target.value)} placeholder="Ghi chú file (không bắt buộc)" />
+
+          {uploading && <div className="space-y-2">
+            <div className="h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-indigo-600 transition-all" style={{ width: `${progress}%` }} /></div>
+            <p className="text-center text-xs font-bold text-indigo-600">Đang tải lên {progress}%</p>
+          </div>}
+        </div>
+        <div className="p-5 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
+          <button type="button" onClick={() => { setUploadModalOpen(false); setDragging(false); }} disabled={uploading} className="px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 disabled:opacity-50">Hủy</button>
+          <button type="button" onClick={() => uploadFiles()} disabled={selectedUploadFiles.length === 0 || uploading} className="px-5 py-3 rounded-xl bg-indigo-600 text-white text-sm font-black disabled:opacity-50 inline-flex items-center justify-center gap-2"><UploadCloud className="w-4 h-4" />{uploading ? `${progress}%` : `Tải lên${selectedUploadFiles.length ? ` (${selectedUploadFiles.length})` : ''}`}</button>
+        </div>
+      </div>
+    </div>}
 
     {(preview || previewLoading) && <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
