@@ -46,6 +46,8 @@ if getattr(sys.stdout, "encoding", None) and sys.stdout.encoding.lower() != "utf
 CONSOLE = Console() if Console else None
 AgentEventHandler = Callable[[str, Dict[str, Any]], None]
 ERROR_ALREADY_EXISTS = 183
+AGENT_VERSION = os.getenv("AGENT_VERSION", "1.0.0")
+API_BASE_URL = "https://thzi-luugame.hf.space"
 
 
 def env_int(name: str, default: int) -> int:
@@ -201,10 +203,12 @@ class RestoreAgent:
         event_handler: Optional[AgentEventHandler] = None,
         stop_event: Optional[threading.Event] = None,
     ) -> None:
-        self.api_base_url = os.getenv("API_BASE_URL", "https://thzi-luugame.hf.space").rstrip("/")
+        self.api_base_url = API_BASE_URL
         self.device_id = socket.gethostname()
         self.poll_interval = max(1, env_int("POLL_INTERVAL_SECONDS", 5))
         self.request_timeout = max(5, env_int("REQUEST_TIMEOUT_SECONDS", 30))
+        self.update_check_interval = max(60, env_int("UPDATE_CHECK_INTERVAL_SECONDS", 6 * 60 * 60))
+        self.last_update_check = 0.0
         self.event_handler = event_handler
         self.stop_event = stop_event or threading.Event()
 
@@ -222,6 +226,7 @@ class RestoreAgent:
             device_id=self.device_id,
             api_key=self.api_key,
             api_base_url=self.api_base_url,
+            version=AGENT_VERSION,
             is_new=is_new_key,
         )
 
@@ -288,6 +293,36 @@ class RestoreAgent:
         )
         response.raise_for_status()
         return response
+
+    def check_for_update(self, force: bool = False) -> None:
+        now = time.time()
+        if not force and now - self.last_update_check < self.update_check_interval:
+            return
+
+        self.last_update_check = now
+        try:
+            response = self.session.get(f"{self.api_base_url}/api/agent/info", timeout=self.request_timeout)
+            response.raise_for_status()
+            info = response.json() or {}
+            latest_version = str(info.get("version") or "").strip()
+            available = bool(info.get("available"))
+
+            if latest_version and latest_version != AGENT_VERSION and available:
+                download_url = f"{self.api_base_url}/api/agent/download"
+                logging.warning(
+                    "CloudSave Agent update available: current=%s latest=%s download=%s",
+                    AGENT_VERSION,
+                    latest_version,
+                    download_url,
+                )
+                self.emit(
+                    "update_available",
+                    current_version=AGENT_VERSION,
+                    latest_version=latest_version,
+                    download_url=download_url,
+                )
+        except Exception as exc:
+            logging.info("Update check skipped: %s", exc)
 
     def heartbeat(self) -> None:
         try:
@@ -433,9 +468,11 @@ class RestoreAgent:
 
     def run_forever(self) -> None:
         show_startup_banner(self.api_base_url, self.device_id, self.poll_interval)
-        logging.info("Agent started. device_id=%s  poll=%ss", self.device_id, self.poll_interval)
+        logging.info("Agent started. version=%s  device_id=%s  poll=%ss", AGENT_VERSION, self.device_id, self.poll_interval)
+        self.check_for_update(force=True)
 
         while not self.stop_event.is_set():
+            self.check_for_update()
             self.heartbeat()
             task = self.fetch_task()
 

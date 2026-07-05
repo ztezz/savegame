@@ -41,6 +41,9 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const [agentVersion, setAgentVersion] = useState('');
   const [agentUploading, setAgentUploading] = useState(false);
   const [agentUploadProgress, setAgentUploadProgress] = useState(0);
+  const [storageUsage, setStorageUsage] = useState<any>(null);
+  const [cleanupPreview, setCleanupPreview] = useState<any>(null);
+  const [cleanupLoading, setCleanupLoading] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -55,8 +58,10 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         try {
           const logs = await api.get('/system/audit-logs?limit=20');
           setAuditLogs(logs.data || []);
+          const storage = await api.get('/system/storage');
+          setStorageUsage(storage.data);
         } catch {
-          showToast('Không tải được audit logs', 'warning');
+          showToast('Không tải được dữ liệu quản trị', 'warning');
         }
       }
     };
@@ -111,6 +116,26 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       showToast(err.message || 'Cập nhật CloudSave Agent thất bại', 'error');
     } finally {
       setAgentUploading(false);
+    }
+  };
+
+  const runStorageCleanup = async (dryRun: boolean) => {
+    if (!isAdmin) return;
+    setCleanupLoading(true);
+    try {
+      const res = await api.post('/system/storage/cleanup', { keepLatest: 5, dryRun });
+      setCleanupPreview(res.data);
+      if (dryRun) {
+        showToast(`Tìm thấy ${res.data.candidates} bản save cũ có thể dọn`, 'info');
+      } else {
+        showToast(`Đã dọn ${res.data.deletedFiles} file save cũ`, 'success');
+        const storage = await api.get('/system/storage');
+        setStorageUsage(storage.data);
+      }
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Dọn dẹp storage thất bại', 'error');
+    } finally {
+      setCleanupLoading(false);
     }
   };
 
@@ -196,6 +221,44 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
 
         {settings.windowsAgent?.available && <a href={AGENT_DOWNLOAD_URL} className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-indigo-800"><Download className="w-4 h-4" />Tải thử CloudSave Agent</a>}
       </div>
+
+      {isAdmin && <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4 xl:col-span-2">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><Server className="w-4 h-4" />Dung lượng lưu trữ</h3>
+            <p className="text-xs text-slate-500 mt-1">Theo dõi thư mục upload và dọn bản save cũ. Mặc định giữ 5 bản mới nhất mỗi game.</p>
+          </div>
+          <button type="button" onClick={() => runStorageCleanup(true)} disabled={cleanupLoading} className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold disabled:opacity-50">Kiểm tra dọn dẹp</button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
+            <p className="text-xs text-slate-500">Tổng dung lượng</p>
+            <p className="font-bold text-slate-800">{formatFileSize(Number(storageUsage?.totalBytes || 0))}</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
+            <p className="text-xs text-slate-500">Số file</p>
+            <p className="font-bold text-slate-800">{storageUsage?.fileCount || 0}</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
+            <p className="text-xs text-slate-500">Save trong DB</p>
+            <p className="font-bold text-slate-800">{storageUsage?.database?.save_count || 0}</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
+            <p className="text-xs text-slate-500">Game/User</p>
+            <p className="font-bold text-slate-800">{storageUsage?.database?.game_count || 0}/{storageUsage?.database?.user_count || 0}</p>
+          </div>
+        </div>
+
+        {storageUsage?.uploadDir && <p className="text-xs text-slate-500 break-all">Upload dir: {storageUsage.uploadDir}</p>}
+
+        {cleanupPreview && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          Có {cleanupPreview.candidates} bản save cũ ngoài 5 bản mới nhất mỗi game.
+          {!cleanupPreview.dryRun && ` Đã xóa ${cleanupPreview.deletedFiles} file (${formatFileSize(Number(cleanupPreview.deletedBytes || 0))}).`}
+        </div>}
+
+        {cleanupPreview?.dryRun && cleanupPreview.candidates > 0 && <button type="button" onClick={() => runStorageCleanup(false)} disabled={cleanupLoading} className="px-5 py-3 bg-red-600 text-white rounded-xl text-sm font-bold disabled:opacity-50">Xóa các bản save cũ</button>}
+      </div>}
     </div>
 
     {isAdmin && <button onClick={saveSettings} disabled={saving} className="w-full sm:w-auto px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold">{saving ? 'Đang lưu...' : 'Lưu cài đặt hệ thống'}</button>}

@@ -11,6 +11,7 @@ Python desktop agent that polls restore tasks, links the current Windows device,
 - Auto hides to tray after successful login/device link
 - Shows a bottom-right notification when a restore task completes
 - Downloads `file_url` from backend task payload
+- Checks `/api/agent/info` periodically and logs when a newer Agent version is available
 - Auto extracts ZIP files, or copies non-ZIP file directly
 - Restores into `save_path` provided by each task (falls back to `restored_saves/` if missing/invalid)
 - Reports result to `POST /api/done`
@@ -30,12 +31,12 @@ pip install -r requirements.txt
 2. Configure environment variables (PowerShell example):
 
 ```powershell
-$env:API_BASE_URL = "https://thzi-luugame.hf.space"
+$env:AGENT_VERSION = "1.0.0"
 $env:POLL_INTERVAL_SECONDS = "5"
 $env:REQUEST_TIMEOUT_SECONDS = "30"
 ```
 
-Optional: place the same variables in a `.env` file next to `restore_agent.py`.
+The backend API is hardcoded to `https://thzi-luugame.hf.space`. Optional runtime settings can be placed in a `.env` file next to `restore_agent.py`.
 
 3. Start the desktop agent:
 
@@ -53,7 +54,6 @@ Install and auto-start at boot:
 
 ```powershell
 .\install-task-scheduler.ps1 `
-  -ApiBaseUrl "https://thzi-luugame.hf.space" `
   -PollIntervalSeconds 5 `
   -RequestTimeoutSeconds 30
 ```
@@ -66,7 +66,6 @@ Requirements: install NSSM and ensure `nssm` is in PATH.
 
 ```powershell
 .\install-nssm-service.ps1 `
-  -ApiBaseUrl "https://thzi-luugame.hf.space" `
   -PollIntervalSeconds 5 `
   -RequestTimeoutSeconds 30
 ```

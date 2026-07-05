@@ -71,8 +71,7 @@ No Python required on target machine.
 
 SETUP:
   1. Copy this folder to target machine (e.g. C:\CloudSaveAgent\)
-  2. Create .env file next to the exe with one line if you need to override the default API:
-         API_BASE_URL=https://thzi-luugame.hf.space
+  2. The backend API is hardcoded to https://thzi-luugame.hf.space
   3. Run restore_agent.exe once - a desktop window will show DEVICE NAME and API KEY
   4. Finish the browser login/link flow
   5. After successful login, the app auto-hides to tray and shows toast notifications on sync success

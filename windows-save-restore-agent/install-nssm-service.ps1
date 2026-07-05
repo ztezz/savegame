@@ -1,8 +1,5 @@
 param(
   [Parameter(Mandatory = $false)]
-  [string]$ApiBaseUrl = "https://thzi-luugame.hf.space",
-
-  [Parameter(Mandatory = $false)]
   [int]$PollIntervalSeconds = 5,
 
   [Parameter(Mandatory = $false)]
@@ -52,7 +49,7 @@ Ensure-Path $LogDir
 & $NssmPath set $ServiceName AppRotateOnline 1
 & $NssmPath set $ServiceName Start SERVICE_AUTO_START
 
-& $NssmPath set $ServiceName AppEnvironmentExtra "API_BASE_URL=$ApiBaseUrl" "POLL_INTERVAL_SECONDS=$PollIntervalSeconds" "REQUEST_TIMEOUT_SECONDS=$RequestTimeoutSeconds"
+& $NssmPath set $ServiceName AppEnvironmentExtra "POLL_INTERVAL_SECONDS=$PollIntervalSeconds" "REQUEST_TIMEOUT_SECONDS=$RequestTimeoutSeconds"
 
 Write-Info "Đã cấu hình service $ServiceName"
 Start-Service -Name $ServiceName

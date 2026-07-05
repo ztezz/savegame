@@ -24,8 +24,31 @@ export const authRouter = Router();
 const MAX_LOGIN_FAILURES_BEFORE_CAPTCHA = 3;
 const CAPTCHA_TTL_MS = 5 * 60 * 1000;
 const DEFAULT_ALLOW_SELF_REGISTER = false;
+const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
+const AUTH_RATE_LIMIT_MAX = 30;
 const loginFailures = new Map<string, { count: number; lastFailedAt: number }>();
 const captchaChallenges = new Map<string, { answer: string; expiresAt: number; key: string }>();
+const authRateLimits = new Map<string, { count: number; resetAt: number }>();
+
+function authRateLimit(req: any, res: any, next: any) {
+  const key = req.ip || req.socket?.remoteAddress || "unknown";
+  const now = Date.now();
+  const current = authRateLimits.get(key);
+
+  if (!current || current.resetAt <= now) {
+    authRateLimits.set(key, { count: 1, resetAt: now + AUTH_RATE_LIMIT_WINDOW_MS });
+    return next();
+  }
+
+  if (current.count >= AUTH_RATE_LIMIT_MAX) {
+    const retryAfterSeconds = Math.ceil((current.resetAt - now) / 1000);
+    res.setHeader("Retry-After", String(retryAfterSeconds));
+    return res.status(429).json({ error: "Too many authentication attempts. Please try again later." });
+  }
+
+  current.count += 1;
+  return next();
+}
 
 async function isSelfRegisterAllowed() {
   if (!isUsingDatabase()) return DEFAULT_ALLOW_SELF_REGISTER;
@@ -86,7 +109,7 @@ function logAuthAudit(userId: number | null, action: string, detail: any) {
     console.error("Failed to write auth audit:", err?.message || err);
   });
 }
-authRouter.post("/api/auth/register", async (req, res) => {
+authRouter.post("/api/auth/register", authRateLimit, async (req, res) => {
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
 
@@ -139,7 +162,7 @@ authRouter.post("/api/auth/register", async (req, res) => {
   }
 });
 
-authRouter.post("/api/auth/login", async (req, res) => {
+authRouter.post("/api/auth/login", authRateLimit, async (req, res) => {
   const { username, password, captchaToken, captchaAnswer } = req.body;
 
   if (!username || !password) {
@@ -219,7 +242,7 @@ authRouter.post("/api/auth/login", async (req, res) => {
     return res.status(401).json({ error: "Invalid credentials" });
   }
 
-  const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET);
+  const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
   loginFailures.delete(loginKey);
   await writeAudit(user.id, 'AUTH_LOGIN_SUCCESS', 'auth', { username, role: user.role });
   res.json({ token, user: { id: user.id, username: user.username, role: user.role } });

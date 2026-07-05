@@ -1,8 +1,5 @@
 param(
   [Parameter(Mandatory = $false)]
-  [string]$ApiBaseUrl = "https://thzi-luugame.hf.space",
-
-  [Parameter(Mandatory = $false)]
   [int]$PollIntervalSeconds = 5,
 
   [Parameter(Mandatory = $false)]
@@ -44,7 +41,6 @@ Ensure-Path $LogDir
 
 $runnerContent = @"
 `$ErrorActionPreference = 'Stop'
-`$env:API_BASE_URL = '$ApiBaseUrl'
 `$env:POLL_INTERVAL_SECONDS = '$PollIntervalSeconds'
 `$env:REQUEST_TIMEOUT_SECONDS = '$RequestTimeoutSeconds'
 

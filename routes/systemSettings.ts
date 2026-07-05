@@ -13,6 +13,46 @@ const WINDOWS_AGENT_SETTINGS_KEY = "windowsAgent";
 const WINDOWS_AGENT_DIR = path.join(UPLOADS_DIR_PATH, "agent");
 const WINDOWS_AGENT_PATH = path.join(WINDOWS_AGENT_DIR, WINDOWS_AGENT_FILENAME);
 
+function collectStorageUsage(dir: string) {
+  const result = { totalBytes: 0, fileCount: 0, directories: [] as Array<{ name: string; bytes: number; files: number }> };
+  if (!fs.existsSync(dir)) return result;
+
+  const walk = (target: string): { bytes: number; files: number } => {
+    let bytes = 0;
+    let files = 0;
+    for (const entry of fs.readdirSync(target, { withFileTypes: true })) {
+      const entryPath = path.join(target, entry.name);
+      if (entry.isDirectory()) {
+        const child = walk(entryPath);
+        bytes += child.bytes;
+        files += child.files;
+      } else if (entry.isFile()) {
+        const stat = fs.statSync(entryPath);
+        bytes += stat.size;
+        files += 1;
+      }
+    }
+    return { bytes, files };
+  };
+
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const entryPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const child = walk(entryPath);
+      result.directories.push({ name: entry.name, bytes: child.bytes, files: child.files });
+      result.totalBytes += child.bytes;
+      result.fileCount += child.files;
+    } else if (entry.isFile()) {
+      const stat = fs.statSync(entryPath);
+      result.totalBytes += stat.size;
+      result.fileCount += 1;
+    }
+  }
+
+  result.directories.sort((a, b) => b.bytes - a.bytes);
+  return result;
+}
+
 const DEFAULT_SETTINGS = {
   security: { enforceStrongPassword: true, sessionTimeoutMinutes: 120, allowSelfRegister: false },
   sync: { autoSyncEnabled: false, syncIntervalMinutes: 5, maxUploadSizeMb: 2048, retentionDays: 30, retryLimit: 2 },
@@ -122,6 +162,76 @@ settingsRouter.post('/api/system/agent/windows', authenticateToken, isAdmin, upl
   } catch (err: any) {
     if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
     res.status(500).json({ error: err.message || 'Failed to update CloudSave Agent' });
+  }
+});
+
+settingsRouter.get('/api/system/storage', authenticateToken, isAdmin, async (_req: any, res) => {
+  try {
+    const usage = collectStorageUsage(UPLOADS_DIR_PATH);
+    let database: any = null;
+
+    if (isUsingDatabase()) {
+      const { rows } = await pool.query(`
+        SELECT
+          COUNT(*)::int AS save_count,
+          COALESCE(SUM(file_size), 0)::bigint AS save_bytes,
+          COUNT(DISTINCT g.user_id)::int AS user_count,
+          COUNT(DISTINCT g.id)::int AS game_count
+        FROM saves s
+        JOIN games g ON g.id = s.game_id
+      `);
+      database = rows[0] || null;
+    }
+
+    res.json({ uploadDir: UPLOADS_DIR_PATH, ...usage, database });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Failed to read storage usage' });
+  }
+});
+
+settingsRouter.post('/api/system/storage/cleanup', authenticateToken, isAdmin, async (req: any, res) => {
+  const keepLatest = Math.max(1, Math.min(Number(req.body?.keepLatest || 5), 50));
+  const dryRun = req.body?.dryRun !== false;
+
+  if (!isUsingDatabase()) return res.status(400).json({ error: 'Cleanup requires database mode' });
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, file_path, file_size
+       FROM (
+         SELECT s.id, s.file_path, s.file_size,
+                ROW_NUMBER() OVER (PARTITION BY s.game_id ORDER BY s.version DESC, s.created_at DESC, s.id DESC) AS rn
+         FROM saves s
+       ) ranked
+       WHERE rn > $1`,
+      [keepLatest]
+    );
+
+    let deletedFiles = 0;
+    let deletedBytes = 0;
+
+    if (!dryRun && rows.length > 0) {
+      for (const save of rows) {
+        const filePath = path.join(UPLOADS_DIR_PATH, save.file_path);
+        if (fs.existsSync(filePath)) {
+          try {
+            const stat = fs.statSync(filePath);
+            fs.unlinkSync(filePath);
+            deletedFiles += 1;
+            deletedBytes += stat.size;
+          } catch (err: any) {
+            console.warn(`Could not delete old save file ${filePath}: ${err.message}`);
+          }
+        }
+      }
+
+      await pool.query('DELETE FROM saves WHERE id = ANY($1::int[])', [rows.map((row: any) => row.id)]);
+      await writeAudit(req.user?.id || null, 'CLEANUP', 'storage', { keepLatest, deletedRows: rows.length, deletedFiles, deletedBytes });
+    }
+
+    res.json({ dryRun, keepLatest, candidates: rows.length, deletedFiles, deletedBytes });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Cleanup failed' });
   }
 });
 

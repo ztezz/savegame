@@ -24,6 +24,11 @@ export default function App() {
     setUser(null);
   };
 
+  useEffect(() => {
+    window.addEventListener('auth:logout', handleLogout);
+    return () => window.removeEventListener('auth:logout', handleLogout);
+  }, []);
+
   const handleLeaveDeviceLink = () => {
     const url = new URL(window.location.href);
     url.searchParams.delete('device_link');
