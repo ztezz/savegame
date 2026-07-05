@@ -195,6 +195,7 @@ export const uploadWithChunks = async (
   }
 
   const CHUNK_SIZE = 8 * 1024 * 1024; // Smaller chunks keep progress responsive on slow networks
+  const MAX_CHUNK_RETRIES = 3;
   const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
   
   console.log(`🚀 Chunked upload starting: ${file.name} (${(file.size / (1024 * 1024)).toFixed(1)}MB, ${totalChunks} chunks)`);
@@ -222,7 +223,9 @@ export const uploadWithChunks = async (
     const { sessionId } = await initRes.json();
     console.log(`📝 Upload session created: ${sessionId}`);
 
-    const uploadChunk = (chunk: Blob, chunkIndex: number) => new Promise<void>((resolve, reject) => {
+    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    const uploadChunk = (chunk: Blob, chunkIndex: number, attempt: number) => new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       const chunkUrl = `${baseURL}/activation/upload/chunk?sessionId=${encodeURIComponent(sessionId)}&chunkIndex=${chunkIndex}&totalChunks=${totalChunks}`;
       const uploadedBeforeChunk = chunkIndex * CHUNK_SIZE;
@@ -247,12 +250,12 @@ export const uploadWithChunks = async (
         } catch {
           if (xhr.responseText) message = xhr.responseText;
         }
-        reject(new Error(`Failed to upload chunk ${chunkIndex + 1}: ${message}`));
+        reject(new Error(`Failed to upload chunk ${chunkIndex + 1} (attempt ${attempt}): ${message}`));
       });
 
-      xhr.addEventListener('error', () => reject(new Error(`Network error while uploading chunk ${chunkIndex + 1}`)));
-      xhr.addEventListener('abort', () => reject(new Error(`Upload chunk ${chunkIndex + 1} aborted`)));
-      xhr.addEventListener('timeout', () => reject(new Error(`Upload chunk ${chunkIndex + 1} timed out`)));
+      xhr.addEventListener('error', () => reject(new Error(`Network error while uploading chunk ${chunkIndex + 1} (attempt ${attempt})`)));
+      xhr.addEventListener('abort', () => reject(new Error(`Upload chunk ${chunkIndex + 1} aborted (attempt ${attempt})`)));
+      xhr.addEventListener('timeout', () => reject(new Error(`Upload chunk ${chunkIndex + 1} timed out (attempt ${attempt})`)));
 
       xhr.open('POST', chunkUrl);
       xhr.timeout = timeoutMs;
@@ -260,6 +263,20 @@ export const uploadWithChunks = async (
       xhr.setRequestHeader('Content-Type', 'application/octet-stream');
       xhr.send(chunk);
     });
+
+    const uploadChunkWithRetry = async (chunk: Blob, chunkIndex: number) => {
+      for (let attempt = 1; attempt <= MAX_CHUNK_RETRIES; attempt++) {
+        try {
+          await uploadChunk(chunk, chunkIndex, attempt);
+          return;
+        } catch (err) {
+          if (attempt === MAX_CHUNK_RETRIES) throw err;
+          const delayMs = attempt * 1500;
+          console.warn(`⚠️ Chunk ${chunkIndex + 1}/${totalChunks} failed, retrying in ${delayMs}ms...`, err);
+          await sleep(delayMs);
+        }
+      }
+    };
 
     // Step 2: Upload chunks
     for (let i = 0; i < totalChunks; i++) {
@@ -269,7 +286,7 @@ export const uploadWithChunks = async (
       
       console.log(`📤 Uploading chunk ${i + 1}/${totalChunks} (${(chunk.size / (1024 * 1024)).toFixed(1)}MB)...`);
 
-      await uploadChunk(chunk, i);
+      await uploadChunkWithRetry(chunk, i);
 
       const progress = Math.floor((end / file.size) * 95);
       onProgress(Math.max(1, Math.min(progress, 95)));

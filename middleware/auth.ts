@@ -4,7 +4,10 @@ import { pool, isUsingDatabase } from "../config/database.js";
 
 export const authenticateToken = async (req: any, res: any, next: any) => {
   const authHeader = req.headers['authorization'];
-  console.log(`🔐 Auth check for ${req.method} ${req.path}:`, authHeader ? 'Header present' : 'NO HEADER');
+  const isNoisyPollPath = req.path === '/api/sync/restore-status' || req.path === '/api/sync/agent-online' || req.path === '/api/task';
+  if (!isNoisyPollPath) {
+    console.log(`🔐 Auth check for ${req.method} ${req.path}:`, authHeader ? 'Header present' : 'NO HEADER');
+  }
 
   // --- Device API Key auth ---
   // Accept "Authorization: ApiKey <key>" from the Python restore agent.
@@ -22,7 +25,7 @@ export const authenticateToken = async (req: any, res: any, next: any) => {
           [apiKey]
         );
         if (rows.length === 0) {
-          console.log('❌ ApiKey not found');
+          if (!isNoisyPollPath) console.log('❌ ApiKey not found');
           return res.sendStatus(401);
         }
         const { rows: userRows } = await pool.query(
@@ -31,7 +34,7 @@ export const authenticateToken = async (req: any, res: any, next: any) => {
         );
         if (userRows.length === 0) return res.sendStatus(401);
         req.user = { id: userRows[0].id, username: userRows[0].username, role: userRows[0].role };
-        console.log('✅ ApiKey auth - User:', req.user.username, 'Device:', rows[0].device_name);
+        if (!isNoisyPollPath) console.log('✅ ApiKey auth - User:', req.user.username, 'Device:', rows[0].device_name);
         return next();
       } catch (err: any) {
         console.error('⚠️  ApiKey DB error:', err.message);
@@ -52,17 +55,17 @@ export const authenticateToken = async (req: any, res: any, next: any) => {
 
   jwt.verify(token, JWT_SECRET, async (err: any, user: any) => {
     if (err) {
-      console.log('❌ Token verification failed:', err.message);
+      if (!isNoisyPollPath) console.log('❌ Token verification failed:', err.message);
       return res.sendStatus(403);
     }
-    console.log('✅ Token verified - User:', user);
+    if (!isNoisyPollPath) console.log('✅ Token verified - User:', user);
     
     if (isUsingDatabase()) {
       try {
         const { rows } = await pool.query('SELECT id, username, role FROM users WHERE username = $1', [user.username]);
         if (rows.length > 0) {
           req.user = { ...user, id: rows[0].id };
-          console.log('✅ User loaded from DB:', req.user);
+          if (!isNoisyPollPath) console.log('✅ User loaded from DB:', req.user);
         } else {
           console.log('⚠️  User not found in database');
           return res.status(401).json({ error: 'User no longer exists. Please sign in again.' });
