@@ -61,10 +61,7 @@ if (Test-Path $iconPath) {
 $exePath = Join-Path $DistDir "$OutputName.exe"
 if (-not (Test-Path $exePath)) { throw "Build failed - exe not found: $exePath" }
 
-# 6. Copy .env.example
-Copy-Item (Join-Path $ScriptRoot ".env.example") (Join-Path $DistDir ".env.example") -Force
-
-# 7. README
+# 6. README
 $guide = @"
 === CloudSave Restore Agent ===
 No Python required on target machine.
