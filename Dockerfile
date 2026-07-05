@@ -15,7 +15,7 @@ RUN npm install
 COPY . .
 
 # Biên dịch TypeScript sang JavaScript (đầu ra sẽ nằm trong thư mục dist)
-RUN npm run build
+RUN npm run backend:build
 
 # ==========================================
 # STAGE 2: Chạy ứng dụng Backend trong môi trường Production

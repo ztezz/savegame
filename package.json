@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch server.ts",
-    "build": "tsc --outDir dist",
+    "build": "npm --prefix frontend run build",
+    "backend:build": "tsc --outDir dist",
     "start": "node dist/server.js",
     "frontend:dev": "npm --prefix frontend run dev",
     "frontend:build": "npm --prefix frontend run build",
