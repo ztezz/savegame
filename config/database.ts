@@ -71,6 +71,10 @@ logDatabaseTarget(dbConfig);
 
 export const pool = new Pool(dbConfig);
 
+pool.on('error', (err: any) => {
+  console.error('⚠️ PostgreSQL pool idle client error:', err?.message || err);
+});
+
 export const isUsingDatabase = () => {
   return process.env.DATABASE_URL || process.env.DB_HOST || TEST_DB_URL;
 };

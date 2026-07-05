@@ -1,10 +1,9 @@
 import * as fs from "fs";
 import * as path from "path";
 import { UploadSession } from "../database/types.js";
+import { UPLOADS_DIR_PATH } from "../config/multer.js";
 
-const TEMP_UPLOADS_DIR = process.env.UPLOADS_DIR 
-  ? path.join(process.env.UPLOADS_DIR, '.temp')
-  : path.join(process.cwd(), 'uploads', '.temp');
+const TEMP_UPLOADS_DIR = path.join(UPLOADS_DIR_PATH, '.temp');
 
 // Ensure temp directory exists
 if (!fs.existsSync(TEMP_UPLOADS_DIR)) {

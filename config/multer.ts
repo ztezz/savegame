@@ -1,8 +1,21 @@
 import multer from "multer";
+import * as fs from "fs";
 import * as path from "path";
 import { MAX_FILE_SIZE } from "./environment.js";
 
-const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(process.cwd(), "uploads");
+const resolveUploadsDir = () => {
+  if (process.env.UPLOADS_DIR) return process.env.UPLOADS_DIR;
+  if (fs.existsSync("/data")) return path.join("/data", "uploads");
+  return path.join(process.cwd(), "uploads");
+};
+
+const UPLOADS_DIR = resolveUploadsDir();
+
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+console.log(`Upload storage directory: ${UPLOADS_DIR}`);
 
 // Multer Storage Configuration
 const storage = multer.diskStorage({

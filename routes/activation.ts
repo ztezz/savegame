@@ -12,6 +12,25 @@ const TEMP_UPLOADS_DIR = getTempUploadDir();
 
 export const activationRouter = Router();
 
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function insertActivationFileWithRetry(values: any[]) {
+  let lastErr: any;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      return await pool.query(
+        'INSERT INTO activation_files (user_id, game_name, original_name, file_path, file_size, note) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+        values
+      );
+    } catch (err: any) {
+      lastErr = err;
+      console.warn(`⚠️ Insert activation file failed (attempt ${attempt}/3):`, err?.message || err);
+      if (attempt < 3) await sleep(attempt * 1500);
+    }
+  }
+  throw lastErr;
+}
+
 // Chunked Upload
 activationRouter.post("/api/activation/upload/init", authenticateToken, isAdmin, express.json({ limit: '1mb' }), async (req: any, res) => {
   const { fileName, fileSize, gameName, note } = req.body;
@@ -96,10 +115,7 @@ activationRouter.post("/api/activation/upload/finalize", authenticateToken, isAd
     // Save to database
     if (isUsingDatabase()) {
       try {
-        const { rows } = await pool.query(
-          'INSERT INTO activation_files (user_id, game_name, original_name, file_path, file_size, note) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-          [req.user.id, session.gameName, session.fileName, fileName, fileStats.size, session.note]
-        );
+        const { rows } = await insertActivationFileWithRetry([req.user.id, session.gameName, session.fileName, fileName, fileStats.size, session.note]);
         uploadSessions.delete(sessionId);
         console.log(`✅ Upload finalized: ${session.fileName} (${(fileStats.size / (1024 * 1024)).toFixed(1)}MB)`);
         res.status(201).json(rows[0]);
@@ -125,10 +141,7 @@ activationRouter.post("/api/activation/upload", authenticateToken, isAdmin, uplo
 
   if (isUsingDatabase()) {
     try {
-      const { rows } = await pool.query(
-        'INSERT INTO activation_files (user_id, game_name, original_name, file_path, file_size, note) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-        [req.user.id, gameName, file.originalname, file.filename, file.size, note || '']
-      );
+      const { rows } = await insertActivationFileWithRetry([req.user.id, gameName, file.originalname, file.filename, file.size, note || '']);
       res.status(201).json(rows[0]);
     } catch (err) {
       console.error('❌ Upload activation file error:', err);
