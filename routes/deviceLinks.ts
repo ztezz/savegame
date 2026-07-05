@@ -18,23 +18,23 @@ function getFrontendBaseUrl(req: any): string {
   }
 
   const origins = Array.isArray(FRONTEND_ORIGIN) ? FRONTEND_ORIGIN : [FRONTEND_ORIGIN];
-  const preferredPublic = origins.find((origin) =>
+  const isFrontendOrigin = (origin: unknown) =>
     typeof origin === "string" &&
-    origin.startsWith("https://") &&
-    !origin.includes("api-savegame") &&
+    origin.startsWith("http") &&
     !origin.includes("localhost") &&
-    !origin.includes("127.0.0.1")
+    !origin.includes("127.0.0.1") &&
+    !origin.includes("/api") &&
+    !origin.includes("api-");
+
+  const preferredPublic = origins.find((origin) =>
+    isFrontendOrigin(origin) && origin.startsWith("https://")
   );
 
   if (preferredPublic) {
     return preferredPublic.replace(/\/$/, "");
   }
 
-  const preferred = origins.find((origin) =>
-    typeof origin === "string" &&
-    origin.startsWith("http") &&
-    !origin.includes("api-savegame")
-  );
+  const preferred = origins.find(isFrontendOrigin);
 
   if (preferred) {
     return preferred.replace(/\/$/, "");

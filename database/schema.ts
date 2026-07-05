@@ -153,29 +153,34 @@ export async function initializeSchema() {
     `);
     console.log('✅ Schema initialized successfully!');
 
-    // Đảm bảo tài khoản admin tồn tại
+    // Create a bootstrap admin only when explicitly configured.
     const adminRow = await pool.query("SELECT id, password_hash FROM users WHERE username = 'admin'");
-    const defaultHash = await bcrypt.hash('admin123', 10);
+    const initialAdminPassword = process.env.ADMIN_INITIAL_PASSWORD || (process.env.NODE_ENV === 'production' ? '' : 'admin123');
     console.log(`📋 Admin account check: ${adminRow.rows.length} admin user(s) found`);
     
     if (adminRow.rows.length === 0) {
-      console.log(`📝 Creating default admin account with password 'admin123'...`);
+      if (!initialAdminPassword) {
+        console.log("ℹ️ No admin account found. Set ADMIN_INITIAL_PASSWORD to bootstrap one.");
+        return;
+      }
+
+      const adminHash = await bcrypt.hash(initialAdminPassword, 10);
+      console.log("📝 Creating bootstrap admin account...");
       await pool.query(
         "INSERT INTO users (username, email, role, status, password_hash) VALUES ('admin', 'admin@cloudsave.local', 'Admin', 'Active', $1)",
-        [defaultHash]
+        [adminHash]
       );
-      console.log("✅ Created default admin account (admin / admin123). Please change password!");
+      console.log("✅ Created bootstrap admin account. Please change password after first login.");
     } else {
       const hasValidHash = adminRow.rows[0].password_hash && adminRow.rows[0].password_hash.startsWith('$2');
       console.log(`🔐 Admin hash status: ${hasValidHash ? 'Valid bcrypt hash' : 'INVALID or missing'}`);
       
-      if (!adminRow.rows[0].password_hash || !adminRow.rows[0].password_hash.startsWith('$2')) {
-        console.log(`⚠️  Updating admin password hash because current hash is invalid...`);
-        await pool.query("UPDATE users SET password_hash = $1, role = 'Admin' WHERE username = 'admin'", [defaultHash]);
-        console.log("✅ Updated admin account with default password (admin123). Please change it!");
-      } else {
-        console.log("✅ Admin account exists with valid password hash");
+      if (!hasValidHash) {
+        console.log("⚠️ Admin account password hash is invalid. Fix it manually or set ADMIN_INITIAL_PASSWORD and reset explicitly.");
+        return;
       }
+
+      console.log("✅ Admin account exists with valid password hash");
     }
   } catch (err) {
     console.error('❌ Schema initialization error:', err);

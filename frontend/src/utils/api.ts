@@ -287,9 +287,7 @@ export const downloadWithProgress = async (
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const token = localStorage.getItem('token');
-    const baseURL = import.meta.env.VITE_API_URL 
-      ? `${import.meta.env.VITE_API_URL}/api` 
-      : '/api';
+    const baseURL = API_BASE_URL;
     
     const fullUrl = `${baseURL}${url}`;
     console.log(`📥 Download starting: ${fullUrl}`);

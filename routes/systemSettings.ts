@@ -73,8 +73,24 @@ settingsRouter.post('/api/system/agent/windows', authenticateToken, isAdmin, upl
 
   try {
     if (!fs.existsSync(WINDOWS_AGENT_DIR)) fs.mkdirSync(WINDOWS_AGENT_DIR, { recursive: true });
-    if (fs.existsSync(WINDOWS_AGENT_PATH)) fs.unlinkSync(WINDOWS_AGENT_PATH);
-    fs.renameSync(file.path, WINDOWS_AGENT_PATH);
+    const nextAgentPath = path.join(WINDOWS_AGENT_DIR, `${WINDOWS_AGENT_FILENAME}.next`);
+    const backupAgentPath = path.join(WINDOWS_AGENT_DIR, `${WINDOWS_AGENT_FILENAME}.bak`);
+
+    if (fs.existsSync(nextAgentPath)) fs.unlinkSync(nextAgentPath);
+    fs.renameSync(file.path, nextAgentPath);
+
+    if (fs.existsSync(backupAgentPath)) fs.unlinkSync(backupAgentPath);
+    if (fs.existsSync(WINDOWS_AGENT_PATH)) fs.renameSync(WINDOWS_AGENT_PATH, backupAgentPath);
+
+    try {
+      fs.renameSync(nextAgentPath, WINDOWS_AGENT_PATH);
+      if (fs.existsSync(backupAgentPath)) fs.unlinkSync(backupAgentPath);
+    } catch (replaceErr) {
+      if (fs.existsSync(backupAgentPath) && !fs.existsSync(WINDOWS_AGENT_PATH)) {
+        fs.renameSync(backupAgentPath, WINDOWS_AGENT_PATH);
+      }
+      throw replaceErr;
+    }
 
     const stat = fs.statSync(WINDOWS_AGENT_PATH);
     const metadata = {

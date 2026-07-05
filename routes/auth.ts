@@ -14,6 +14,7 @@ let nextId = 2;
 
 // Initialize mock admin
 (async () => {
+  if (process.env.NODE_ENV === 'production') return;
   const hash = await bcrypt.hash('admin123', 10);
   users.push({ id: 1, username: 'admin', email: 'admin@cloudsave.local', role: 'Admin', status: 'Active', passwordHash: hash, createdAt: new Date().toISOString() });
 })();
@@ -22,8 +23,21 @@ export const authRouter = Router();
 
 const MAX_LOGIN_FAILURES_BEFORE_CAPTCHA = 3;
 const CAPTCHA_TTL_MS = 5 * 60 * 1000;
+const DEFAULT_ALLOW_SELF_REGISTER = false;
 const loginFailures = new Map<string, { count: number; lastFailedAt: number }>();
 const captchaChallenges = new Map<string, { answer: string; expiresAt: number; key: string }>();
+
+async function isSelfRegisterAllowed() {
+  if (!isUsingDatabase()) return DEFAULT_ALLOW_SELF_REGISTER;
+
+  try {
+    const { rows } = await pool.query("SELECT value_json FROM system_settings WHERE key = 'security'");
+    return Boolean(rows[0]?.value_json?.allowSelfRegister);
+  } catch (err: any) {
+    console.error('Failed to load registration setting:', err?.message || err);
+    return DEFAULT_ALLOW_SELF_REGISTER;
+  }
+}
 
 function getLoginKey(req: any, username: string): string {
   const ip = req.ip || req.socket?.remoteAddress || "unknown";
@@ -57,7 +71,7 @@ function verifyCaptcha(key: string, token: unknown, answer: unknown): boolean {
   return challenge.answer === answer.trim();
 }
 
-function captchaError(res: any, key: string, error = "Vui lÃ²ng nháº­p mÃ£ xÃ¡c minh") {
+function captchaError(res: any, key: string, error = "Vui lòng nhập mã xác minh") {
   return res.status(403).json({
     error,
     captchaRequired: true,
@@ -73,17 +87,32 @@ function logAuthAudit(userId: number | null, action: string, detail: any) {
   });
 }
 authRouter.post("/api/auth/register", async (req, res) => {
-  const { username, password } = req.body;
+  const username = String(req.body?.username || '').trim();
+  const password = String(req.body?.password || '');
+
+  if (!username || !password) {
+    return res.status(400).json({ error: "Username and password are required" });
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ error: "Password must be at least 6 characters" });
+  }
+
+  if (!(await isSelfRegisterAllowed())) {
+    logAuthAudit(null, 'AUTH_REGISTER_FAILED', { username, reason: 'self_register_disabled' });
+    return res.status(403).json({ error: "Self registration is disabled" });
+  }
+
   const passwordHash = await bcrypt.hash(password, 10);
 
   if (isUsingDatabase()) {
     try {
-      const role = username === 'admin' ? 'Admin' : 'User';
+      const role = 'User';
       await pool.query('INSERT INTO users (username, display_name, password_hash, role) VALUES ($1, $2, $3, $4)', [username, username, passwordHash, role]);
       logAuthAudit(null, 'AUTH_REGISTER', { username, success: true });
       return res.status(201).json({ message: "User registered" });
     } catch (err: any) {
-      console.error('âŒ Registration error:', err);
+      console.error('❌ Registration error:', err);
       if (err.code === '23505') {
         logAuthAudit(null, 'AUTH_REGISTER_FAILED', { username, reason: 'user_exists' });
         return res.status(400).json({ error: "User already exists" });
@@ -100,7 +129,7 @@ authRouter.post("/api/auth/register", async (req, res) => {
       id: nextId++, 
       username, 
       passwordHash, 
-      role: username === 'admin' ? 'Admin' : 'User', 
+      role: 'User', 
       status: 'Active', 
       createdAt: new Date().toISOString() 
     };
@@ -123,7 +152,7 @@ authRouter.post("/api/auth/login", async (req, res) => {
   const failureCount = loginFailures.get(loginKey)?.count ?? 0;
   if (failureCount >= MAX_LOGIN_FAILURES_BEFORE_CAPTCHA && !verifyCaptcha(loginKey, captchaToken, captchaAnswer)) {
     logAuthAudit(null, 'AUTH_LOGIN_FAILED', { username, reason: 'captcha_failed' });
-    return captchaError(res, loginKey, "M? x?c minh kh?ng ??ng ho?c ?? h?t h?n");
+    return captchaError(res, loginKey, "Mã xác minh không đúng hoặc đã hết hạn");
   }
 
   const rejectLogin = () => {
@@ -135,9 +164,9 @@ authRouter.post("/api/auth/login", async (req, res) => {
       captchaRequired: failedCount >= MAX_LOGIN_FAILURES_BEFORE_CAPTCHA,
     });
     if (failedCount >= MAX_LOGIN_FAILURES_BEFORE_CAPTCHA) {
-      return captchaError(res, loginKey, "T?n ??ng nh?p ho?c m?t kh?u kh?ng ??ng");
+      return captchaError(res, loginKey, "Tên đăng nhập hoặc mật khẩu không đúng");
     }
-    return res.status(401).json({ error: "T?n ??ng nh?p ho?c m?t kh?u kh?ng ??ng" });
+    return res.status(401).json({ error: "Tên đăng nhập hoặc mật khẩu không đúng" });
   };
 
   let user: User | null = null;
@@ -314,7 +343,7 @@ authRouter.get("/api/auth/diagnose", async (req: any, res) => {
 
     res.json(results);
   } catch (err: any) {
-    console.error('âŒ Diagnostic error:', err);
+    console.error('❌ Diagnostic error:', err);
     results.error = err.message;
     res.status(500).json(results);
   }
