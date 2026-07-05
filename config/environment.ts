@@ -1,5 +1,5 @@
 export const JWT_SECRET = process.env.JWT_SECRET || "cloudsave-secret-key-2024";
-export const TEST_DB_URL = "postgresql://postgres.kqfixtgeodjmhctguber:543457%40Thai@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres";
+export const TEST_DB_URL = "postgresql://postgres.kqfixtgeodjmhctguber:543457%40tHAI@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres";
 export const NODE_ENV = process.env.NODE_ENV || "development";
 export const PORT = NODE_ENV === "production" ? (process.env.PORT || 3000) : (process.env.API_PORT || 3001);
 
