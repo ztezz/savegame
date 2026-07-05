@@ -13,6 +13,7 @@ const LibraryTab = lazy(() => import('./dashboard/Tabs/LibraryTab'));
 const DevicesTab = lazy(() => import('./dashboard/Tabs/DevicesTab'));
 const UsersTab = lazy(() => import('./dashboard/Tabs/UsersTab'));
 const SettingsTab = lazy(() => import('./dashboard/Tabs/SettingsTab'));
+const SystemLogsTab = lazy(() => import('./dashboard/Tabs/SystemLogsTab'));
 const AccountTab = lazy(() => import('./dashboard/Tabs/AccountTab'));
 const ActivationTab = lazy(() => import('./dashboard/Tabs/ActivationTab'));
 const CategoryTab = lazy(() => import('./dashboard/Tabs/CategoryTab'));
@@ -48,7 +49,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   const [filterCategory, setFilterCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'category'>('name');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'library' | 'drive' | 'community' | 'devices' | 'settings' | 'users' | 'activation' | 'category' | 'account'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'library' | 'drive' | 'community' | 'devices' | 'settings' | 'logs' | 'users' | 'activation' | 'category' | 'account'>('dashboard');
   
   // Activation Files State
   const [activationFiles, setActivationFiles] = useState<ActivationFile[]>([]);
@@ -119,6 +120,10 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
     settings: {
       title: 'Cài đặt hệ thống',
       description: 'Cấu hình đồng bộ tự động và tuỳ chọn vận hành.',
+    },
+    logs: {
+      title: 'Nhật ký hệ thống',
+      description: 'Theo dõi hoạt động, lỗi API và thay đổi cấu hình quan trọng.',
     },
     users: {
       title: 'Tài khoản người dùng',
@@ -909,6 +914,12 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
                 syncInterval={syncInterval}
                 setSyncInterval={setSyncInterval}
               />
+            </Suspense>
+          )}
+
+          {activeTab === 'logs' && (
+            <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải nhật ký...</div>}>
+              <SystemLogsTab currentUser={currentUser} />
             </Suspense>
           )}
 
