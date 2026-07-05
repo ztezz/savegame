@@ -153,6 +153,7 @@ export async function initializeSchema() {
       CREATE TABLE IF NOT EXISTS drive_files (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        folder_id INTEGER,
         original_name VARCHAR(255) NOT NULL,
         stored_name VARCHAR(255) NOT NULL,
         mime_type VARCHAR(255),
@@ -160,7 +161,28 @@ export async function initializeSchema() {
         note TEXT,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
+      CREATE TABLE IF NOT EXISTS drive_folders (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        parent_id INTEGER REFERENCES drive_folders(id) ON DELETE CASCADE,
+        name VARCHAR(120) NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, parent_id, name)
+      );
+      ALTER TABLE drive_files ADD COLUMN IF NOT EXISTS folder_id INTEGER;
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.table_constraints
+          WHERE constraint_name = 'drive_files_folder_id_fkey'
+        ) THEN
+          ALTER TABLE drive_files
+          ADD CONSTRAINT drive_files_folder_id_fkey FOREIGN KEY (folder_id) REFERENCES drive_folders(id) ON DELETE CASCADE;
+        END IF;
+      END $$;
       CREATE INDEX IF NOT EXISTS idx_drive_files_user_created ON drive_files(user_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_drive_files_user_folder ON drive_files(user_id, folder_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_drive_folders_user_parent ON drive_folders(user_id, parent_id, name);
 
     `);
     console.log('✅ Schema initialized successfully!');
