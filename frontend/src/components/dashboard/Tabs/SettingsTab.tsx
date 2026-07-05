@@ -47,6 +47,11 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const [chatStats, setChatStats] = useState<any>(null);
   const [chatKeepLatest, setChatKeepLatest] = useState(200);
   const [chatManaging, setChatManaging] = useState(false);
+  const [chatBans, setChatBans] = useState<any[]>([]);
+  const [chatUsers, setChatUsers] = useState<any[]>([]);
+  const [banUserId, setBanUserId] = useState('');
+  const [banDurationMinutes, setBanDurationMinutes] = useState(60);
+  const [banReason, setBanReason] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -65,6 +70,10 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           setStorageUsage(storage.data);
           const chat = await api.get('/community/stats');
           setChatStats(chat.data);
+          const bans = await api.get('/community/bans');
+          setChatBans(bans.data || []);
+          const users = await api.get('/users');
+          setChatUsers(users.data || []);
         } catch {
           showToast('Không tải được dữ liệu quản trị', 'warning');
         }
@@ -147,6 +156,41 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const refreshChatStats = async () => {
     const chat = await api.get('/community/stats');
     setChatStats(chat.data);
+    const bans = await api.get('/community/bans');
+    setChatBans(bans.data || []);
+  };
+
+  const banChatUser = async () => {
+    if (!banUserId) return;
+    setChatManaging(true);
+    try {
+      await api.post('/community/bans', {
+        userId: Number(banUserId),
+        durationMinutes: banDurationMinutes === 0 ? null : banDurationMinutes,
+        reason: banReason.trim(),
+      });
+      showToast('Đã khóa chat người dùng', 'success');
+      setBanUserId('');
+      setBanReason('');
+      await refreshChatStats();
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Khóa chat thất bại', 'error');
+    } finally {
+      setChatManaging(false);
+    }
+  };
+
+  const unbanChatUser = async (userId: number) => {
+    setChatManaging(true);
+    try {
+      await api.delete(`/community/bans/${userId}`);
+      showToast('Đã mở khóa chat', 'success');
+      await refreshChatStats();
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Mở khóa chat thất bại', 'error');
+    } finally {
+      setChatManaging(false);
+    }
   };
 
   const cleanupChat = async () => {
@@ -328,6 +372,44 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           </label>
           <button type="button" onClick={cleanupChat} disabled={chatManaging} className="px-5 py-3 bg-slate-900 text-white rounded-xl text-sm font-bold disabled:opacity-50">Dọn tin cũ</button>
           <button type="button" onClick={clearChat} disabled={chatManaging} className="px-5 py-3 bg-red-600 text-white rounded-xl text-sm font-bold disabled:opacity-50">Xóa toàn bộ</button>
+        </div>
+
+        <div className="space-y-3 pt-4 border-t border-slate-100">
+          <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">Khóa chat người dùng</h4>
+          <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_160px_1fr_auto] gap-3 items-end">
+            <label className="block text-sm">Người dùng
+              <select className="w-full mt-1 border rounded-lg px-3 py-2" value={banUserId} onChange={(e)=>setBanUserId(e.target.value)}>
+                <option value="">Chọn người dùng</option>
+                {chatUsers.filter((user:any) => user.role !== 'Admin').map((user:any) => <option key={user.id} value={user.id}>{user.display_name || user.username} ({user.username})</option>)}
+              </select>
+            </label>
+            <label className="block text-sm">Thời hạn
+              <select className="w-full mt-1 border rounded-lg px-3 py-2" value={banDurationMinutes} onChange={(e)=>setBanDurationMinutes(parseInt(e.target.value, 10))}>
+                <option value={15}>15 phút</option>
+                <option value={60}>1 giờ</option>
+                <option value={1440}>1 ngày</option>
+                <option value={10080}>7 ngày</option>
+                <option value={0}>Vĩnh viễn</option>
+              </select>
+            </label>
+            <label className="block text-sm">Lý do
+              <input className="w-full mt-1 border rounded-lg px-3 py-2" value={banReason} onChange={(e)=>setBanReason(e.target.value)} placeholder="Spam, vi phạm nội quy..." />
+            </label>
+            <button type="button" onClick={banChatUser} disabled={!banUserId || chatManaging} className="px-5 py-3 bg-amber-600 text-white rounded-xl text-sm font-bold disabled:opacity-50">Khóa chat</button>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 overflow-hidden">
+            <div className="px-4 py-3 bg-slate-50 text-xs font-black uppercase tracking-widest text-slate-500">Đang bị khóa chat</div>
+            {chatBans.length === 0 ? <div className="p-4 text-sm text-slate-500">Không có người dùng nào đang bị khóa chat.</div> : <div className="divide-y divide-slate-100">
+              {chatBans.map((ban:any) => <div key={ban.user_id} className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                  <p className="font-bold text-slate-800">{ban.display_name || ban.username} <span className="text-xs text-slate-400">@{ban.username}</span></p>
+                  <p className="text-xs text-slate-500">{ban.banned_until ? `Đến ${new Date(ban.banned_until).toLocaleString('vi-VN')}` : 'Vĩnh viễn'}{ban.reason ? ` · ${ban.reason}` : ''}</p>
+                </div>
+                <button type="button" onClick={() => unbanChatUser(ban.user_id)} disabled={chatManaging} className="px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold disabled:opacity-50">Mở khóa</button>
+              </div>)}
+            </div>}
+          </div>
         </div>
       </div>}
     </div>

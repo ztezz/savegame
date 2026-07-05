@@ -192,6 +192,15 @@ export async function initializeSchema() {
       );
       CREATE INDEX IF NOT EXISTS idx_community_messages_created ON community_messages(created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS community_bans (
+        user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        reason TEXT,
+        banned_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        banned_until TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_community_bans_until ON community_bans(banned_until);
+
     `);
     console.log('✅ Schema initialized successfully!');
 
