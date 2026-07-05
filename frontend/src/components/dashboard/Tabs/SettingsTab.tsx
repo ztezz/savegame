@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { Shield, RefreshCw, Monitor, Server, UploadCloud, Download, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Shield, RefreshCw, Monitor, Server, UploadCloud, Download, CheckCircle2, AlertCircle, Save, FolderOpen, HardDrive, MessageCircle, FileText, SlidersHorizontal } from 'lucide-react';
 import api from '../../../utils/api';
 import { API_ORIGIN, uploadWithProgress } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
@@ -222,209 +222,268 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   };
 
   return <div className="col-span-12 space-y-6 px-1 sm:px-0">
-    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-6">
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4">
-        <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><Shield className="w-4 h-4" />Bảo mật</h3>
-        <label className="flex items-center justify-between text-sm"><span>Bắt buộc mật khẩu mạnh</span><input type="checkbox" checked={!!settings.security.enforceStrongPassword} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,security:{...s.security,enforceStrongPassword:e.target.checked}}))} /></label>
-        <label className="block text-sm">Session timeout (phút)
-          <input className="w-full mt-1 border rounded-lg px-3 py-2" type="number" value={settings.security.sessionTimeoutMinutes} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,security:{...s.security,sessionTimeoutMinutes:parseInt(e.target.value||'0',10)}}))} />
+    <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 p-5 text-white shadow-xl shadow-slate-200/60 sm:p-7">
+      <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.45),transparent_55%)]" />
+      <div className="relative grid gap-6 lg:grid-cols-[1.3fr_1fr] lg:items-end">
+        <div>
+          <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-widest text-indigo-100">
+            <SlidersHorizontal className="h-3.5 w-3.5" /> Trung tâm điều khiển
+          </div>
+          <h2 className="text-2xl font-black tracking-tight sm:text-3xl">Cài đặt hệ thống</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300">Quản lý bảo mật, đồng bộ, giao diện và các tác vụ vận hành trong một màn hình rõ ràng hơn.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Quyền truy cập</p>
+            <p className="mt-2 font-black text-white">{isAdmin ? 'Quản trị viên' : 'Chỉ xem'}</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">CloudSave Agent</p>
+            <p className={settings.windowsAgent?.available ? 'mt-2 font-black text-emerald-300' : 'mt-2 font-black text-amber-300'}>{settings.windowsAgent?.available ? 'Sẵn sàng' : 'Thiếu file'}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {!isAdmin && <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">Bạn đang ở chế độ chỉ xem. Chỉ quản trị viên mới có thể thay đổi cài đặt hệ thống.</div>}
+
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 xl:col-span-2">
+        <div className="mb-5 flex items-start justify-between gap-4">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><Shield className="h-4 w-4 text-indigo-600" />Bảo mật và phiên đăng nhập</h3>
+            <p className="mt-1 text-xs text-slate-500">Các lớp bảo vệ tài khoản và thời gian duy trì phiên làm việc.</p>
+          </div>
+          <span className={settings.security.enforceStrongPassword ? 'rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-black text-emerald-700' : 'rounded-full bg-amber-50 px-3 py-1 text-[11px] font-black text-amber-700'}>{settings.security.enforceStrongPassword ? 'An toàn' : 'Cần chú ý'}</span>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm">
+            <span>
+              <span className="block font-bold text-slate-900">Bắt buộc mật khẩu mạnh</span>
+              <span className="mt-1 block text-xs text-slate-500">Giảm rủi ro tài khoản dùng mật khẩu yếu.</span>
+            </span>
+            <input className="h-5 w-5 accent-indigo-600" type="checkbox" checked={!!settings.security.enforceStrongPassword} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,security:{...s.security,enforceStrongPassword:e.target.checked}}))} />
+          </label>
+          <label className="rounded-2xl border border-slate-200 p-4 text-sm">
+            <span className="font-bold text-slate-900">Session timeout</span>
+            <span className="mt-1 block text-xs text-slate-500">Tự đăng xuất sau số phút không hoạt động.</span>
+            <div className="mt-3 flex items-center gap-2">
+              <input className="w-full rounded-xl border border-slate-200 px-3 py-2 font-bold text-slate-800 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:bg-slate-50" type="number" min="5" value={settings.security.sessionTimeoutMinutes} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,security:{...s.security,sessionTimeoutMinutes:parseInt(e.target.value||'0',10)}}))} />
+              <span className="text-xs font-bold text-slate-400">phút</span>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><Monitor className="h-4 w-4 text-indigo-600" />Giao diện</h3>
+        <p className="mt-1 text-xs text-slate-500">Tùy chỉnh trải nghiệm hiển thị cho dashboard.</p>
+        <label className="mt-5 flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm">
+          <span>
+            <span className="block font-bold text-slate-900">Chế độ compact</span>
+            <span className="mt-1 block text-xs text-slate-500">Thu gọn khoảng cách để hiển thị nhiều dữ liệu hơn.</span>
+          </span>
+          <input className="h-5 w-5 accent-indigo-600" type="checkbox" checked={!!settings.ui.compactMode} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,ui:{...s.ui,compactMode:e.target.checked}}))} />
         </label>
       </div>
+    </div>
 
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4">
-        <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><RefreshCw className="w-4 h-4" />Đồng bộ</h3>
-        <label className="flex items-center justify-between text-sm"><span>Auto sync backend</span><input type="checkbox" checked={!!settings.sync.autoSyncEnabled} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,sync:{...s.sync,autoSyncEnabled:e.target.checked}}))} /></label>
-        <label className="block text-sm">Chu kỳ Đồng bộ (phút)
-          <input className="w-full mt-1 border rounded-lg px-3 py-2" type="number" value={settings.sync.syncIntervalMinutes} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,sync:{...s.sync,syncIntervalMinutes:parseInt(e.target.value||'0',10)}}))} />
-        </label>
-        <div className="pt-2 border-t">
-          <p className="text-xs font-bold mb-2">Auto sync trên trình duyệt</p>
-          <div className="flex items-center justify-between"><span className="text-sm">Bật auto sync</span><input type="checkbox" checked={autoSyncEnabled} onChange={(e)=>setAutoSyncEnabled(e.target.checked)} /></div>
-          {autoSyncEnabled && <div className="mt-2 space-y-2">
-            <button type="button" onClick={handleSelectDirectory} className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs">Chọn thư mục</button>
-            <p className="text-xs text-slate-500">{directoryHandle ? directoryHandle.name : 'Chưa chọn thư mục'}</p>
-            <input type="range" min="1" max="60" value={syncInterval} onChange={(e)=>setSyncInterval(parseInt(e.target.value, 10))} className="w-full" />
-          </div>}
-        </div>
-      </div>
-
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4">
-        <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><Monitor className="w-4 h-4" />Giao diện</h3>
-        <label className="flex items-center justify-between text-sm"><span>Chế độ compact</span><input type="checkbox" checked={!!settings.ui.compactMode} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,ui:{...s.ui,compactMode:e.target.checked}}))} /></label>
-      </div>
-
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4">
-        <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><Server className="w-4 h-4" />Kỹ thuật</h3>
-        <label className="block text-sm">SMTP host
-          <input className="w-full mt-1 border rounded-lg px-3 py-2" value={settings.technical.smtpHost || ''} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,technical:{...s.technical,smtpHost:e.target.value}}))} />
-        </label>
-      </div>
-
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4 xl:col-span-2">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_0.8fr]">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><UploadCloud className="w-4 h-4" />Phần mềm Windows</h3>
-            <p className="text-xs text-slate-500 mt-1">Cập nhật file CloudSave Agent để người dùng tải bản mới nhất.</p>
+            <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><RefreshCw className="h-4 w-4 text-indigo-600" />Đồng bộ dữ liệu</h3>
+            <p className="mt-1 text-xs text-slate-500">Tách riêng đồng bộ server và đồng bộ trình duyệt để dễ kiểm soát.</p>
           </div>
-          <div className="flex items-center gap-2 text-xs font-bold">
-            {settings.windowsAgent?.available ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <AlertCircle className="w-4 h-4 text-amber-500" />}
-            <span className={settings.windowsAgent?.available ? 'text-emerald-700' : 'text-amber-600'}>{settings.windowsAgent?.available ? 'Đã có file' : 'Chưa có file'}</span>
-          </div>
+          <span className={settings.sync.autoSyncEnabled || autoSyncEnabled ? 'rounded-full bg-indigo-50 px-3 py-1 text-[11px] font-black text-indigo-700' : 'rounded-full bg-slate-100 px-3 py-1 text-[11px] font-black text-slate-500'}>{settings.sync.autoSyncEnabled || autoSyncEnabled ? 'Đang bật' : 'Đang tắt'}</span>
         </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-            <p className="text-xs text-slate-500">Tên file</p>
-            <p className="font-bold text-slate-800 truncate">{settings.windowsAgent?.filename || 'Cloudsave.exe'}</p>
-          </div>
-          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-            <p className="text-xs text-slate-500">Phiên bản</p>
-            <p className="font-bold text-slate-800">{settings.windowsAgent?.version || 'Chưa đặt'}</p>
-          </div>
-          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-            <p className="text-xs text-slate-500">Dung lượng</p>
-            <p className="font-bold text-slate-800">{formatFileSize(Number(settings.windowsAgent?.size || 0))}</p>
-          </div>
-        </div>
-
-        {settings.windowsAgent?.updatedAt && <p className="text-xs text-slate-500">Cập nhật lần cuối: {new Date(settings.windowsAgent.updatedAt).toLocaleString('vi-VN')}</p>}
-
-        {isAdmin && <div className="grid grid-cols-1 lg:grid-cols-[1fr_180px_auto] gap-3 items-end pt-2 border-t border-slate-100">
-          <label className="block text-sm">File CloudSave Agent (.exe)
-            <input className="w-full mt-1 border rounded-lg px-3 py-2 text-sm" type="file" accept=".exe,application/x-msdownload" disabled={agentUploading} onChange={(e)=>setAgentFile(e.target.files?.[0] || null)} />
-          </label>
-          <label className="block text-sm">Version
-            <input className="w-full mt-1 border rounded-lg px-3 py-2" placeholder="1.0.1" value={agentVersion} disabled={agentUploading} onChange={(e)=>setAgentVersion(e.target.value)} />
-          </label>
-          <button type="button" onClick={uploadWindowsAgent} disabled={!agentFile || agentUploading} className="px-5 py-3 bg-slate-900 text-white rounded-xl text-sm font-bold disabled:opacity-50 disabled:cursor-not-allowed">{agentUploading ? `Đang tải ${agentUploadProgress}%` : 'Cập nhật file'}</button>
-        </div>}
-
-        {agentUploading && <div className="h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-indigo-600 transition-all" style={{ width: `${agentUploadProgress}%` }} /></div>}
-
-        {settings.windowsAgent?.available && <a href={AGENT_DOWNLOAD_URL} className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 hover:text-indigo-800"><Download className="w-4 h-4" />Tải thử CloudSave Agent</a>}
-      </div>
-
-      {isAdmin && <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4 xl:col-span-2">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><Server className="w-4 h-4" />Dung lượng lưu trữ</h3>
-            <p className="text-xs text-slate-500 mt-1">Theo dõi thư mục upload và dọn bản save cũ. Mặc định giữ 5 bản mới nhất mỗi game.</p>
-          </div>
-          <button type="button" onClick={() => runStorageCleanup(true)} disabled={cleanupLoading} className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold disabled:opacity-50">Kiểm tra dọn dẹp</button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
-          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-            <p className="text-xs text-slate-500">Tổng dung lượng</p>
-            <p className="font-bold text-slate-800">{formatFileSize(Number(storageUsage?.totalBytes || 0))}</p>
-          </div>
-          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-            <p className="text-xs text-slate-500">Số file</p>
-            <p className="font-bold text-slate-800">{storageUsage?.fileCount || 0}</p>
-          </div>
-          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-            <p className="text-xs text-slate-500">Save trong DB</p>
-            <p className="font-bold text-slate-800">{storageUsage?.database?.save_count || 0}</p>
-          </div>
-          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-            <p className="text-xs text-slate-500">Game/User</p>
-            <p className="font-bold text-slate-800">{storageUsage?.database?.game_count || 0}/{storageUsage?.database?.user_count || 0}</p>
-          </div>
-        </div>
-
-        {storageUsage?.uploadDir && <p className="text-xs text-slate-500 break-all">Upload dir: {storageUsage.uploadDir}</p>}
-
-        {cleanupPreview && <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-          Có {cleanupPreview.candidates} bản save cũ ngoài 5 bản mới nhất mỗi game.
-          {!cleanupPreview.dryRun && ` Đã xóa ${cleanupPreview.deletedFiles} file (${formatFileSize(Number(cleanupPreview.deletedBytes || 0))}).`}
-        </div>}
-
-        {cleanupPreview?.dryRun && cleanupPreview.candidates > 0 && <button type="button" onClick={() => runStorageCleanup(false)} disabled={cleanupLoading} className="px-5 py-3 bg-red-600 text-white rounded-xl text-sm font-bold disabled:opacity-50">Xóa các bản save cũ</button>}
-      </div>}
-
-      {isAdmin && <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4 xl:col-span-2">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-          <div>
-            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><Monitor className="w-4 h-4" />Quản lý phòng chat</h3>
-            <p className="text-xs text-slate-500 mt-1">Theo dõi và dọn dẹp tin nhắn trong phòng chat cộng đồng.</p>
-          </div>
-          <button type="button" onClick={refreshChatStats} className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold">Làm mới</button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-            <p className="text-xs text-slate-500">Tổng tin nhắn</p>
-            <p className="font-bold text-slate-800">{chatStats?.message_count || 0}</p>
-          </div>
-          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-            <p className="text-xs text-slate-500">Người tham gia</p>
-            <p className="font-bold text-slate-800">{chatStats?.user_count || 0}</p>
-          </div>
-          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
-            <p className="text-xs text-slate-500">Tin mới nhất</p>
-            <p className="font-bold text-slate-800">{chatStats?.latest_at ? new Date(chatStats.latest_at).toLocaleString('vi-VN') : 'Chưa có'}</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-end pt-2 border-t border-slate-100">
-          <label className="block text-sm">Giữ lại số tin mới nhất
-            <input className="w-full mt-1 border rounded-lg px-3 py-2" type="number" min="0" max="5000" value={chatKeepLatest} onChange={(e)=>setChatKeepLatest(parseInt(e.target.value || '0', 10))} />
-          </label>
-          <button type="button" onClick={cleanupChat} disabled={chatManaging} className="px-5 py-3 bg-slate-900 text-white rounded-xl text-sm font-bold disabled:opacity-50">Dọn tin cũ</button>
-          <button type="button" onClick={clearChat} disabled={chatManaging} className="px-5 py-3 bg-red-600 text-white rounded-xl text-sm font-bold disabled:opacity-50">Xóa toàn bộ</button>
-        </div>
-
-        <div className="space-y-3 pt-4 border-t border-slate-100">
-          <h4 className="text-xs font-black uppercase tracking-widest text-slate-500">Khóa chat người dùng</h4>
-          <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_160px_1fr_auto] gap-3 items-end">
-            <label className="block text-sm">Người dùng
-              <select className="w-full mt-1 border rounded-lg px-3 py-2" value={banUserId} onChange={(e)=>setBanUserId(e.target.value)}>
-                <option value="">Chọn người dùng</option>
-                {chatUsers.filter((user:any) => user.role !== 'Admin').map((user:any) => <option key={user.id} value={user.id}>{user.display_name || user.username} ({user.username})</option>)}
-              </select>
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-2xl border border-slate-200 p-4">
+            <label className="flex items-center justify-between gap-4 text-sm">
+              <span>
+                <span className="block font-bold text-slate-900">Auto sync backend</span>
+                <span className="mt-1 block text-xs text-slate-500">Cho phép server tự chạy chu kỳ đồng bộ.</span>
+              </span>
+              <input className="h-5 w-5 accent-indigo-600" type="checkbox" checked={!!settings.sync.autoSyncEnabled} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,sync:{...s.sync,autoSyncEnabled:e.target.checked}}))} />
             </label>
-            <label className="block text-sm">Thời hạn
-              <select className="w-full mt-1 border rounded-lg px-3 py-2" value={banDurationMinutes} onChange={(e)=>setBanDurationMinutes(parseInt(e.target.value, 10))}>
-                <option value={15}>15 phút</option>
-                <option value={60}>1 giờ</option>
-                <option value={1440}>1 ngày</option>
-                <option value={10080}>7 ngày</option>
-                <option value={0}>Vĩnh viễn</option>
-              </select>
+            <label className="mt-4 block text-sm font-bold text-slate-900">Chu kỳ backend
+              <div className="mt-2 flex items-center gap-2">
+                <input className="w-full rounded-xl border border-slate-200 px-3 py-2 font-bold outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:bg-slate-50" type="number" min="1" value={settings.sync.syncIntervalMinutes} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,sync:{...s.sync,syncIntervalMinutes:parseInt(e.target.value||'0',10)}}))} />
+                <span className="text-xs font-bold text-slate-400">phút</span>
+              </div>
             </label>
-            <label className="block text-sm">Lý do
-              <input className="w-full mt-1 border rounded-lg px-3 py-2" value={banReason} onChange={(e)=>setBanReason(e.target.value)} placeholder="Spam, vi phạm nội quy..." />
-            </label>
-            <button type="button" onClick={banChatUser} disabled={!banUserId || chatManaging} className="px-5 py-3 bg-amber-600 text-white rounded-xl text-sm font-bold disabled:opacity-50">Khóa chat</button>
           </div>
 
-          <div className="rounded-xl border border-slate-200 overflow-hidden">
-            <div className="px-4 py-3 bg-slate-50 text-xs font-black uppercase tracking-widest text-slate-500">Đang bị khóa chat</div>
-            {chatBans.length === 0 ? <div className="p-4 text-sm text-slate-500">Không có người dùng nào đang bị khóa chat.</div> : <div className="divide-y divide-slate-100">
-              {chatBans.map((ban:any) => <div key={ban.user_id} className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                <div>
-                  <p className="font-bold text-slate-800">{ban.display_name || ban.username} <span className="text-xs text-slate-400">@{ban.username}</span></p>
-                  <p className="text-xs text-slate-500">{ban.banned_until ? `Đến ${new Date(ban.banned_until).toLocaleString('vi-VN')}` : 'Vĩnh viễn'}{ban.reason ? ` · ${ban.reason}` : ''}</p>
-                </div>
-                <button type="button" onClick={() => unbanChatUser(ban.user_id)} disabled={chatManaging} className="px-3 py-2 rounded-lg border border-slate-200 text-xs font-bold disabled:opacity-50">Mở khóa</button>
-              </div>)}
+          <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+            <label className="flex items-center justify-between gap-4 text-sm">
+              <span>
+                <span className="block font-bold text-slate-900">Auto sync trình duyệt</span>
+                <span className="mt-1 block text-xs text-slate-500">Dùng thư mục cục bộ đang chọn trên máy này.</span>
+              </span>
+              <input className="h-5 w-5 accent-indigo-600" type="checkbox" checked={autoSyncEnabled} onChange={(e)=>setAutoSyncEnabled(e.target.checked)} />
+            </label>
+            {autoSyncEnabled && <div className="mt-4 space-y-3">
+              <button type="button" onClick={handleSelectDirectory} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700"><FolderOpen className="h-4 w-4" />Chọn thư mục</button>
+              <p className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-600">{directoryHandle ? directoryHandle.name : 'Chưa chọn thư mục'}</p>
+              <div>
+                <div className="mb-2 flex items-center justify-between text-xs font-bold text-slate-500"><span>Chu kỳ trình duyệt</span><span>{syncInterval} phút</span></div>
+                <input type="range" min="1" max="60" value={syncInterval} onChange={(e)=>setSyncInterval(parseInt(e.target.value, 10))} className="w-full accent-indigo-600" />
+              </div>
             </div>}
           </div>
         </div>
-      </div>}
+      </div>
+
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><Server className="h-4 w-4 text-indigo-600" />Kỹ thuật</h3>
+        <p className="mt-1 text-xs text-slate-500">Thông số tích hợp hệ thống.</p>
+        <label className="mt-5 block text-sm font-bold text-slate-900">SMTP host
+          <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 font-semibold outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:bg-slate-50" value={settings.technical.smtpHost || ''} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,technical:{...s.technical,smtpHost:e.target.value}}))} placeholder="smtp.example.com" />
+        </label>
+      </div>
     </div>
 
-    {isAdmin && <button onClick={saveSettings} disabled={saving} className="w-full sm:w-auto px-5 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold">{saving ? 'Đang lưu...' : 'Lưu cài đặt hệ thống'}</button>}
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><UploadCloud className="h-4 w-4 text-indigo-600" />Phần mềm Windows</h3>
+          <p className="mt-1 text-xs text-slate-500">Cập nhật file CloudSave Agent để người dùng tải bản mới nhất.</p>
+        </div>
+        <div className="flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1 text-xs font-black">
+          {settings.windowsAgent?.available ? <CheckCircle2 className="h-4 w-4 text-emerald-600" /> : <AlertCircle className="h-4 w-4 text-amber-500" />}
+          <span className={settings.windowsAgent?.available ? 'text-emerald-700' : 'text-amber-600'}>{settings.windowsAgent?.available ? 'Đã có file' : 'Chưa có file'}</span>
+        </div>
+      </div>
 
-    {isAdmin && <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6">
-      <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest mb-3">Audit logs</h3>
-      <div className="space-y-2 max-h-64 overflow-auto">
+      <div className="mt-5 grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-bold text-slate-500">Tên file</p>
+          <p className="mt-1 truncate font-black text-slate-900">{settings.windowsAgent?.filename || 'Cloudsave.exe'}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-bold text-slate-500">Phiên bản</p>
+          <p className="mt-1 font-black text-slate-900">{settings.windowsAgent?.version || 'Chưa đặt'}</p>
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-xs font-bold text-slate-500">Dung lượng</p>
+          <p className="mt-1 font-black text-slate-900">{formatFileSize(Number(settings.windowsAgent?.size || 0))}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 lg:flex-row lg:items-end">
+        {isAdmin && <>
+          <label className="block flex-1 text-sm font-bold text-slate-900">File CloudSave Agent (.exe)
+            <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white" type="file" accept=".exe,application/x-msdownload" disabled={agentUploading} onChange={(e)=>setAgentFile(e.target.files?.[0] || null)} />
+          </label>
+          <label className="block text-sm font-bold text-slate-900 lg:w-44">Version
+            <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50" placeholder="1.0.1" value={agentVersion} disabled={agentUploading} onChange={(e)=>setAgentVersion(e.target.value)} />
+          </label>
+          <button type="button" onClick={uploadWindowsAgent} disabled={!agentFile || agentUploading} className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">{agentUploading ? `Đang tải ${agentUploadProgress}%` : 'Cập nhật file'}</button>
+        </>}
+        {settings.windowsAgent?.available && <a href={AGENT_DOWNLOAD_URL} className="inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-100 px-4 py-3 text-sm font-black text-indigo-600 transition hover:bg-indigo-50"><Download className="h-4 w-4" />Tải thử</a>}
+      </div>
+      {agentUploading && <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-indigo-600 transition-all" style={{ width: `${agentUploadProgress}%` }} /></div>}
+      {settings.windowsAgent?.updatedAt && <p className="mt-3 text-xs text-slate-500">Cập nhật lần cuối: {new Date(settings.windowsAgent.updatedAt).toLocaleString('vi-VN')}</p>}
+    </div>
+
+    {isAdmin && <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><HardDrive className="h-4 w-4 text-indigo-600" />Dung lượng lưu trữ</h3>
+            <p className="mt-1 text-xs text-slate-500">Theo dõi upload và dọn bản save cũ, mặc định giữ 5 bản mới nhất mỗi game.</p>
+          </div>
+          <button type="button" onClick={() => runStorageCleanup(true)} disabled={cleanupLoading} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black transition hover:bg-slate-50 disabled:opacity-50">Kiểm tra</button>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
+          <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Tổng dung lượng</p><p className="mt-1 font-black text-slate-900">{formatFileSize(Number(storageUsage?.totalBytes || 0))}</p></div>
+          <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Số file</p><p className="mt-1 font-black text-slate-900">{storageUsage?.fileCount || 0}</p></div>
+          <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Save trong DB</p><p className="mt-1 font-black text-slate-900">{storageUsage?.database?.save_count || 0}</p></div>
+          <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Game/User</p><p className="mt-1 font-black text-slate-900">{storageUsage?.database?.game_count || 0}/{storageUsage?.database?.user_count || 0}</p></div>
+        </div>
+        {storageUsage?.uploadDir && <p className="mt-4 break-all rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-500">Upload dir: {storageUsage.uploadDir}</p>}
+        {cleanupPreview && <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">Có {cleanupPreview.candidates} bản save cũ ngoài 5 bản mới nhất mỗi game.{!cleanupPreview.dryRun && ` Đã xóa ${cleanupPreview.deletedFiles} file (${formatFileSize(Number(cleanupPreview.deletedBytes || 0))}).`}</div>}
+        {cleanupPreview?.dryRun && cleanupPreview.candidates > 0 && <button type="button" onClick={() => runStorageCleanup(false)} disabled={cleanupLoading} className="mt-4 rounded-xl bg-red-600 px-5 py-3 text-sm font-black text-white transition hover:bg-red-700 disabled:opacity-50">Xóa các bản save cũ</button>}
+      </div>
+
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><MessageCircle className="h-4 w-4 text-indigo-600" />Quản lý phòng chat</h3>
+            <p className="mt-1 text-xs text-slate-500">Theo dõi, dọn dẹp tin nhắn và khóa chat khi cần.</p>
+          </div>
+          <button type="button" onClick={refreshChatStats} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black transition hover:bg-slate-50">Làm mới</button>
+        </div>
+        <div className="mt-5 grid grid-cols-1 gap-3 text-sm sm:grid-cols-3">
+          <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Tổng tin nhắn</p><p className="mt-1 font-black text-slate-900">{chatStats?.message_count || 0}</p></div>
+          <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Người tham gia</p><p className="mt-1 font-black text-slate-900">{chatStats?.user_count || 0}</p></div>
+          <div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">Tin mới nhất</p><p className="mt-1 truncate font-black text-slate-900">{chatStats?.latest_at ? new Date(chatStats.latest_at).toLocaleString('vi-VN') : 'Chưa có'}</p></div>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-3 border-t border-slate-100 pt-4 md:grid-cols-[1fr_auto_auto] md:items-end">
+          <label className="block text-sm font-bold text-slate-900">Giữ lại số tin mới nhất
+            <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50" type="number" min="0" max="5000" value={chatKeepLatest} onChange={(e)=>setChatKeepLatest(parseInt(e.target.value || '0', 10))} />
+          </label>
+          <button type="button" onClick={cleanupChat} disabled={chatManaging} className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white disabled:opacity-50">Dọn tin cũ</button>
+          <button type="button" onClick={clearChat} disabled={chatManaging} className="rounded-xl bg-red-600 px-5 py-3 text-sm font-black text-white disabled:opacity-50">Xóa toàn bộ</button>
+        </div>
+      </div>
+    </div>}
+
+    {isAdmin && <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <h3 className="text-sm font-black uppercase tracking-widest text-slate-800">Khóa chat người dùng</h3>
+      <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1.2fr_160px_1fr_auto] lg:items-end">
+        <label className="block text-sm font-bold text-slate-900">Người dùng
+          <select className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50" value={banUserId} onChange={(e)=>setBanUserId(e.target.value)}>
+            <option value="">Chọn người dùng</option>
+            {chatUsers.filter((user:any) => user.role !== 'Admin').map((user:any) => <option key={user.id} value={user.id}>{user.display_name || user.username} ({user.username})</option>)}
+          </select>
+        </label>
+        <label className="block text-sm font-bold text-slate-900">Thời hạn
+          <select className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50" value={banDurationMinutes} onChange={(e)=>setBanDurationMinutes(parseInt(e.target.value, 10))}>
+            <option value={15}>15 phút</option>
+            <option value={60}>1 giờ</option>
+            <option value={1440}>1 ngày</option>
+            <option value={10080}>7 ngày</option>
+            <option value={0}>Vĩnh viễn</option>
+          </select>
+        </label>
+        <label className="block text-sm font-bold text-slate-900">Lý do
+          <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50" value={banReason} onChange={(e)=>setBanReason(e.target.value)} placeholder="Spam, vi phạm nội quy..." />
+        </label>
+        <button type="button" onClick={banChatUser} disabled={!banUserId || chatManaging} className="rounded-xl bg-amber-600 px-5 py-3 text-sm font-black text-white disabled:opacity-50">Khóa chat</button>
+      </div>
+      <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
+        <div className="bg-slate-50 px-4 py-3 text-xs font-black uppercase tracking-widest text-slate-500">Đang bị khóa chat</div>
+        {chatBans.length === 0 ? <div className="p-4 text-sm text-slate-500">Không có người dùng nào đang bị khóa chat.</div> : <div className="divide-y divide-slate-100">
+          {chatBans.map((ban:any) => <div key={ban.user_id} className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="font-bold text-slate-800">{ban.display_name || ban.username} <span className="text-xs text-slate-400">@{ban.username}</span></p>
+              <p className="text-xs text-slate-500">{ban.banned_until ? `Đến ${new Date(ban.banned_until).toLocaleString('vi-VN')}` : 'Vĩnh viễn'}{ban.reason ? ` · ${ban.reason}` : ''}</p>
+            </div>
+            <button type="button" onClick={() => unbanChatUser(ban.user_id)} disabled={chatManaging} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold disabled:opacity-50">Mở khóa</button>
+          </div>)}
+        </div>}
+      </div>
+    </div>}
+
+    {isAdmin && <div className="sticky bottom-4 z-10 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-2xl shadow-slate-300/40 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+      <div className="text-sm">
+        <p className="font-black text-slate-900">Sẵn sàng lưu thay đổi</p>
+        <p className="text-xs text-slate-500">Các thay đổi chỉ áp dụng sau khi bấm lưu.</p>
+      </div>
+      <button onClick={saveSettings} disabled={saving} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 disabled:opacity-50 sm:w-auto"><Save className="h-4 w-4" />{saving ? 'Đang lưu...' : 'Lưu cài đặt hệ thống'}</button>
+    </div>}
+
+    {isAdmin && <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <h3 className="mb-4 flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><FileText className="h-4 w-4 text-indigo-600" />Audit logs</h3>
+      <div className="max-h-72 space-y-2 overflow-auto pr-1">
         {auditLogs.map((log: any) => (
-          <div key={log.id} className="text-xs border-b pb-2">
-            <b>{log.action}</b> {log.resource} - {log.username || 'system'} - {new Date(log.created_at).toLocaleString('vi-VN')}
-            {log.detail_json && (
-              <div className="text-[11px] text-slate-500 mt-1">{formatAuditDetail(log.detail_json)}</div>
-            )}
+          <div key={log.id} className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3 text-xs">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <p className="font-bold text-slate-800"><span className="text-indigo-600">{log.action}</span> {log.resource}</p>
+              <p className="text-slate-500">{log.username || 'system'} - {new Date(log.created_at).toLocaleString('vi-VN')}</p>
+            </div>
+            {log.detail_json && <div className="mt-1 text-[11px] text-slate-500">{formatAuditDetail(log.detail_json)}</div>}
           </div>
         ))}
       </div>
