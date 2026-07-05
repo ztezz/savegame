@@ -115,6 +115,33 @@ const getDriveUsage = async (userId: number) => {
   };
 };
 
+const getOrCreateFolder = async (userId: number, parentId: number | null, name: string) => {
+  const existing = await pool.query(
+    `SELECT id FROM drive_folders
+     WHERE user_id = $1 AND deleted_at IS NULL AND name = $2 AND ${parentId ? "parent_id = $3" : "parent_id IS NULL"}`,
+    parentId ? [userId, name, parentId] : [userId, name]
+  );
+  if (existing.rows[0]) return Number(existing.rows[0].id);
+
+  const { rows } = await pool.query(
+    `INSERT INTO drive_folders (user_id, parent_id, name)
+     VALUES ($1, $2, $3)
+     RETURNING id`,
+    [userId, parentId, name]
+  );
+  return Number(rows[0].id);
+};
+
+const getOrCreateFolderPath = async (userId: number, baseFolderId: number | null, relativePath: string) => {
+  const normalized = relativePath.replace(/\\/g, "/");
+  const segments = normalized.split("/").map((segment) => cleanName(segment, 120)).filter(Boolean) as string[];
+  let parentId = baseFolderId;
+  for (const segment of segments) {
+    parentId = await getOrCreateFolder(userId, parentId, segment);
+  }
+  return parentId;
+};
+
 driveRouter.get("/api/drive/usage", authenticateToken, async (req: any, res) => {
   if (!isUsingDatabase()) return res.json({ activeBytes: 0, trashBytes: 0, totalBytes: 0, activeFiles: 0, trashFiles: 0, quotaBytes: DRIVE_QUOTA_BYTES });
 
@@ -122,6 +149,32 @@ driveRouter.get("/api/drive/usage", authenticateToken, async (req: any, res) => 
     res.json(await getDriveUsage(req.user.id));
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to read drive usage" });
+  }
+});
+
+driveRouter.get("/api/drive/folders/tree", authenticateToken, async (req: any, res) => {
+  if (!isUsingDatabase()) return res.json([]);
+
+  try {
+    const { rows } = await pool.query(
+      `WITH RECURSIVE folder_tree AS (
+         SELECT id, name, parent_id, 0 AS depth, name::text AS path
+         FROM drive_folders
+         WHERE user_id = $1 AND deleted_at IS NULL AND parent_id IS NULL
+         UNION ALL
+         SELECT child.id, child.name, child.parent_id, ft.depth + 1, (ft.path || '/' || child.name)::text
+         FROM drive_folders child
+         JOIN folder_tree ft ON child.parent_id = ft.id
+         WHERE child.user_id = $1 AND child.deleted_at IS NULL
+       )
+       SELECT id, name, parent_id, depth, path
+       FROM folder_tree
+       ORDER BY path ASC`,
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to load folder tree" });
   }
 });
 
@@ -144,10 +197,11 @@ driveRouter.get("/api/drive/files", authenticateToken, async (req: any, res) => 
         [req.user.id, search, likeSearch]
       );
       const files = await pool.query(
-        `SELECT id, original_name, mime_type, file_size, note, created_at, deleted_at
-         FROM drive_files
-         WHERE user_id = $1 AND deleted_at IS NOT NULL AND ($2 = '' OR original_name ILIKE $3 OR COALESCE(note, '') ILIKE $3)
-         ORDER BY deleted_at DESC`,
+        `SELECT df.id, df.original_name, df.mime_type, df.file_size, df.note, df.created_at, df.deleted_at, ds.token AS share_token
+         FROM drive_files df
+         LEFT JOIN drive_shares ds ON ds.file_id = df.id AND ds.user_id = df.user_id AND ds.disabled_at IS NULL
+         WHERE df.user_id = $1 AND df.deleted_at IS NOT NULL AND ($2 = '' OR df.original_name ILIKE $3 OR COALESCE(df.note, '') ILIKE $3)
+         ORDER BY df.deleted_at DESC`,
         [req.user.id, search, likeSearch]
       );
       return res.json({ folders: folders.rows, files: files.rows });
@@ -166,12 +220,13 @@ driveRouter.get("/api/drive/files", authenticateToken, async (req: any, res) => 
     );
 
     const { rows } = await pool.query(
-      `SELECT id, original_name, mime_type, file_size, note, created_at, deleted_at
-       FROM drive_files
-       WHERE user_id = $1 AND deleted_at IS NULL
-         AND ($2 = '' OR original_name ILIKE $3 OR COALESCE(note, '') ILIKE $3)
-         AND ($2 != '' OR ${folderId ? "folder_id = $4" : "folder_id IS NULL"})
-       ORDER BY created_at DESC`,
+      `SELECT df.id, df.original_name, df.mime_type, df.file_size, df.note, df.created_at, df.deleted_at, ds.token AS share_token
+       FROM drive_files df
+       LEFT JOIN drive_shares ds ON ds.file_id = df.id AND ds.user_id = df.user_id AND ds.disabled_at IS NULL
+       WHERE df.user_id = $1 AND df.deleted_at IS NULL
+         AND ($2 = '' OR df.original_name ILIKE $3 OR COALESCE(df.note, '') ILIKE $3)
+         AND ($2 != '' OR ${folderId ? "df.folder_id = $4" : "df.folder_id IS NULL"})
+       ORDER BY df.created_at DESC`,
       folderId ? [req.user.id, search, likeSearch, folderId] : [req.user.id, search, likeSearch]
     );
     res.json({ folders: folders.rows, files: rows });
@@ -227,7 +282,7 @@ driveRouter.post("/api/drive/folders", authenticateToken, async (req: any, res) 
   }
 });
 
-driveRouter.post("/api/drive/upload", authenticateToken, driveUpload.fields([{ name: "files", maxCount: 50 }, { name: "file", maxCount: 1 }]), async (req: any, res) => {
+driveRouter.post("/api/drive/upload", authenticateToken, driveUpload.fields([{ name: "files", maxCount: 500 }, { name: "file", maxCount: 1 }]), async (req: any, res) => {
   const fieldFiles = req.files as Record<string, Express.Multer.File[]> | undefined;
   const files = [...(fieldFiles?.files || []), ...(fieldFiles?.file || [])];
   const note = String(req.body?.note || "").trim() || null;
@@ -251,12 +306,18 @@ driveRouter.post("/api/drive/upload", authenticateToken, driveUpload.fields([{ n
     }
 
     const inserted = [];
-    for (const file of files) {
+    const relativePaths = Array.isArray(req.body?.relativePaths) ? req.body.relativePaths : req.body?.relativePaths ? [req.body.relativePaths] : [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const relativePath = String(relativePaths[i] || "").replace(/\\/g, "/");
+      const parts = relativePath.split("/").filter(Boolean);
+      const folderPath = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
+      const targetFolderId = folderPath ? await getOrCreateFolderPath(req.user.id, folderId, folderPath) : folderId;
       const { rows } = await pool.query(
         `INSERT INTO drive_files (user_id, folder_id, original_name, stored_name, mime_type, file_size, note)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id, original_name, mime_type, file_size, note, created_at, deleted_at`,
-        [req.user.id, folderId, file.originalname, file.filename, file.mimetype || null, file.size, note]
+        [req.user.id, targetFolderId, parts[parts.length - 1] || file.originalname, file.filename, file.mimetype || null, file.size, note]
       );
       inserted.push(rows[0]);
     }

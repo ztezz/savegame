@@ -12,6 +12,7 @@ interface DriveFile {
   note: string | null;
   created_at: string;
   deleted_at?: string | null;
+  share_token?: string | null;
 }
 
 interface DriveFolder {
@@ -23,6 +24,14 @@ interface DriveFolder {
 }
 
 type SelectionKey = `file-${number}` | `folder-${number}`;
+type WebkitFile = File & { webkitRelativePath?: string };
+type FileSystemEntry = {
+  name: string;
+  isFile: boolean;
+  isDirectory: boolean;
+};
+type FileSystemFileEntry = FileSystemEntry & { file: (success: (file: File) => void, error?: (err: unknown) => void) => void };
+type FileSystemDirectoryEntry = FileSystemEntry & { createReader: () => { readEntries: (success: (entries: FileSystemEntry[]) => void, error?: (err: unknown) => void) => void } };
 
 interface PreviewState {
   kind: 'image' | 'pdf' | 'text' | 'unsupported';
@@ -40,6 +49,19 @@ interface DriveUsage {
   quotaBytes: number;
 }
 
+interface UploadItem {
+  file: File;
+  relativePath?: string;
+}
+
+interface FolderTreeItem {
+  id: number;
+  name: string;
+  parent_id: number | null;
+  depth: number;
+  path: string;
+}
+
 const formatFileSize = (size: number) => {
   if (!size) return '0 B';
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
@@ -48,13 +70,32 @@ const formatFileSize = (size: number) => {
 
 const keyOf = (type: 'file' | 'folder', id: number): SelectionKey => `${type}-${id}`;
 
+const readEntryFiles = async (entry: FileSystemEntry, prefix = ''): Promise<UploadItem[]> => {
+  if (entry.isFile) {
+    const file = await new Promise<File>((resolve, reject) => (entry as FileSystemFileEntry).file(resolve, reject));
+    return [{ file, relativePath: `${prefix}${file.name}` }];
+  }
+  if (!entry.isDirectory) return [];
+
+  const dir = entry as FileSystemDirectoryEntry;
+  const reader = dir.createReader();
+  const entries: FileSystemEntry[] = [];
+  while (true) {
+    const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject));
+    if (batch.length === 0) break;
+    entries.push(...batch);
+  }
+  const children = await Promise.all(entries.map((child) => readEntryFiles(child, `${prefix}${entry.name}/`)));
+  return children.flat();
+};
+
 const DriveTab: React.FC = () => {
   const { showToast } = useToast();
   const [files, setFiles] = useState<DriveFile[]>([]);
   const [folders, setFolders] = useState<DriveFolder[]>([]);
   const [breadcrumb, setBreadcrumb] = useState<DriveFolder[]>([]);
   const [currentFolderId, setCurrentFolderId] = useState<number | null>(null);
-  const [selectedUploadFiles, setSelectedUploadFiles] = useState<File[]>([]);
+  const [selectedUploadFiles, setSelectedUploadFiles] = useState<UploadItem[]>([]);
   const [note, setNote] = useState('');
   const [newFolderName, setNewFolderName] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -65,6 +106,8 @@ const DriveTab: React.FC = () => {
   const [selected, setSelected] = useState<Set<SelectionKey>>(new Set());
   const [trashMode, setTrashMode] = useState(false);
   const [moveTargetId, setMoveTargetId] = useState<string>('root');
+  const [moveModalOpen, setMoveModalOpen] = useState(false);
+  const [folderTree, setFolderTree] = useState<FolderTreeItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -156,7 +199,10 @@ const DriveTab: React.FC = () => {
   const uploadFiles = async (uploadFilesInput = selectedUploadFiles) => {
     if (uploadFilesInput.length === 0 || trashMode) return;
     const formData = new FormData();
-    uploadFilesInput.forEach((file) => formData.append('files', file));
+    uploadFilesInput.forEach((item) => {
+      formData.append('files', item.file);
+      formData.append('relativePaths', item.relativePath || item.file.webkitRelativePath || item.file.name);
+    });
     formData.append('note', note.trim());
     if (currentFolderId) formData.append('folderId', String(currentFolderId));
 
@@ -164,7 +210,8 @@ const DriveTab: React.FC = () => {
     setProgress(0);
     try {
       await uploadWithProgress('/drive/upload', formData, setProgress);
-      showToast(`Đã tải ${uploadFilesInput.length} file lên Drive`, 'success');
+      const folderCount = new Set(uploadFilesInput.map((item) => (item.relativePath || item.file.webkitRelativePath || '').split('/').slice(0, -1).join('/')).filter(Boolean)).size;
+      showToast(folderCount ? `Đã tải ${uploadFilesInput.length} file trong ${folderCount} thư mục` : `Đã tải ${uploadFilesInput.length} file lên Drive`, 'success');
       setSelectedUploadFiles([]);
       setNote('');
       await fetchFiles();
@@ -201,6 +248,17 @@ const DriveTab: React.FC = () => {
       await fetchFiles();
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Di chuyển thất bại', 'error');
+    }
+  };
+
+  const openMoveModal = async () => {
+    if (selectedCount === 0 || trashMode) return;
+    try {
+      const res = await api.get('/drive/folders/tree');
+      setFolderTree(Array.isArray(res.data) ? res.data : []);
+      setMoveModalOpen(true);
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Không tải được cây thư mục', 'error');
     }
   };
 
@@ -291,24 +349,45 @@ const DriveTab: React.FC = () => {
   const shareFile = async (file: DriveFile) => {
     if (trashMode) return;
     try {
-      const res = await api.post(`/drive/files/${file.id}/share`);
-      const shareUrl = `${window.location.origin}/share/${encodeURIComponent(res.data.token)}`;
+      const token = file.share_token || (await api.post(`/drive/files/${file.id}/share`)).data.token;
+      const shareUrl = `${window.location.origin}/share/${encodeURIComponent(token)}`;
       const copied = await copyToClipboard(shareUrl);
       showToast(copied ? 'Đã copy link chia sẻ' : shareUrl, copied ? 'success' : 'info');
+      if (!file.share_token) await fetchFiles();
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Tạo link chia sẻ thất bại', 'error');
     }
   };
 
-  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+  const unshareFile = async (file: DriveFile) => {
+    if (!file.share_token || !window.confirm('Tắt link chia sẻ của file này?')) return;
+    try {
+      await api.delete(`/drive/files/${file.id}/share`);
+      showToast('Đã tắt link chia sẻ', 'success');
+      await fetchFiles();
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Tắt chia sẻ thất bại', 'error');
+    }
+  };
+
+  const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
-    const dropped = Array.from(event.dataTransfer.files || []);
+    const items = Array.from(event.dataTransfer.items || []);
+    const entryItems = await Promise.all(items.map((item: any) => {
+      const entry = typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null;
+      return entry ? readEntryFiles(entry) : Promise.resolve([]);
+    }));
+    const entryFiles = entryItems.flat();
+    const dropped = entryFiles.length
+      ? entryFiles
+      : Array.from<File>(event.dataTransfer.files || []).map((file) => ({ file, relativePath: file.name }));
     setDragging(false);
     if (dropped.length) uploadFiles(dropped);
   };
 
   const empty = folders.length === 0 && files.length === 0;
-  const visibleFoldersForMove = folders.filter((folder) => !selected.has(keyOf('folder', folder.id)));
+  const selectedFolderIds = selectedItems.filter((item) => item.type === 'folder').map((item) => item.id);
+  const visibleFoldersForMove = folderTree.filter((folder) => !selectedFolderIds.includes(folder.id));
   const usagePercent = usage?.quotaBytes ? Math.min(100, Math.round((usage.totalBytes / usage.quotaBytes) * 100)) : 0;
   const activePercent = usage?.quotaBytes ? Math.min(100, (usage.activeBytes / usage.quotaBytes) * 100) : 0;
   const trashPercent = usage?.quotaBytes ? Math.min(100 - activePercent, (usage.trashBytes / usage.quotaBytes) * 100) : 0;
@@ -323,7 +402,8 @@ const DriveTab: React.FC = () => {
     return <div className="flex items-center gap-2">
       {type === 'file' && <a href={`${API_BASE_URL}/drive/download/${id}`} className="text-xs font-bold text-indigo-600 inline-flex items-center gap-1"><Download className="w-3 h-3" />Tải</a>}
       {type === 'file' && <button type="button" onClick={() => openPreview(item as DriveFile)} className="text-xs font-bold text-violet-600 inline-flex items-center gap-1"><Eye className="w-3 h-3" />Xem</button>}
-      {type === 'file' && <button type="button" onClick={() => shareFile(item as DriveFile)} className="text-xs font-bold text-emerald-600 inline-flex items-center gap-1"><Link className="w-3 h-3" />Share</button>}
+      {type === 'file' && <button type="button" onClick={() => shareFile(item as DriveFile)} className="text-xs font-bold text-emerald-600 inline-flex items-center gap-1"><Link className="w-3 h-3" />{(item as DriveFile).share_token ? 'Copy link' : 'Share'}</button>}
+      {type === 'file' && (item as DriveFile).share_token && <button type="button" onClick={() => unshareFile(item as DriveFile)} className="text-xs font-bold text-amber-600 inline-flex items-center gap-1"><X className="w-3 h-3" />Tắt share</button>}
       <button type="button" onClick={() => renameItem(type, id, name)} className="text-xs font-bold text-slate-600 inline-flex items-center gap-1"><Pencil className="w-3 h-3" />Đổi tên</button>
       <button type="button" onClick={() => trashOne(type, id)} className="text-xs font-bold text-red-500 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" />Xóa</button>
     </div>;
@@ -384,7 +464,10 @@ const DriveTab: React.FC = () => {
           <button type="button" onClick={createFolder} disabled={!newFolderName.trim()} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold disabled:opacity-50 inline-flex items-center gap-2"><Plus className="w-4 h-4" />Thư mục</button>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_auto] gap-2">
-          <input className="border rounded-xl px-3 py-2 text-sm" type="file" multiple disabled={uploading} onChange={(e)=>setSelectedUploadFiles(Array.from(e.target.files || []))} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <input className="border rounded-xl px-3 py-2 text-sm" type="file" multiple disabled={uploading} onChange={(e)=>setSelectedUploadFiles(Array.from<File>(e.currentTarget.files || []).map((file) => ({ file, relativePath: file.name })))} />
+            <input className="border rounded-xl px-3 py-2 text-sm" type="file" multiple disabled={uploading} {...({ webkitdirectory: '', directory: '' } as any)} onChange={(e)=>setSelectedUploadFiles(Array.from<File>(e.currentTarget.files || []).map((file) => ({ file, relativePath: (file as WebkitFile).webkitRelativePath || file.name })))} />
+          </div>
           <input className="border rounded-xl px-3 py-2 text-sm" value={note} disabled={uploading} onChange={(e)=>setNote(e.target.value)} placeholder="Ghi chú file" />
           <button type="button" onClick={() => uploadFiles()} disabled={selectedUploadFiles.length === 0 || uploading} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold disabled:opacity-50 inline-flex items-center justify-center gap-2"><UploadCloud className="w-4 h-4" />{uploading ? `${progress}%` : `Tải lên${selectedUploadFiles.length ? ` (${selectedUploadFiles.length})` : ''}`}</button>
         </div>
@@ -392,8 +475,8 @@ const DriveTab: React.FC = () => {
 
       {!trashMode && <div onDragOver={(e) => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={handleDrop} className={`rounded-2xl border-2 border-dashed p-6 text-center transition ${dragging ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
         <UploadCloud className="w-8 h-8 mx-auto mb-2" />
-        <p className="text-sm font-bold">Kéo thả file vào đây để upload nhanh vào thư mục hiện tại</p>
-        <p className="text-xs mt-1">Hỗ trợ nhiều file cùng lúc.</p>
+        <p className="text-sm font-bold">Kéo thả file hoặc cả thư mục vào đây để upload nhanh</p>
+        <p className="text-xs mt-1">Giữ nguyên cấu trúc thư mục con khi trình duyệt hỗ trợ.</p>
       </div>}
 
       {uploading && <div className="h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-indigo-600 transition-all" style={{ width: `${progress}%` }} /></div>}
@@ -401,7 +484,7 @@ const DriveTab: React.FC = () => {
 
     {selectedCount > 0 && <div className="sticky top-3 z-20 bg-slate-950 text-white rounded-2xl px-4 py-3 shadow-xl flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
       <div className="flex items-center gap-3"><button type="button" onClick={() => setSelected(new Set())} className="p-1 rounded-lg bg-white/10"><X className="w-4 h-4" /></button><span className="text-sm font-black">Đã chọn {selectedCount} mục</span></div>
-      {trashMode ? <div className="flex flex-wrap gap-2"><button type="button" onClick={restoreSelected} className="px-3 py-2 bg-emerald-500 text-white rounded-xl text-xs font-black inline-flex items-center gap-2"><RotateCcw className="w-4 h-4" />Khôi phục</button><button type="button" onClick={permanentDeleteSelected} className="px-3 py-2 bg-red-600 text-white rounded-xl text-xs font-black inline-flex items-center gap-2"><Trash2 className="w-4 h-4" />Xóa vĩnh viễn</button></div> : <div className="flex flex-wrap items-center gap-2"><select value={moveTargetId} onChange={(e) => setMoveTargetId(e.target.value)} className="bg-white text-slate-900 rounded-xl px-3 py-2 text-xs font-bold"><option value="root">Drive của tôi</option>{visibleFoldersForMove.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select><button type="button" onClick={moveSelected} className="px-3 py-2 bg-indigo-500 text-white rounded-xl text-xs font-black">Di chuyển</button><button type="button" onClick={trashSelected} className="px-3 py-2 bg-red-600 text-white rounded-xl text-xs font-black inline-flex items-center gap-2"><Trash2 className="w-4 h-4" />Xóa</button></div>}
+      {trashMode ? <div className="flex flex-wrap gap-2"><button type="button" onClick={restoreSelected} className="px-3 py-2 bg-emerald-500 text-white rounded-xl text-xs font-black inline-flex items-center gap-2"><RotateCcw className="w-4 h-4" />Khôi phục</button><button type="button" onClick={permanentDeleteSelected} className="px-3 py-2 bg-red-600 text-white rounded-xl text-xs font-black inline-flex items-center gap-2"><Trash2 className="w-4 h-4" />Xóa vĩnh viễn</button></div> : <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={openMoveModal} className="px-3 py-2 bg-indigo-500 text-white rounded-xl text-xs font-black">Di chuyển...</button><button type="button" onClick={trashSelected} className="px-3 py-2 bg-red-600 text-white rounded-xl text-xs font-black inline-flex items-center gap-2"><Trash2 className="w-4 h-4" />Xóa</button></div>}
     </div>}
 
     <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
@@ -446,6 +529,27 @@ const DriveTab: React.FC = () => {
         </div>
         <div className="p-5 overflow-auto bg-slate-50 min-h-[320px]">
           {previewLoading ? <div className="text-sm text-slate-500">Đang tải preview...</div> : preview?.kind === 'image' && previewObjectUrl ? <img src={previewObjectUrl} alt={preview.file.original_name} className="max-h-[65vh] mx-auto rounded-2xl shadow-lg" /> : preview?.kind === 'pdf' && previewObjectUrl ? <iframe src={previewObjectUrl} title={preview.file.original_name} className="w-full h-[65vh] rounded-2xl bg-white" /> : preview?.kind === 'text' ? <div className="space-y-3"><pre className="whitespace-pre-wrap break-words rounded-2xl bg-slate-950 text-slate-100 p-4 text-xs leading-relaxed overflow-auto">{preview.content}</pre>{preview.truncated && <p className="text-xs font-bold text-amber-600">Preview đã được cắt ngắn để tải nhanh.</p>}</div> : <div className="text-center py-16"><File className="w-12 h-12 mx-auto text-slate-400 mb-3" /><p className="font-black text-slate-800">Chưa hỗ trợ xem trước loại file này</p><a href={preview ? `${API_BASE_URL}/drive/download/${preview.file.id}` : '#'} className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold"><Download className="w-4 h-4" />Tải xuống</a></div>}
+        </div>
+      </div>
+    </div>}
+
+    {moveModalOpen && <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl max-h-[85vh] overflow-hidden flex flex-col">
+        <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-widest text-indigo-500">Di chuyển</p>
+            <h3 className="font-black text-slate-900">Chọn thư mục đích cho {selectedCount} mục</h3>
+          </div>
+          <button type="button" onClick={() => setMoveModalOpen(false)} className="p-2 rounded-xl hover:bg-slate-100"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="p-5 overflow-auto space-y-2">
+          <button type="button" onClick={() => setMoveTargetId('root')} className={`w-full text-left rounded-2xl border px-4 py-3 text-sm font-bold ${moveTargetId === 'root' ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 hover:bg-slate-50'}`}>Drive của tôi</button>
+          {visibleFoldersForMove.map((folder) => <button key={folder.id} type="button" onClick={() => setMoveTargetId(String(folder.id))} className={`w-full text-left rounded-2xl border px-4 py-3 text-sm font-bold ${moveTargetId === String(folder.id) ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 hover:bg-slate-50'}`} style={{ paddingLeft: `${16 + folder.depth * 20}px` }}><Folder className="w-4 h-4 inline mr-2 text-indigo-500" />{folder.name}<span className="ml-2 text-xs font-normal text-slate-400">{folder.path}</span></button>)}
+          {folderTree.length === 0 && <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Chưa có thư mục nào. Có thể di chuyển về Drive của tôi.</div>}
+        </div>
+        <div className="p-5 border-t border-slate-100 flex items-center justify-end gap-2">
+          <button type="button" onClick={() => setMoveModalOpen(false)} className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-600">Hủy</button>
+          <button type="button" onClick={async () => { await moveSelected(); setMoveModalOpen(false); }} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-black">Di chuyển</button>
         </div>
       </div>
     </div>}
