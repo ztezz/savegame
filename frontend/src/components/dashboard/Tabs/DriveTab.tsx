@@ -31,6 +31,15 @@ interface PreviewState {
   truncated?: boolean;
 }
 
+interface DriveUsage {
+  activeBytes: number;
+  trashBytes: number;
+  totalBytes: number;
+  activeFiles: number;
+  trashFiles: number;
+  quotaBytes: number;
+}
+
 const formatFileSize = (size: number) => {
   if (!size) return '0 B';
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
@@ -60,6 +69,7 @@ const DriveTab: React.FC = () => {
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
+  const [usage, setUsage] = useState<DriveUsage | null>(null);
 
   const allItems = [
     ...folders.map((folder) => ({ type: 'folder' as const, id: folder.id, name: folder.name })),
@@ -76,8 +86,10 @@ const DriveTab: React.FC = () => {
         ? { trash: 1, ...(trimmedSearch ? { search: trimmedSearch } : {}) }
         : { ...(folderId && !trimmedSearch ? { folderId } : {}), ...(trimmedSearch ? { search: trimmedSearch } : {}) };
       const res = await api.get('/drive/files', { params });
+      const usageRes = await api.get('/drive/usage');
       setFolders(Array.isArray(res.data?.folders) ? res.data.folders : []);
       setFiles(Array.isArray(res.data?.files) ? res.data.files : []);
+      setUsage(usageRes.data || null);
       setSelected(new Set());
       if (folderId && !nextTrashMode) {
         const crumb = await api.get(`/drive/folders/${folderId}/breadcrumb`);
@@ -157,7 +169,7 @@ const DriveTab: React.FC = () => {
       setNote('');
       await fetchFiles();
     } catch (err: any) {
-      showToast(err.message || 'Upload Drive thất bại', 'error');
+      showToast(err.message.includes('413') ? 'Drive đã vượt dung lượng cho phép. Hãy dọn thùng rác hoặc tăng quota.' : err.message || 'Upload Drive thất bại', 'error');
     } finally {
       setUploading(false);
       setDragging(false);
@@ -297,6 +309,9 @@ const DriveTab: React.FC = () => {
 
   const empty = folders.length === 0 && files.length === 0;
   const visibleFoldersForMove = folders.filter((folder) => !selected.has(keyOf('folder', folder.id)));
+  const usagePercent = usage?.quotaBytes ? Math.min(100, Math.round((usage.totalBytes / usage.quotaBytes) * 100)) : 0;
+  const activePercent = usage?.quotaBytes ? Math.min(100, (usage.activeBytes / usage.quotaBytes) * 100) : 0;
+  const trashPercent = usage?.quotaBytes ? Math.min(100 - activePercent, (usage.trashBytes / usage.quotaBytes) * 100) : 0;
 
   const renderActions = (type: 'file' | 'folder', item: DriveFile | DriveFolder) => {
     const name = type === 'file' ? (item as DriveFile).original_name : (item as DriveFolder).name;
@@ -333,6 +348,24 @@ const DriveTab: React.FC = () => {
     </div>
 
     <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-4">
+      {usage && <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <p className="text-xs font-black uppercase tracking-widest text-indigo-500">Dung lượng Drive</p>
+            <p className="mt-1 text-sm font-bold text-slate-800">Đã dùng {formatFileSize(usage.totalBytes)} / {formatFileSize(usage.quotaBytes)} ({usagePercent}%)</p>
+          </div>
+          <div className="text-xs text-slate-500 sm:text-right">
+            <p>{usage.activeFiles} file active · {formatFileSize(usage.activeBytes)}</p>
+            <p>{usage.trashFiles} file trong thùng rác · {formatFileSize(usage.trashBytes)}</p>
+          </div>
+        </div>
+        <div className="mt-3 h-3 rounded-full bg-white overflow-hidden border border-indigo-100 flex">
+          <div className="h-full bg-indigo-600" style={{ width: `${activePercent}%` }} />
+          <div className="h-full bg-amber-400" style={{ width: `${trashPercent}%` }} />
+        </div>
+        {usagePercent >= 90 && <p className="mt-2 text-xs font-bold text-amber-700">Drive gần đầy. Hãy xóa vĩnh viễn file trong thùng rác hoặc tăng DRIVE_QUOTA_MB.</p>}
+      </div>}
+
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <button type="button" onClick={() => openFolder(null)} disabled={trashMode} className="font-bold text-indigo-600 hover:text-indigo-800 disabled:text-slate-400">Drive của tôi</button>
         {trashMode && <><ChevronRight className="w-4 h-4 text-slate-300" /><span className="font-bold text-red-600">Thùng rác</span></>}

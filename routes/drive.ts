@@ -5,7 +5,7 @@ import * as fs from "fs";
 import crypto from "crypto";
 import { pool, isUsingDatabase } from "../config/database.js";
 import { authenticateToken } from "../middleware/auth.js";
-import { MAX_FILE_SIZE } from "../config/environment.js";
+import { DRIVE_QUOTA_BYTES, MAX_FILE_SIZE } from "../config/environment.js";
 import { UPLOADS_DIR_PATH } from "../config/multer.js";
 
 export const driveRouter = Router();
@@ -89,6 +89,40 @@ const buildFileMeta = (file: any) => ({
   file_size: Number(file.file_size || 0),
   note: file.note,
   created_at: file.created_at,
+});
+
+const getDriveUsage = async (userId: number) => {
+  const { rows } = await pool.query(
+    `SELECT
+       COALESCE(SUM(file_size) FILTER (WHERE deleted_at IS NULL), 0)::bigint AS active_bytes,
+       COALESCE(SUM(file_size) FILTER (WHERE deleted_at IS NOT NULL), 0)::bigint AS trash_bytes,
+       COUNT(*) FILTER (WHERE deleted_at IS NULL)::int AS active_files,
+       COUNT(*) FILTER (WHERE deleted_at IS NOT NULL)::int AS trash_files
+     FROM drive_files
+     WHERE user_id = $1`,
+    [userId]
+  );
+  const row = rows[0] || {};
+  const activeBytes = Number(row.active_bytes || 0);
+  const trashBytes = Number(row.trash_bytes || 0);
+  return {
+    activeBytes,
+    trashBytes,
+    totalBytes: activeBytes + trashBytes,
+    activeFiles: Number(row.active_files || 0),
+    trashFiles: Number(row.trash_files || 0),
+    quotaBytes: DRIVE_QUOTA_BYTES,
+  };
+};
+
+driveRouter.get("/api/drive/usage", authenticateToken, async (req: any, res) => {
+  if (!isUsingDatabase()) return res.json({ activeBytes: 0, trashBytes: 0, totalBytes: 0, activeFiles: 0, trashFiles: 0, quotaBytes: DRIVE_QUOTA_BYTES });
+
+  try {
+    res.json(await getDriveUsage(req.user.id));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to read drive usage" });
+  }
 });
 
 driveRouter.get("/api/drive/files", authenticateToken, async (req: any, res) => {
@@ -205,6 +239,17 @@ driveRouter.post("/api/drive/upload", authenticateToken, driveUpload.fields([{ n
 
   try {
     await assertFolder(folderId, req.user.id);
+    const usage = await getDriveUsage(req.user.id);
+    const uploadBytes = files.reduce((sum, file) => sum + file.size, 0);
+    if (usage.totalBytes + uploadBytes > usage.quotaBytes) {
+      for (const file of files) if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      return res.status(413).json({
+        error: "Drive quota exceeded",
+        usage,
+        uploadBytes,
+      });
+    }
+
     const inserted = [];
     for (const file of files) {
       const { rows } = await pool.query(

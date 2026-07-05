@@ -29,6 +29,7 @@ export const FRONTEND_APP_URL = process.env.FRONTEND_APP_URL || "https://luugame
 
 export const UPLOAD_LIMIT = "500MB";
 export const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
+export const DRIVE_QUOTA_BYTES = Math.max(1, Number(process.env.DRIVE_QUOTA_MB || 2048)) * 1024 * 1024;
 
 // Agent download
 export const AGENT_VERSION = process.env.AGENT_VERSION || "1.0.0";
