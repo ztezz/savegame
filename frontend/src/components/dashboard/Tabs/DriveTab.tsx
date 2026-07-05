@@ -103,6 +103,7 @@ const DriveTab: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [folderModalOpen, setFolderModalOpen] = useState(false);
   const [progress, setProgress] = useState(0);
   const [selected, setSelected] = useState<Set<SelectionKey>>(new Set());
   const [trashMode, setTrashMode] = useState(false);
@@ -190,6 +191,7 @@ const DriveTab: React.FC = () => {
     try {
       await api.post('/drive/folders', { name, parentId: currentFolderId });
       setNewFolderName('');
+      setFolderModalOpen(false);
       showToast('Đã tạo thư mục', 'success');
       await fetchFiles();
     } catch (err: any) {
@@ -460,11 +462,8 @@ const DriveTab: React.FC = () => {
         {searchTerm && <button type="button" onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>}
       </div>
 
-      {!trashMode && <div className="grid grid-cols-1 xl:grid-cols-[1fr_auto] gap-3">
-        <div className="flex gap-2">
-          <input className="flex-1 border rounded-xl px-3 py-2 text-sm" value={newFolderName} onChange={(e)=>setNewFolderName(e.target.value)} placeholder="Tên thư mục mới" />
-          <button type="button" onClick={createFolder} disabled={!newFolderName.trim()} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold disabled:opacity-50 inline-flex items-center gap-2"><Plus className="w-4 h-4" />Thư mục</button>
-        </div>
+      {!trashMode && <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+        <button type="button" onClick={() => setFolderModalOpen(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white shadow-lg shadow-slate-100 transition hover:bg-slate-800"><Plus className="w-4 h-4" />Thư mục mới</button>
         <button type="button" onClick={() => setUploadModalOpen(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-100 transition hover:bg-indigo-700"><UploadCloud className="w-4 h-4" />Tải lên</button>
       </div>}
     </div>
@@ -503,6 +502,31 @@ const DriveTab: React.FC = () => {
         </div>)}
       </div>}
     </div>
+
+    {folderModalOpen && <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
+        <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-black uppercase tracking-widest text-indigo-500">Thư mục Drive</p>
+            <h3 className="font-black text-slate-900">Tạo thư mục mới</h3>
+            <p className="mt-1 text-xs text-slate-500">Thư mục sẽ được tạo trong vị trí hiện tại.</p>
+          </div>
+          <button type="button" onClick={() => { setFolderModalOpen(false); setNewFolderName(''); }} className="p-2 rounded-xl hover:bg-slate-100"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="p-5 space-y-4">
+          <label className="block text-sm font-bold text-slate-900">Tên thư mục
+            <input autoFocus className="mt-2 w-full border border-slate-200 rounded-xl px-3 py-3 text-sm outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50" value={newFolderName} onChange={(e)=>setNewFolderName(e.target.value)} onKeyDown={(e)=>{ if (e.key === 'Enter' && newFolderName.trim()) createFolder(); }} placeholder="Ví dụ: Setup game, Tài liệu, Ảnh..." />
+          </label>
+          <div className="rounded-2xl bg-slate-50 p-4 text-xs text-slate-500">
+            Vị trí: <span className="font-bold text-slate-700">{breadcrumb.length ? breadcrumb.map((folder) => folder.name).join(' / ') : 'Drive của tôi'}</span>
+          </div>
+        </div>
+        <div className="p-5 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
+          <button type="button" onClick={() => { setFolderModalOpen(false); setNewFolderName(''); }} className="px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600">Hủy</button>
+          <button type="button" onClick={createFolder} disabled={!newFolderName.trim()} className="px-5 py-3 rounded-xl bg-slate-900 text-white text-sm font-black disabled:opacity-50 inline-flex items-center justify-center gap-2"><Plus className="w-4 h-4" />Tạo thư mục</button>
+        </div>
+      </div>
+    </div>}
 
     {uploadModalOpen && <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
