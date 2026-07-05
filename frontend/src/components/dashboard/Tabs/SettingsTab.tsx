@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useState } from 'react';
 import { Shield, RefreshCw, Monitor, Server, UploadCloud, Download, CheckCircle2, AlertCircle } from 'lucide-react';
 import api from '../../../utils/api';
-import { uploadWithProgress } from '../../../utils/api';
+import { API_ORIGIN, uploadWithProgress } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
 
 interface SettingsTabProps {
@@ -22,7 +22,7 @@ const defaultSettings = {
   windowsAgent: { filename: 'Cloudsave.exe', version: '', size: 0, updatedAt: null, available: false }
 };
 
-const AGENT_DOWNLOAD_URL = `${import.meta.env.VITE_API_URL || ''}/api/agent/download`;
+const AGENT_DOWNLOAD_URL = `${API_ORIGIN}/api/agent/download`;
 
 const formatFileSize = (size: number) => {
   if (!size) return '0 MB';

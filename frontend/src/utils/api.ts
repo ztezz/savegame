@@ -1,7 +1,10 @@
 import axios from 'axios';
 
+export const API_ORIGIN = import.meta.env.VITE_API_URL || 'https://thzi-luugame.hf.space';
+export const API_BASE_URL = `${API_ORIGIN}/api`;
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ? `${import.meta.env.VITE_API_URL}/api` : '/api',
+  baseURL: API_BASE_URL,
 });
 
 api.interceptors.request.use((config) => {
@@ -36,9 +39,7 @@ export const uploadWithProgress = async (
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const token = localStorage.getItem('token');
-    const baseURL = import.meta.env.VITE_API_URL 
-      ? `${import.meta.env.VITE_API_URL}/api` 
-      : '/api';
+    const baseURL = API_BASE_URL;
     
     const fullUrl = `${baseURL}${url}`;
     let hasRealProgress = false;
@@ -189,9 +190,7 @@ export const uploadWithChunks = async (
   metadata: { gameName: string; note?: string },
   onProgress: (progress: number) => void
 ): Promise<any> => {
-  const baseURL = import.meta.env.VITE_API_URL 
-    ? `${import.meta.env.VITE_API_URL}/api` 
-    : '/api';
+  const baseURL = API_BASE_URL;
   const token = localStorage.getItem('token');
   
   if (!token) {

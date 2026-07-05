@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Laptop, Plus, Trash2, Copy, Check, RefreshCw, ChevronDown, ChevronUp, Download, Monitor, AlertTriangle } from 'lucide-react';
 import api from '../../../utils/api';
+import { API_ORIGIN } from '../../../utils/api';
 import { deviceKeysApi } from '../../../utils/apiClient';
 import { useToast } from '../../../context/ToastContext';
 
@@ -11,8 +12,8 @@ interface AgentInfo {
   filename: string;
 }
 
-const AGENT_DOWNLOAD_URL = `${import.meta.env.VITE_API_URL || ''}/api/agent/download`;
-const AGENT_INFO_URL = `${import.meta.env.VITE_API_URL || ''}/api/agent/info`;
+const AGENT_DOWNLOAD_URL = `${API_ORIGIN}/api/agent/download`;
+const AGENT_INFO_URL = `${API_ORIGIN}/api/agent/info`;
 
 interface DeviceKey {
   id: number;
