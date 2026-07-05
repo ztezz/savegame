@@ -132,7 +132,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         </label>
         <div className="pt-2 border-t">
           <p className="text-xs font-bold mb-2">Auto sync trên trình duyệt</p>
-          <div className="flex items-center justify-between"><span className="text-sm">Báº­t auto sync</span><input type="checkbox" checked={autoSyncEnabled} onChange={(e)=>setAutoSyncEnabled(e.target.checked)} /></div>
+          <div className="flex items-center justify-between"><span className="text-sm">Bật auto sync</span><input type="checkbox" checked={autoSyncEnabled} onChange={(e)=>setAutoSyncEnabled(e.target.checked)} /></div>
           {autoSyncEnabled && <div className="mt-2 space-y-2">
             <button type="button" onClick={handleSelectDirectory} className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs">Chọn thư mục</button>
             <p className="text-xs text-slate-500">{directoryHandle ? directoryHandle.name : 'Chưa chọn thư mục'}</p>
