@@ -20,7 +20,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, currentUser,
       <div className="p-6 border-b border-slate-800">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center overflow-hidden">
-            <img src="/logo.ico" alt="CloudSave logo" className="w-7 h-7 object-contain" />
+            <img src="/logo.svg" alt="CloudSave logo" className="w-7 h-7 object-contain" />
           </div>
           <h1 className="text-xl font-bold tracking-tight">CloudSave</h1>
         </div>
