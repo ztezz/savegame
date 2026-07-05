@@ -170,6 +170,8 @@ export async function initializeSchema() {
         UNIQUE(user_id, parent_id, name)
       );
       ALTER TABLE drive_files ADD COLUMN IF NOT EXISTS folder_id INTEGER;
+      ALTER TABLE drive_files ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+      ALTER TABLE drive_folders ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
       DO $$
       BEGIN
         IF NOT EXISTS (
@@ -182,7 +184,9 @@ export async function initializeSchema() {
       END $$;
       CREATE INDEX IF NOT EXISTS idx_drive_files_user_created ON drive_files(user_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_drive_files_user_folder ON drive_files(user_id, folder_id, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_drive_files_user_deleted ON drive_files(user_id, deleted_at DESC);
       CREATE INDEX IF NOT EXISTS idx_drive_folders_user_parent ON drive_folders(user_id, parent_id, name);
+      CREATE INDEX IF NOT EXISTS idx_drive_folders_user_deleted ON drive_folders(user_id, deleted_at DESC);
 
       CREATE TABLE IF NOT EXISTS community_messages (
         id SERIAL PRIMARY KEY,
