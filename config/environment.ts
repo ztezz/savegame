@@ -11,13 +11,14 @@ const defaultOrigins = [
   'http://127.0.0.1:3000',
   'http://127.0.0.1:5173',
   'https://savegame.datdaihcm.pro',  // Production frontend
-  'https://api-savegame.datdaihcm.pro', // Production API (for dev testing)
   'https://luugame.fun',             // New production domain
+  'https://www.luugame.fun',
+  'https://luugame.thuonghongthai97.workers.dev',
 ];
 
 const envOrigin = process.env.FRONTEND_ORIGIN;
 export const FRONTEND_ORIGIN = envOrigin 
-  ? envOrigin.split(',').map(o => o.trim()) 
+  ? envOrigin.split(',').map(o => o.trim()).filter(Boolean)
   : defaultOrigins;
 
 export const FRONTEND_APP_URL = process.env.FRONTEND_APP_URL || "https://luugame.fun";

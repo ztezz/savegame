@@ -55,7 +55,7 @@ async function startServer() {
   const corsOptions = {
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       // Allow requests with no origin (mobile apps, curl requests)
-      if (!origin || typeof FRONTEND_ORIGIN === 'string') return callback(null, true);
+      if (!origin) return callback(null, true);
       
       // Convert single origin string to array for consistent handling
       const allowedOrigins = Array.isArray(FRONTEND_ORIGIN) ? FRONTEND_ORIGIN : [FRONTEND_ORIGIN];
