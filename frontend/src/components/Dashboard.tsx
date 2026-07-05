@@ -16,6 +16,7 @@ const SettingsTab = lazy(() => import('./dashboard/Tabs/SettingsTab'));
 const AccountTab = lazy(() => import('./dashboard/Tabs/AccountTab'));
 const ActivationTab = lazy(() => import('./dashboard/Tabs/ActivationTab'));
 const CategoryTab = lazy(() => import('./dashboard/Tabs/CategoryTab'));
+const DriveTab = lazy(() => import('./dashboard/Tabs/DriveTab'));
 import { ActivationFile } from './dashboard/Tabs/ActivationTab';
 
 // Modals
@@ -46,7 +47,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   const [filterCategory, setFilterCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'category'>('name');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'library' | 'devices' | 'settings' | 'users' | 'activation' | 'category' | 'account'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'library' | 'drive' | 'devices' | 'settings' | 'users' | 'activation' | 'category' | 'account'>('dashboard');
   
   // Activation Files State
   const [activationFiles, setActivationFiles] = useState<ActivationFile[]>([]);
@@ -101,6 +102,10 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
     library: {
       title: 'Thư viện bản lưu',
       description: 'Tìm kiếm, tải xuống, khôi phục và quản lý dữ liệu game.',
+    },
+    drive: {
+      title: 'Drive cá nhân',
+      description: 'Lưu trữ, tải xuống và quản lý file cá nhân của bạn.',
     },
     devices: {
       title: 'Thiết bị kết nối',
@@ -856,6 +861,12 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
           {activeTab === 'category' && (
             <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải thể loại...</div>}>
               <CategoryTab onCategoryUpdated={refetchCategories} />
+            </Suspense>
+          )}
+
+          {activeTab === 'drive' && (
+            <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải Drive...</div>}>
+              <DriveTab />
             </Suspense>
           )}
 

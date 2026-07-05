@@ -2,10 +2,10 @@
 import React from 'react';
 import { 
   LayoutDashboard, Library, Laptop, 
-  Settings, User, KeyRound
+  Settings, User, KeyRound, HardDrive
 } from 'lucide-react';
 
-type TabType = 'dashboard' | 'library' | 'devices' | 'settings' | 'users' | 'activation' | 'category' | 'account';
+type TabType = 'dashboard' | 'library' | 'drive' | 'devices' | 'settings' | 'users' | 'activation' | 'category' | 'account';
 interface SidebarProps {
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
@@ -49,6 +49,13 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, currentUser,
         >
           <Library className="w-4 h-4" />
           Quản lý thể loại
+        </button>
+        <button 
+          onClick={() => setActiveTab('drive')}
+          className={`w-full flex items-center gap-3 p-3 rounded-xl text-sm font-semibold transition-all ${activeTab === 'drive' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+        >
+          <HardDrive className="w-4 h-4" />
+          Drive cá nhân
         </button>
         <button 
           onClick={() => setActiveTab('devices')}

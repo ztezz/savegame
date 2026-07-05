@@ -150,6 +150,18 @@ export async function initializeSchema() {
       );
       CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
 
+      CREATE TABLE IF NOT EXISTS drive_files (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        original_name VARCHAR(255) NOT NULL,
+        stored_name VARCHAR(255) NOT NULL,
+        mime_type VARCHAR(255),
+        file_size BIGINT NOT NULL DEFAULT 0,
+        note TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_drive_files_user_created ON drive_files(user_id, created_at DESC);
+
     `);
     console.log('✅ Schema initialized successfully!');
 
