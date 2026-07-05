@@ -458,15 +458,26 @@ const DriveTab: React.FC = () => {
         {searchTerm && <button type="button" onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>}
       </div>
 
-      {!trashMode && <div className="grid grid-cols-1 xl:grid-cols-[1fr_1.4fr] gap-3">
+      {!trashMode && <div className="grid grid-cols-1 xl:grid-cols-[1fr_1.8fr] gap-3">
         <div className="flex gap-2">
           <input className="flex-1 border rounded-xl px-3 py-2 text-sm" value={newFolderName} onChange={(e)=>setNewFolderName(e.target.value)} placeholder="Tên thư mục mới" />
           <button type="button" onClick={createFolder} disabled={!newFolderName.trim()} className="px-4 py-2 bg-slate-900 text-white rounded-xl text-sm font-bold disabled:opacity-50 inline-flex items-center gap-2"><Plus className="w-4 h-4" />Thư mục</button>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_auto] gap-2">
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,1fr)_minmax(220px,0.8fr)_auto] gap-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <input className="border rounded-xl px-3 py-2 text-sm" type="file" multiple disabled={uploading} onChange={(e)=>setSelectedUploadFiles(Array.from<File>(e.currentTarget.files || []).map((file) => ({ file, relativePath: file.name })))} />
-            <input className="border rounded-xl px-3 py-2 text-sm" type="file" multiple disabled={uploading} {...({ webkitdirectory: '', directory: '' } as any)} onChange={(e)=>setSelectedUploadFiles(Array.from<File>(e.currentTarget.files || []).map((file) => ({ file, relativePath: (file as WebkitFile).webkitRelativePath || file.name })))} />
+            <label className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black transition ${uploading ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400' : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:border-indigo-300 hover:bg-indigo-100'}`}>
+              <File className="w-4 h-4" />
+              Chọn file
+              <input className="hidden" type="file" multiple disabled={uploading} onChange={(e)=>{ setSelectedUploadFiles(Array.from<File>(e.currentTarget.files || []).map((file) => ({ file, relativePath: file.name }))); e.currentTarget.value = ''; }} />
+            </label>
+            <label className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-black transition ${uploading ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400' : 'border-violet-200 bg-violet-50 text-violet-700 hover:border-violet-300 hover:bg-violet-100'}`}>
+              <Folder className="w-4 h-4" />
+              Chọn thư mục
+              <input className="hidden" type="file" multiple disabled={uploading} {...({ webkitdirectory: '', directory: '' } as any)} onChange={(e)=>{ setSelectedUploadFiles(Array.from<File>(e.currentTarget.files || []).map((file) => ({ file, relativePath: (file as WebkitFile).webkitRelativePath || file.name }))); e.currentTarget.value = ''; }} />
+            </label>
+            <p className="sm:col-span-2 min-h-5 truncate text-xs font-semibold text-slate-500">
+              {selectedUploadFiles.length > 0 ? `Đã chọn ${selectedUploadFiles.length} file${selectedUploadFiles[0]?.relativePath ? ` · ${selectedUploadFiles[0].relativePath}` : ''}` : 'Chọn file lẻ hoặc cả thư mục để tải lên Drive.'}
+            </p>
           </div>
           <input className="border rounded-xl px-3 py-2 text-sm" value={note} disabled={uploading} onChange={(e)=>setNote(e.target.value)} placeholder="Ghi chú file" />
           <button type="button" onClick={() => uploadFiles()} disabled={selectedUploadFiles.length === 0 || uploading} className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-bold disabled:opacity-50 inline-flex items-center justify-center gap-2"><UploadCloud className="w-4 h-4" />{uploading ? `${progress}%` : `Tải lên${selectedUploadFiles.length ? ` (${selectedUploadFiles.length})` : ''}`}</button>
