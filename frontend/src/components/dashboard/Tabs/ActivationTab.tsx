@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Upload, Download, Trash2, KeyRound, Plus, X, FileCheck, Pencil, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import api, { uploadWithChunks, downloadWithProgress } from '../../../utils/api';
+import api, { uploadWithProgress, downloadWithProgress } from '../../../utils/api';
 import EditActivationModal from '../Modals/EditActivationModal';
 import DeleteConfirmModal from '../Modals/DeleteConfirmModal';
 import { useToast } from '../../../context/ToastContext';
@@ -44,15 +44,13 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
     if (!gameName.trim() || !selectedFile) return;
     setUploading(true);
     setUploadProgress(0);
+    const formData = new FormData();
+    formData.append('activationfile', selectedFile);
+    formData.append('gameName', gameName.trim());
+    formData.append('note', note.trim());
     
     try {
-      await uploadWithChunks(
-        selectedFile,
-        { gameName: gameName.trim(), note: note.trim() },
-        (progress) => {
-          setUploadProgress(progress);
-        }
-      );
+      await uploadWithProgress('/activation/upload', formData, setUploadProgress);
       
       // Set to 100% and show success
       setUploadProgress(100);
@@ -330,20 +328,15 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
                     />
                   </div>
                   <p className="text-[10px] text-amber-700 text-center flex items-center justify-center gap-1">
-                    {uploadProgress < 96 ? (
+                    {uploadProgress < 100 ? (
                       <>
                         <span className="inline-block w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
                         Đang gửi file lên server...
                       </>
-                    ) : uploadProgress < 100 ? (
-                      <>
-                        <span className="inline-block w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
-                        Đang ghép file và lưu dữ liệu...
-                      </>
                     ) : (
                       <>
                         <span className="inline-block w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
-                        Xử lý server...
+                        Hoàn tất
                       </>
                     )}
                   </p>
