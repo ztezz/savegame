@@ -184,6 +184,14 @@ export async function initializeSchema() {
       CREATE INDEX IF NOT EXISTS idx_drive_files_user_folder ON drive_files(user_id, folder_id, created_at DESC);
       CREATE INDEX IF NOT EXISTS idx_drive_folders_user_parent ON drive_folders(user_id, parent_id, name);
 
+      CREATE TABLE IF NOT EXISTS community_messages (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        message TEXT NOT NULL,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_community_messages_created ON community_messages(created_at DESC);
+
     `);
     console.log('✅ Schema initialized successfully!');
 

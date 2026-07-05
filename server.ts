@@ -31,6 +31,7 @@ import { deviceLinksRouter } from "./routes/deviceLinks.js";
 import { agentDownloadRouter } from "./routes/agentDownload.js";
 import { settingsRouter } from "./routes/systemSettings.js";
 import { driveRouter } from "./routes/drive.js";
+import { communityRouter } from "./routes/community.js";
 
 // Utils imports
 import { startUploadSessionCleanupInterval } from "./utils/uploads.js";
@@ -128,6 +129,7 @@ async function startServer() {
   app.use(agentDownloadRouter);
   app.use(settingsRouter);
   app.use(driveRouter);
+  app.use(communityRouter);
 
   // Health check
   app.get("/api/health", async (req, res) => {

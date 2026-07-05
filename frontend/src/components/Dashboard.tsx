@@ -17,6 +17,7 @@ const AccountTab = lazy(() => import('./dashboard/Tabs/AccountTab'));
 const ActivationTab = lazy(() => import('./dashboard/Tabs/ActivationTab'));
 const CategoryTab = lazy(() => import('./dashboard/Tabs/CategoryTab'));
 const DriveTab = lazy(() => import('./dashboard/Tabs/DriveTab'));
+const CommunityChatTab = lazy(() => import('./dashboard/Tabs/CommunityChatTab'));
 import { ActivationFile } from './dashboard/Tabs/ActivationTab';
 
 // Modals
@@ -47,7 +48,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   const [filterCategory, setFilterCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'category'>('name');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'library' | 'drive' | 'devices' | 'settings' | 'users' | 'activation' | 'category' | 'account'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'library' | 'drive' | 'community' | 'devices' | 'settings' | 'users' | 'activation' | 'category' | 'account'>('dashboard');
   
   // Activation Files State
   const [activationFiles, setActivationFiles] = useState<ActivationFile[]>([]);
@@ -106,6 +107,10 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
     drive: {
       title: 'Drive cá nhân',
       description: 'Lưu trữ, tải xuống và quản lý file cá nhân của bạn.',
+    },
+    community: {
+      title: 'Chat cộng đồng',
+      description: 'Trao đổi nhanh với các thành viên đang dùng CloudSave.',
     },
     devices: {
       title: 'Thiết bị kết nối',
@@ -867,6 +872,12 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
           {activeTab === 'drive' && (
             <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải Drive...</div>}>
               <DriveTab />
+            </Suspense>
+          )}
+
+          {activeTab === 'community' && (
+            <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải chat...</div>}>
+              <CommunityChatTab currentUser={currentUser} />
             </Suspense>
           )}
 
