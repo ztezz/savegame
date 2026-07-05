@@ -121,8 +121,8 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
 
         <motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} className="relative z-10 w-full max-w-xl px-12">
           <div className="flex items-center gap-4 mb-12">
-            <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center shadow-xl shadow-indigo-950/40">
-              <Database className="w-6 h-6" />
+            <div className="w-12 h-12 bg-white rounded-xl flex items-center justify-center shadow-xl shadow-indigo-950/40 overflow-hidden">
+              <img src="/logo.ico" alt="CloudSave logo" className="w-10 h-10 object-contain" />
             </div>
             <div>
               <h1 className="text-2xl font-black tracking-tight">CloudSave<span className="text-indigo-300">Hub</span></h1>
@@ -153,8 +153,8 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
       <section className="flex items-center justify-center px-5 py-10 sm:px-8 lg:px-16 bg-white">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }} className="w-full max-w-md">
           <div className="lg:hidden flex items-center gap-3 mb-10">
-            <div className="w-11 h-11 bg-slate-900 rounded-xl flex items-center justify-center text-white">
-              <Database className="w-5 h-5" />
+            <div className="w-11 h-11 bg-slate-900 rounded-xl flex items-center justify-center overflow-hidden">
+              <img src="/logo.ico" alt="CloudSave logo" className="w-9 h-9 object-contain" />
             </div>
             <div>
               <h1 className="text-xl font-black tracking-tight text-slate-950">CloudSaveHub</h1>
