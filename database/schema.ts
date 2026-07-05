@@ -188,6 +188,19 @@ export async function initializeSchema() {
       CREATE INDEX IF NOT EXISTS idx_drive_folders_user_parent ON drive_folders(user_id, parent_id, name);
       CREATE INDEX IF NOT EXISTS idx_drive_folders_user_deleted ON drive_folders(user_id, deleted_at DESC);
 
+      CREATE TABLE IF NOT EXISTS drive_shares (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        file_id INTEGER NOT NULL REFERENCES drive_files(id) ON DELETE CASCADE,
+        token VARCHAR(64) NOT NULL UNIQUE,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP,
+        disabled_at TIMESTAMP,
+        UNIQUE(user_id, file_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_drive_shares_token ON drive_shares(token);
+      CREATE INDEX IF NOT EXISTS idx_drive_shares_file ON drive_shares(file_id);
+
       CREATE TABLE IF NOT EXISTS community_messages (
         id SERIAL PRIMARY KEY,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

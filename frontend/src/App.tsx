@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
 import DeviceLinkPage from './components/DeviceLinkPage';
+import DriveSharePage from './components/DriveSharePage';
 import ToastContainer from './components/ToastContainer';
 import { ToastProvider } from './context/ToastContext';
 
@@ -11,6 +12,8 @@ export default function App() {
   const [deviceLinkToken, setDeviceLinkToken] = useState<string | null>(
     new URLSearchParams(window.location.search).get('device_link')
   );
+  const shareMatch = window.location.pathname.match(/^\/share\/([^/]+)$/);
+  const shareToken = shareMatch ? decodeURIComponent(shareMatch[1]) : null;
 
   const handleLogin = (newToken: string, newUser: any) => {
     setToken(newToken);
@@ -39,7 +42,9 @@ export default function App() {
   return (
     <ToastProvider>
       <div className="font-sans text-slate-900 bg-white">
-        {deviceLinkToken ? (
+        {shareToken ? (
+          <DriveSharePage token={shareToken} />
+        ) : deviceLinkToken ? (
           <div className="min-h-screen flex flex-col">
             <div className="flex-1">
               <DeviceLinkPage

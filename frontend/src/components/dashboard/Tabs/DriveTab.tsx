@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronRight, Download, File, Folder, Grid2X2, List, Pencil, Plus, RotateCcw, Trash2, UploadCloud, X } from 'lucide-react';
+import { ChevronRight, Download, Eye, File, Folder, Grid2X2, Link, List, Pencil, Plus, RotateCcw, Search, Trash2, UploadCloud, X } from 'lucide-react';
 import api, { API_BASE_URL, uploadWithProgress } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
+import { copyToClipboard } from '../../../utils/clipboard';
 
 interface DriveFile {
   id: number;
@@ -22,6 +23,13 @@ interface DriveFolder {
 }
 
 type SelectionKey = `file-${number}` | `folder-${number}`;
+
+interface PreviewState {
+  kind: 'image' | 'pdf' | 'text' | 'unsupported';
+  file: DriveFile;
+  content?: string;
+  truncated?: boolean;
+}
 
 const formatFileSize = (size: number) => {
   if (!size) return '0 B';
@@ -48,6 +56,10 @@ const DriveTab: React.FC = () => {
   const [selected, setSelected] = useState<Set<SelectionKey>>(new Set());
   const [trashMode, setTrashMode] = useState(false);
   const [moveTargetId, setMoveTargetId] = useState<string>('root');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [preview, setPreview] = useState<PreviewState | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
 
   const allItems = [
     ...folders.map((folder) => ({ type: 'folder' as const, id: folder.id, name: folder.name })),
@@ -59,7 +71,10 @@ const DriveTab: React.FC = () => {
   const fetchFiles = async (folderId = currentFolderId, nextTrashMode = trashMode) => {
     setLoading(true);
     try {
-      const params = nextTrashMode ? { trash: 1 } : folderId ? { folderId } : {};
+      const trimmedSearch = searchTerm.trim();
+      const params = nextTrashMode
+        ? { trash: 1, ...(trimmedSearch ? { search: trimmedSearch } : {}) }
+        : { ...(folderId && !trimmedSearch ? { folderId } : {}), ...(trimmedSearch ? { search: trimmedSearch } : {}) };
       const res = await api.get('/drive/files', { params });
       setFolders(Array.isArray(res.data?.folders) ? res.data.folders : []);
       setFiles(Array.isArray(res.data?.files) ? res.data.files : []);
@@ -80,6 +95,17 @@ const DriveTab: React.FC = () => {
   useEffect(() => {
     fetchFiles(null, false);
   }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => fetchFiles(currentFolderId, trashMode), 300);
+    return () => window.clearTimeout(timer);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    return () => {
+      if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+    };
+  }, [previewObjectUrl]);
 
   const openFolder = (folderId: number | null) => {
     if (trashMode) return;
@@ -231,6 +257,37 @@ const DriveTab: React.FC = () => {
     }
   };
 
+  const openPreview = async (file: DriveFile) => {
+    if (trashMode) return;
+    setPreviewLoading(true);
+    try {
+      if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+      setPreviewObjectUrl(null);
+      const res = await api.get(`/drive/files/${file.id}/preview`);
+      setPreview(res.data);
+      if (res.data.kind === 'image' || res.data.kind === 'pdf') {
+        const raw = await api.get(`/drive/files/${file.id}/raw`, { responseType: 'blob' });
+        setPreviewObjectUrl(URL.createObjectURL(raw.data));
+      }
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Không xem trước được file', 'error');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const shareFile = async (file: DriveFile) => {
+    if (trashMode) return;
+    try {
+      const res = await api.post(`/drive/files/${file.id}/share`);
+      const shareUrl = `${window.location.origin}/share/${encodeURIComponent(res.data.token)}`;
+      const copied = await copyToClipboard(shareUrl);
+      showToast(copied ? 'Đã copy link chia sẻ' : shareUrl, copied ? 'success' : 'info');
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Tạo link chia sẻ thất bại', 'error');
+    }
+  };
+
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     const dropped = Array.from(event.dataTransfer.files || []);
@@ -250,6 +307,8 @@ const DriveTab: React.FC = () => {
     </div>;
     return <div className="flex items-center gap-2">
       {type === 'file' && <a href={`${API_BASE_URL}/drive/download/${id}`} className="text-xs font-bold text-indigo-600 inline-flex items-center gap-1"><Download className="w-3 h-3" />Tải</a>}
+      {type === 'file' && <button type="button" onClick={() => openPreview(item as DriveFile)} className="text-xs font-bold text-violet-600 inline-flex items-center gap-1"><Eye className="w-3 h-3" />Xem</button>}
+      {type === 'file' && <button type="button" onClick={() => shareFile(item as DriveFile)} className="text-xs font-bold text-emerald-600 inline-flex items-center gap-1"><Link className="w-3 h-3" />Share</button>}
       <button type="button" onClick={() => renameItem(type, id, name)} className="text-xs font-bold text-slate-600 inline-flex items-center gap-1"><Pencil className="w-3 h-3" />Đổi tên</button>
       <button type="button" onClick={() => trashOne(type, id)} className="text-xs font-bold text-red-500 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" />Xóa</button>
     </div>;
@@ -278,6 +337,12 @@ const DriveTab: React.FC = () => {
         <button type="button" onClick={() => openFolder(null)} disabled={trashMode} className="font-bold text-indigo-600 hover:text-indigo-800 disabled:text-slate-400">Drive của tôi</button>
         {trashMode && <><ChevronRight className="w-4 h-4 text-slate-300" /><span className="font-bold text-red-600">Thùng rác</span></>}
         {!trashMode && breadcrumb.map((folder) => <React.Fragment key={folder.id}><ChevronRight className="w-4 h-4 text-slate-300" /><button type="button" onClick={() => openFolder(folder.id)} className="font-bold text-slate-700 hover:text-indigo-700">{folder.name}</button></React.Fragment>)}
+      </div>
+
+      <div className="relative">
+        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full border border-slate-200 rounded-2xl pl-10 pr-10 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300" placeholder={trashMode ? 'Tìm trong thùng rác...' : 'Tìm file, thư mục hoặc ghi chú trong Drive...'} />
+        {searchTerm && <button type="button" onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>}
       </div>
 
       {!trashMode && <div className="grid grid-cols-1 xl:grid-cols-[1fr_1.4fr] gap-3">
@@ -335,6 +400,22 @@ const DriveTab: React.FC = () => {
         </div>)}
       </div>}
     </div>
+
+    {(preview || previewLoading) && <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs font-black uppercase tracking-widest text-indigo-500">Xem trước</p>
+            <h3 className="font-black text-slate-900 truncate">{preview?.file.original_name || 'Đang tải...'}</h3>
+            {preview?.file && <p className="text-xs text-slate-500 mt-1">{formatFileSize(Number(preview.file.file_size))} · {preview.file.mime_type || 'Không rõ loại file'}</p>}
+          </div>
+          <button type="button" onClick={() => setPreview(null)} className="p-2 rounded-xl hover:bg-slate-100"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="p-5 overflow-auto bg-slate-50 min-h-[320px]">
+          {previewLoading ? <div className="text-sm text-slate-500">Đang tải preview...</div> : preview?.kind === 'image' && previewObjectUrl ? <img src={previewObjectUrl} alt={preview.file.original_name} className="max-h-[65vh] mx-auto rounded-2xl shadow-lg" /> : preview?.kind === 'pdf' && previewObjectUrl ? <iframe src={previewObjectUrl} title={preview.file.original_name} className="w-full h-[65vh] rounded-2xl bg-white" /> : preview?.kind === 'text' ? <div className="space-y-3"><pre className="whitespace-pre-wrap break-words rounded-2xl bg-slate-950 text-slate-100 p-4 text-xs leading-relaxed overflow-auto">{preview.content}</pre>{preview.truncated && <p className="text-xs font-bold text-amber-600">Preview đã được cắt ngắn để tải nhanh.</p>}</div> : <div className="text-center py-16"><File className="w-12 h-12 mx-auto text-slate-400 mb-3" /><p className="font-black text-slate-800">Chưa hỗ trợ xem trước loại file này</p><a href={preview ? `${API_BASE_URL}/drive/download/${preview.file.id}` : '#'} className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-bold"><Download className="w-4 h-4" />Tải xuống</a></div>}
+        </div>
+      </div>
+    </div>}
   </div>;
 };
 

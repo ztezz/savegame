@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import * as path from "path";
 import * as fs from "fs";
+import crypto from "crypto";
 import { pool, isUsingDatabase } from "../config/database.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { MAX_FILE_SIZE } from "../config/environment.js";
@@ -71,10 +72,31 @@ const unlinkStoredFiles = (rows: Array<{ stored_name: string }>) => {
   }
 };
 
+const isPreviewableText = (mimeType: string | null, originalName: string) => {
+  const ext = path.extname(originalName).toLowerCase();
+  return Boolean(
+    mimeType?.startsWith("text/") ||
+    mimeType === "application/json" ||
+    mimeType === "application/xml" ||
+    [".txt", ".log", ".json", ".xml", ".ini", ".cfg", ".csv", ".md", ".sav"].includes(ext)
+  );
+};
+
+const buildFileMeta = (file: any) => ({
+  id: file.id,
+  original_name: file.original_name,
+  mime_type: file.mime_type,
+  file_size: Number(file.file_size || 0),
+  note: file.note,
+  created_at: file.created_at,
+});
+
 driveRouter.get("/api/drive/files", authenticateToken, async (req: any, res) => {
   if (!isUsingDatabase()) return res.json({ folders: [], files: [] });
   const folderId = req.query.folderId ? parseId(req.query.folderId) : null;
   const trash = req.query.trash === "1" || req.query.trash === "true";
+  const search = String(req.query.search || "").trim();
+  const likeSearch = `%${search}%`;
 
   try {
     if (req.query.folderId && !folderId) return res.status(400).json({ error: "Invalid folder id" });
@@ -83,36 +105,40 @@ driveRouter.get("/api/drive/files", authenticateToken, async (req: any, res) => 
       const folders = await pool.query(
         `SELECT id, name, parent_id, created_at, deleted_at
          FROM drive_folders
-         WHERE user_id = $1 AND deleted_at IS NOT NULL
+         WHERE user_id = $1 AND deleted_at IS NOT NULL AND ($2 = '' OR name ILIKE $3)
          ORDER BY deleted_at DESC`,
-        [req.user.id]
+        [req.user.id, search, likeSearch]
       );
       const files = await pool.query(
         `SELECT id, original_name, mime_type, file_size, note, created_at, deleted_at
          FROM drive_files
-         WHERE user_id = $1 AND deleted_at IS NOT NULL
+         WHERE user_id = $1 AND deleted_at IS NOT NULL AND ($2 = '' OR original_name ILIKE $3 OR COALESCE(note, '') ILIKE $3)
          ORDER BY deleted_at DESC`,
-        [req.user.id]
+        [req.user.id, search, likeSearch]
       );
       return res.json({ folders: folders.rows, files: files.rows });
     }
 
-    await assertFolder(folderId, req.user.id);
+    if (!search) await assertFolder(folderId, req.user.id);
 
     const folders = await pool.query(
       `SELECT id, name, parent_id, created_at, deleted_at
        FROM drive_folders
-       WHERE user_id = $1 AND deleted_at IS NULL AND ${folderId ? "parent_id = $2" : "parent_id IS NULL"}
+       WHERE user_id = $1 AND deleted_at IS NULL
+         AND ($2 = '' OR name ILIKE $3)
+         AND ($2 != '' OR ${folderId ? "parent_id = $4" : "parent_id IS NULL"})
        ORDER BY name ASC`,
-      folderId ? [req.user.id, folderId] : [req.user.id]
+      folderId ? [req.user.id, search, likeSearch, folderId] : [req.user.id, search, likeSearch]
     );
 
     const { rows } = await pool.query(
       `SELECT id, original_name, mime_type, file_size, note, created_at, deleted_at
        FROM drive_files
-       WHERE user_id = $1 AND deleted_at IS NULL AND ${folderId ? "folder_id = $2" : "folder_id IS NULL"}
+       WHERE user_id = $1 AND deleted_at IS NULL
+         AND ($2 = '' OR original_name ILIKE $3 OR COALESCE(note, '') ILIKE $3)
+         AND ($2 != '' OR ${folderId ? "folder_id = $4" : "folder_id IS NULL"})
        ORDER BY created_at DESC`,
-      folderId ? [req.user.id, folderId] : [req.user.id]
+      folderId ? [req.user.id, search, likeSearch, folderId] : [req.user.id, search, likeSearch]
     );
     res.json({ folders: folders.rows, files: rows });
   } catch (err: any) {
@@ -307,6 +333,151 @@ driveRouter.get("/api/drive/download/:id", authenticateToken, async (req: any, r
     return res.download(filePath, file.original_name);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Drive download failed" });
+  }
+});
+
+driveRouter.get("/api/drive/files/:id/raw", authenticateToken, async (req: any, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid file id" });
+  if (!isUsingDatabase()) return res.status(404).json({ error: "File not found" });
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT original_name, stored_name, mime_type
+       FROM drive_files
+       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
+      [id, req.user.id]
+    );
+    const file = rows[0];
+    if (!file) return res.status(404).json({ error: "File not found" });
+
+    const filePath = path.join(DRIVE_DIR, file.stored_name);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Physical file not found" });
+
+    res.setHeader("Content-Type", file.mime_type || "application/octet-stream");
+    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(file.original_name)}"`);
+    return res.sendFile(filePath);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Drive preview failed" });
+  }
+});
+
+driveRouter.get("/api/drive/files/:id/preview", authenticateToken, async (req: any, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid file id" });
+  if (!isUsingDatabase()) return res.status(404).json({ error: "File not found" });
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, original_name, stored_name, mime_type, file_size, note, created_at
+       FROM drive_files
+       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
+      [id, req.user.id]
+    );
+    const file = rows[0];
+    if (!file) return res.status(404).json({ error: "File not found" });
+
+    const filePath = path.join(DRIVE_DIR, file.stored_name);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Physical file not found" });
+
+    const meta = buildFileMeta(file);
+    if (file.mime_type?.startsWith("image/")) return res.json({ kind: "image", file: meta });
+    if (file.mime_type === "application/pdf") return res.json({ kind: "pdf", file: meta });
+    if (isPreviewableText(file.mime_type, file.original_name)) {
+      const content = fs.readFileSync(filePath, "utf8").slice(0, 200000);
+      return res.json({ kind: "text", file: meta, content, truncated: Number(file.file_size) > 200000 });
+    }
+    return res.json({ kind: "unsupported", file: meta });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Drive preview failed" });
+  }
+});
+
+driveRouter.post("/api/drive/files/:id/share", authenticateToken, async (req: any, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid file id" });
+  if (!isUsingDatabase()) return res.status(404).json({ error: "File not found" });
+
+  try {
+    const file = await pool.query("SELECT id FROM drive_files WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL", [id, req.user.id]);
+    if (!file.rows[0]) return res.status(404).json({ error: "File not found" });
+
+    const existing = await pool.query(
+      "SELECT token FROM drive_shares WHERE user_id = $1 AND file_id = $2 AND disabled_at IS NULL",
+      [req.user.id, id]
+    );
+    if (existing.rows[0]) return res.json({ token: existing.rows[0].token });
+
+    const token = crypto.randomBytes(24).toString("hex");
+    const { rows } = await pool.query(
+      `INSERT INTO drive_shares (user_id, file_id, token, disabled_at)
+       VALUES ($1, $2, $3, NULL)
+       ON CONFLICT (user_id, file_id)
+       DO UPDATE SET token = EXCLUDED.token, disabled_at = NULL, created_at = CURRENT_TIMESTAMP
+       RETURNING token`,
+      [req.user.id, id, token]
+    );
+    res.status(201).json({ token: rows[0].token });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Drive share failed" });
+  }
+});
+
+driveRouter.delete("/api/drive/files/:id/share", authenticateToken, async (req: any, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid file id" });
+  if (!isUsingDatabase()) return res.status(404).json({ error: "File not found" });
+
+  try {
+    await pool.query(
+      "UPDATE drive_shares SET disabled_at = CURRENT_TIMESTAMP WHERE user_id = $1 AND file_id = $2 AND disabled_at IS NULL",
+      [req.user.id, id]
+    );
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Drive unshare failed" });
+  }
+});
+
+driveRouter.get("/api/drive/share/:token", async (req, res) => {
+  if (!isUsingDatabase()) return res.status(404).json({ error: "Share not found" });
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT df.id, df.original_name, df.mime_type, df.file_size, df.note, df.created_at
+       FROM drive_shares ds
+       JOIN drive_files df ON df.id = ds.file_id
+       WHERE ds.token = $1 AND ds.disabled_at IS NULL AND df.deleted_at IS NULL
+         AND (ds.expires_at IS NULL OR ds.expires_at > CURRENT_TIMESTAMP)`,
+      [req.params.token]
+    );
+    if (!rows[0]) return res.status(404).json({ error: "Share not found" });
+    res.json({ file: buildFileMeta(rows[0]) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Drive share failed" });
+  }
+});
+
+driveRouter.get("/api/drive/share/:token/download", async (req, res) => {
+  if (!isUsingDatabase()) return res.status(404).json({ error: "Share not found" });
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT df.original_name, df.stored_name
+       FROM drive_shares ds
+       JOIN drive_files df ON df.id = ds.file_id
+       WHERE ds.token = $1 AND ds.disabled_at IS NULL AND df.deleted_at IS NULL
+         AND (ds.expires_at IS NULL OR ds.expires_at > CURRENT_TIMESTAMP)`,
+      [req.params.token]
+    );
+    const file = rows[0];
+    if (!file) return res.status(404).json({ error: "Share not found" });
+
+    const filePath = path.join(DRIVE_DIR, file.stored_name);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Physical file not found" });
+    return res.download(filePath, file.original_name);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Drive share download failed" });
   }
 });
 
