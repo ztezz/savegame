@@ -330,15 +330,15 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
                     />
                   </div>
                   <p className="text-[10px] text-amber-700 text-center flex items-center justify-center gap-1">
-                    {uploadProgress < 50 ? (
+                    {uploadProgress < 96 ? (
                       <>
                         <span className="inline-block w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
-                        Đang chuẩn bị...
+                        Đang gửi file lên server...
                       </>
                     ) : uploadProgress < 100 ? (
                       <>
                         <span className="inline-block w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
-                        Đang gửi lên (chờ tối đa 30 phút)...
+                        Đang ghép file và lưu dữ liệu...
                       </>
                     ) : (
                       <>

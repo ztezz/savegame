@@ -202,7 +202,7 @@ export const uploadWithChunks = async (
     throw new Error('No authentication token');
   }
 
-  const CHUNK_SIZE = 20 * 1024 * 1024; // 20MB chunks
+  const CHUNK_SIZE = 8 * 1024 * 1024; // Smaller chunks keep progress responsive on slow networks
   const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
   
   console.log(`🚀 Chunked upload starting: ${file.name} (${(file.size / (1024 * 1024)).toFixed(1)}MB, ${totalChunks} chunks)`);
@@ -230,6 +230,45 @@ export const uploadWithChunks = async (
     const { sessionId } = await initRes.json();
     console.log(`📝 Upload session created: ${sessionId}`);
 
+    const uploadChunk = (chunk: Blob, chunkIndex: number) => new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      const chunkUrl = `${baseURL}/activation/upload/chunk?sessionId=${encodeURIComponent(sessionId)}&chunkIndex=${chunkIndex}&totalChunks=${totalChunks}`;
+      const uploadedBeforeChunk = chunkIndex * CHUNK_SIZE;
+      const timeoutMs = Math.max(180000, (chunk.size / (1024 * 1024)) * 30000);
+
+      xhr.upload.addEventListener('progress', (event) => {
+        if (!event.lengthComputable) return;
+        const uploadedBytes = Math.min(uploadedBeforeChunk + event.loaded, file.size);
+        const progress = Math.floor((uploadedBytes / file.size) * 95);
+        onProgress(Math.max(1, Math.min(progress, 95)));
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve();
+          return;
+        }
+
+        let message = xhr.statusText || `HTTP ${xhr.status}`;
+        try {
+          message = JSON.parse(xhr.responseText)?.error || message;
+        } catch {
+          if (xhr.responseText) message = xhr.responseText;
+        }
+        reject(new Error(`Failed to upload chunk ${chunkIndex + 1}: ${message}`));
+      });
+
+      xhr.addEventListener('error', () => reject(new Error(`Network error while uploading chunk ${chunkIndex + 1}`)));
+      xhr.addEventListener('abort', () => reject(new Error(`Upload chunk ${chunkIndex + 1} aborted`)));
+      xhr.addEventListener('timeout', () => reject(new Error(`Upload chunk ${chunkIndex + 1} timed out`)));
+
+      xhr.open('POST', chunkUrl);
+      xhr.timeout = timeoutMs;
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+      xhr.send(chunk);
+    });
+
     // Step 2: Upload chunks
     for (let i = 0; i < totalChunks; i++) {
       const start = i * CHUNK_SIZE;
@@ -238,29 +277,16 @@ export const uploadWithChunks = async (
       
       console.log(`📤 Uploading chunk ${i + 1}/${totalChunks} (${(chunk.size / (1024 * 1024)).toFixed(1)}MB)...`);
 
-      const chunkRes = await fetch(
-        `${baseURL}/activation/upload/chunk?sessionId=${sessionId}&chunkIndex=${i}&totalChunks=${totalChunks}`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/octet-stream'
-          },
-          body: chunk // Send raw binary data
-        }
-      );
+      await uploadChunk(chunk, i);
 
-      if (!chunkRes.ok) {
-        throw new Error(`Failed to upload chunk ${i + 1}: ${chunkRes.statusText}`);
-      }
-
-      const progress = Math.round(((i + 1) / totalChunks) * 100);
-      onProgress(Math.min(progress, 99));
+      const progress = Math.floor((end / file.size) * 95);
+      onProgress(Math.max(1, Math.min(progress, 95)));
       console.log(`✅ Chunk ${i + 1}/${totalChunks} uploaded (${progress}%)`);
     }
 
     // Step 3: Finalize upload
     console.log(`🔗 Finalizing upload...`);
+    onProgress(96);
     const finalizeRes = await fetch(`${baseURL}/activation/upload/finalize`, {
       method: 'POST',
       headers: {
