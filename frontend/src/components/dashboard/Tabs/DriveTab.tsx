@@ -1,31 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { ChevronRight, Download, Eye, File, Folder, Grid2X2, Link, List, Pencil, Plus, RotateCcw, Search, Trash2, UploadCloud, X } from 'lucide-react';
+import { Download, Eye, Link, Pencil, RotateCcw, Trash2, X } from 'lucide-react';
 import api, { API_BASE_URL, uploadWithProgress } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
 import { copyToClipboard } from '../../../utils/clipboard';
-
-interface DriveFile {
-  id: number;
-  original_name: string;
-  mime_type: string | null;
-  file_size: number;
-  note: string | null;
-  created_at: string;
-  deleted_at?: string | null;
-  share_token?: string | null;
-}
-
-interface DriveFolder {
-  id: number;
-  name: string;
-  parent_id: number | null;
-  created_at: string;
-  deleted_at?: string | null;
-}
+import DrivePreviewModal from '../drive/DrivePreviewModal';
+import DriveFolderModal from '../drive/DriveFolderModal';
+import DriveUploadModal from '../drive/DriveUploadModal';
+import DriveMoveModal from '../drive/DriveMoveModal';
+import DriveContent from '../drive/DriveContent';
+import DriveHeader from '../drive/DriveHeader';
+import DriveToolbar from '../drive/DriveToolbar';
+import DriveSelectionBar from '../drive/DriveSelectionBar';
+import { DriveFile, DriveFolder, DriveUsage, FileFilter, PreviewState, UploadItem } from '../drive/driveTypes';
+import { getFileKind } from '../drive/driveUtils';
 
 type SelectionKey = `file-${number}` | `folder-${number}`;
-type FileFilter = 'all' | 'folders' | 'images' | 'documents' | 'installers' | 'archives' | 'other';
-type WebkitFile = File & { webkitRelativePath?: string };
 type FileSystemEntry = {
   name: string;
   isFile: boolean;
@@ -33,27 +22,6 @@ type FileSystemEntry = {
 };
 type FileSystemFileEntry = FileSystemEntry & { file: (success: (file: File) => void, error?: (err: unknown) => void) => void };
 type FileSystemDirectoryEntry = FileSystemEntry & { createReader: () => { readEntries: (success: (entries: FileSystemEntry[]) => void, error?: (err: unknown) => void) => void } };
-
-interface PreviewState {
-  kind: 'image' | 'pdf' | 'text' | 'unsupported';
-  file: DriveFile;
-  content?: string;
-  truncated?: boolean;
-}
-
-interface DriveUsage {
-  activeBytes: number;
-  trashBytes: number;
-  totalBytes: number;
-  activeFiles: number;
-  trashFiles: number;
-  quotaBytes: number;
-}
-
-interface UploadItem {
-  file: File;
-  relativePath?: string;
-}
 
 interface FolderTreeItem {
   id: number;
@@ -63,35 +31,7 @@ interface FolderTreeItem {
   path: string;
 }
 
-const formatFileSize = (size: number) => {
-  if (!size) return '0 B';
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-};
-
 const keyOf = (type: 'file' | 'folder', id: number): SelectionKey => `${type}-${id}`;
-
-const getFileKind = (file: DriveFile): Exclude<FileFilter, 'all' | 'folders'> => {
-  const name = file.original_name.toLowerCase();
-  const mime = (file.mime_type || '').toLowerCase();
-  if (mime.startsWith('image/') || /\.(png|jpe?g|gif|webp|svg|bmp)$/i.test(name)) return 'images';
-  if (/\.(pdf|docx?|xlsx?|pptx?|txt|md|csv|json)$/i.test(name) || mime.includes('pdf') || mime.includes('text')) return 'documents';
-  if (/\.(exe|msi|apk|dmg|pkg|deb|rpm)$/i.test(name)) return 'installers';
-  if (/\.(zip|rar|7z|tar|gz)$/i.test(name)) return 'archives';
-  return 'other';
-};
-
-const getFileVisual = (file: DriveFile) => {
-  const kind = getFileKind(file);
-  const map = {
-    images: { label: 'Ảnh', className: 'bg-emerald-50 text-emerald-700 border-emerald-100', iconClass: 'text-emerald-500 bg-emerald-50' },
-    documents: { label: 'Tài liệu', className: 'bg-blue-50 text-blue-700 border-blue-100', iconClass: 'text-blue-500 bg-blue-50' },
-    installers: { label: 'Cài đặt', className: 'bg-violet-50 text-violet-700 border-violet-100', iconClass: 'text-violet-500 bg-violet-50' },
-    archives: { label: 'Nén', className: 'bg-amber-50 text-amber-700 border-amber-100', iconClass: 'text-amber-500 bg-amber-50' },
-    other: { label: 'File', className: 'bg-slate-50 text-slate-600 border-slate-100', iconClass: 'text-slate-500 bg-slate-50' },
-  };
-  return map[kind];
-};
 
 const readEntryFiles = async (entry: FileSystemEntry, prefix = ''): Promise<UploadItem[]> => {
   if (entry.isFile) {
@@ -138,6 +78,7 @@ const DriveTab: React.FC = () => {
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
+  const [officePreviewUrl, setOfficePreviewUrl] = useState<string | null>(null);
   const [usage, setUsage] = useState<DriveUsage | null>(null);
 
   const allItems = [
@@ -187,6 +128,14 @@ const DriveTab: React.FC = () => {
       if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
     };
   }, [previewObjectUrl]);
+
+  const closePreview = () => {
+    if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
+    setPreviewObjectUrl(null);
+    setOfficePreviewUrl(null);
+    setPreview(null);
+    setPreviewLoading(false);
+  };
 
   const openFolder = (folderId: number | null) => {
     if (trashMode) return;
@@ -361,11 +310,16 @@ const DriveTab: React.FC = () => {
     try {
       if (previewObjectUrl) URL.revokeObjectURL(previewObjectUrl);
       setPreviewObjectUrl(null);
+      setOfficePreviewUrl(null);
       const res = await api.get(`/drive/files/${file.id}/preview`);
       setPreview(res.data);
-      if (res.data.kind === 'image' || res.data.kind === 'pdf') {
+      if (['image', 'pdf', 'video', 'audio'].includes(res.data.kind)) {
         const raw = await api.get(`/drive/files/${file.id}/raw`, { responseType: 'blob' });
         setPreviewObjectUrl(URL.createObjectURL(raw.data));
+      } else if (res.data.kind === 'office') {
+        const token = file.share_token || (await api.post(`/drive/files/${file.id}/share`)).data.token;
+        const publicRawUrl = `${API_BASE_URL}/drive/share/${encodeURIComponent(token)}/raw`;
+        setOfficePreviewUrl(`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(publicRawUrl)}`);
       }
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Không xem trước được file', 'error');
@@ -450,234 +404,21 @@ const DriveTab: React.FC = () => {
   };
 
   return <div className="col-span-12 space-y-6 px-1 sm:px-0">
-    <div className="rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-600 p-6 text-white shadow-xl shadow-indigo-100">
-      <div className="flex flex-col xl:flex-row xl:items-end xl:justify-between gap-5">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.25em] text-white/70">CloudSave Drive</p>
-          <h3 className="mt-2 text-3xl font-black tracking-tight">Drive cá nhân</h3>
-          <p className="mt-2 text-sm text-white/80 max-w-2xl">Quản lý file kiểu Google Drive: kéo thả upload, chọn nhiều mục, đổi tên, di chuyển và thùng rác.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2 bg-white/10 border border-white/20 rounded-2xl p-1">
-            <button type="button" onClick={() => setViewMode('grid')} className={`px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 ${viewMode === 'grid' ? 'bg-white text-indigo-700' : 'text-white/80'}`}><Grid2X2 className="w-4 h-4" />Lưới</button>
-            <button type="button" onClick={() => setViewMode('list')} className={`px-3 py-2 rounded-xl text-sm font-bold flex items-center gap-2 ${viewMode === 'list' ? 'bg-white text-indigo-700' : 'text-white/80'}`}><List className="w-4 h-4" />Danh sách</button>
-          </div>
-          <button type="button" onClick={() => toggleTrash(!trashMode)} className={`px-4 py-3 rounded-2xl text-sm font-black border ${trashMode ? 'bg-white text-red-600 border-white' : 'bg-white/10 text-white border-white/20'}`}><Trash2 className="w-4 h-4 inline mr-2" />Thùng rác</button>
-        </div>
-      </div>
-    </div>
+    <DriveHeader viewMode={viewMode} trashMode={trashMode} onSetViewMode={setViewMode} onToggleTrash={() => toggleTrash(!trashMode)} />
 
-    <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-4">
-      {usage && <div className="rounded-2xl border border-indigo-100 bg-indigo-50/70 p-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div>
-            <p className="text-xs font-black uppercase tracking-widest text-indigo-500">Dung lượng Drive</p>
-            <p className="mt-1 text-sm font-bold text-slate-800">Đã dùng {formatFileSize(usage.totalBytes)} / {formatFileSize(usage.quotaBytes)} ({usagePercent}%)</p>
-          </div>
-          <div className="text-xs text-slate-500 sm:text-right">
-            <p>{usage.activeFiles} file active · {formatFileSize(usage.activeBytes)}</p>
-            <p>{usage.trashFiles} file trong thùng rác · {formatFileSize(usage.trashBytes)}</p>
-          </div>
-        </div>
-        <div className="mt-3 h-3 rounded-full bg-white overflow-hidden border border-indigo-100 flex">
-          <div className="h-full bg-indigo-600" style={{ width: `${activePercent}%` }} />
-          <div className="h-full bg-amber-400" style={{ width: `${trashPercent}%` }} />
-        </div>
-        {usagePercent >= 90 && <p className="mt-2 text-xs font-bold text-amber-700">Drive gần đầy. Hãy xóa vĩnh viễn file trong thùng rác hoặc tăng DRIVE_QUOTA_MB.</p>}
-      </div>}
+    <DriveToolbar usage={usage} trashMode={trashMode} breadcrumb={breadcrumb} searchTerm={searchTerm} usagePercent={usagePercent} activePercent={activePercent} trashPercent={trashPercent} onOpenFolder={openFolder} onSetSearchTerm={setSearchTerm} onOpenFolderModal={() => setFolderModalOpen(true)} onOpenUploadModal={() => setUploadModalOpen(true)} />
 
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <button type="button" onClick={() => openFolder(null)} disabled={trashMode} className="font-bold text-indigo-600 hover:text-indigo-800 disabled:text-slate-400">Drive của tôi</button>
-        {trashMode && <><ChevronRight className="w-4 h-4 text-slate-300" /><span className="font-bold text-red-600">Thùng rác</span></>}
-        {!trashMode && breadcrumb.map((folder) => <React.Fragment key={folder.id}><ChevronRight className="w-4 h-4 text-slate-300" /><button type="button" onClick={() => openFolder(folder.id)} className="font-bold text-slate-700 hover:text-indigo-700">{folder.name}</button></React.Fragment>)}
-      </div>
+    <DriveSelectionBar selectedCount={selectedCount} trashMode={trashMode} onClearSelection={() => setSelected(new Set())} onOpenMoveModal={openMoveModal} onTrashSelected={trashSelected} onRestoreSelected={restoreSelected} onPermanentDeleteSelected={permanentDeleteSelected} />
 
-      <div className="relative">
-        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-        <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full border border-slate-200 rounded-2xl pl-10 pr-10 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-300" placeholder={trashMode ? 'Tìm trong thùng rác...' : 'Tìm file, thư mục hoặc ghi chú trong Drive...'} />
-        {searchTerm && <button type="button" onClick={() => setSearchTerm('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>}
-      </div>
+    <DriveContent loading={loading} trashMode={trashMode} empty={empty} filteredEmpty={filteredEmpty} viewMode={viewMode} fileFilter={fileFilter} filterOptions={filterOptions} visibleFolders={visibleFolders} visibleFiles={visibleFiles} selected={selected} onSetFileFilter={setFileFilter} onOpenFolder={openFolder} onToggleSelected={toggleSelected} renderActions={renderActions} />
 
-      {!trashMode && <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
-        <button type="button" onClick={() => setFolderModalOpen(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white shadow-lg shadow-slate-100 transition hover:bg-slate-800"><Plus className="w-4 h-4" />Thư mục mới</button>
-        <button type="button" onClick={() => setUploadModalOpen(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-100 transition hover:bg-indigo-700"><UploadCloud className="w-4 h-4" />Tải lên</button>
-      </div>}
-    </div>
+    <DriveFolderModal open={folderModalOpen} folderName={newFolderName} breadcrumb={breadcrumb} onChangeFolderName={setNewFolderName} onClose={() => { setFolderModalOpen(false); setNewFolderName(''); }} onCreate={createFolder} />
 
-    {selectedCount > 0 && <div className="sticky top-3 z-20 bg-slate-950 text-white rounded-2xl px-4 py-3 shadow-xl flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
-      <div className="flex items-center gap-3"><button type="button" onClick={() => setSelected(new Set())} className="p-1 rounded-lg bg-white/10"><X className="w-4 h-4" /></button><span className="text-sm font-black">Đã chọn {selectedCount} mục</span></div>
-      {trashMode ? <div className="flex flex-wrap gap-2"><button type="button" onClick={restoreSelected} className="px-3 py-2 bg-emerald-500 text-white rounded-xl text-xs font-black inline-flex items-center gap-2"><RotateCcw className="w-4 h-4" />Khôi phục</button><button type="button" onClick={permanentDeleteSelected} className="px-3 py-2 bg-red-600 text-white rounded-xl text-xs font-black inline-flex items-center gap-2"><Trash2 className="w-4 h-4" />Xóa vĩnh viễn</button></div> : <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={openMoveModal} className="px-3 py-2 bg-indigo-500 text-white rounded-xl text-xs font-black">Di chuyển...</button><button type="button" onClick={trashSelected} className="px-3 py-2 bg-red-600 text-white rounded-xl text-xs font-black inline-flex items-center gap-2"><Trash2 className="w-4 h-4" />Xóa</button></div>}
-    </div>}
+    <DriveUploadModal open={uploadModalOpen} uploading={uploading} dragging={dragging} progress={progress} selectedUploadFiles={selectedUploadFiles} note={note} onSetDragging={setDragging} onSetSelectedUploadFiles={setSelectedUploadFiles} onSetNote={setNote} onDrop={handleDrop} onClose={() => { if (!uploading) { setUploadModalOpen(false); setDragging(false); } }} onUpload={() => uploadFiles()} />
 
-    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
-      <div className="p-5 border-b border-slate-100 space-y-4">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">{trashMode ? 'Thùng rác' : 'Nội dung'}</h3>
-          <span className="text-xs text-slate-500">{visibleFolders.length} thư mục · {visibleFiles.length} file đang hiển thị</span>
-        </div>
-        <div className="flex gap-2 overflow-x-auto pb-1">
-          {filterOptions.map((option) => <button key={option.value} type="button" onClick={() => setFileFilter(option.value)} className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-black transition ${fileFilter === option.value ? 'border-indigo-200 bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'}`}>{option.label} <span className={fileFilter === option.value ? 'text-white/80' : 'text-slate-400'}>{option.count}</span></button>)}
-        </div>
-      </div>
+    <DrivePreviewModal preview={preview} previewLoading={previewLoading} previewObjectUrl={previewObjectUrl} officePreviewUrl={officePreviewUrl} onClose={closePreview} onShareFile={shareFile} />
 
-      {loading ? <div className="p-8 text-sm text-slate-500">Đang tải...</div> : empty ? <div className="p-10 text-center text-sm text-slate-500">{trashMode ? 'Thùng rác đang trống.' : 'Thư mục này đang trống.'}</div> : filteredEmpty ? <div className="p-10 text-center text-sm text-slate-500">Không có mục nào khớp bộ lọc này.</div> : viewMode === 'grid' ? <div className="p-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {visibleFolders.map((folder) => <div key={`folder-${folder.id}`} className={`group rounded-3xl border p-4 transition ${selected.has(keyOf('folder', folder.id)) ? 'border-indigo-400 bg-indigo-50 shadow-lg shadow-indigo-100' : 'border-slate-200 bg-white hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-xl hover:shadow-slate-100'}`}>
-          <div className="flex items-start justify-between gap-2"><button type="button" onClick={() => openFolder(folder.id)} className="min-w-0 flex-1 text-left"><div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-500"><Folder className="w-7 h-7" /></div><p className="font-black text-slate-900 truncate">{folder.name}</p><p className="text-xs font-semibold text-slate-500 mt-1">Thư mục</p></button><input type="checkbox" checked={selected.has(keyOf('folder', folder.id))} onChange={() => toggleSelected('folder', folder.id)} className="w-4 h-4 accent-indigo-600" /></div>
-          <div className="mt-4 border-t border-slate-100 pt-3 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition">{renderActions('folder', folder)}</div>
-        </div>)}
-        {visibleFiles.map((file) => {
-          const visual = getFileVisual(file);
-          return <div key={`file-${file.id}`} className={`group rounded-3xl border bg-white transition p-4 ${selected.has(keyOf('file', file.id)) ? 'border-indigo-400 ring-2 ring-indigo-100 shadow-lg shadow-indigo-100' : 'border-slate-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-xl hover:shadow-slate-100'}`}>
-            <div className="flex items-start justify-between gap-2"><div className={`mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl ${visual.iconClass}`}><File className="w-7 h-7" /></div><input type="checkbox" checked={selected.has(keyOf('file', file.id))} onChange={() => toggleSelected('file', file.id)} className="w-4 h-4 accent-indigo-600" /></div>
-            <p className="font-black text-slate-900 line-clamp-2 min-h-12 break-words">{file.original_name}</p>
-            <div className="mt-3 flex flex-wrap items-center gap-2"><span className={`rounded-full border px-2 py-1 text-[10px] font-black ${visual.className}`}>{visual.label}</span><span className="text-xs font-bold text-slate-500">{formatFileSize(Number(file.file_size))}</span></div>
-            {file.note && <p className="text-xs text-slate-400 mt-3 line-clamp-2">{file.note}</p>}
-            <div className="mt-4 border-t border-slate-100 pt-3 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition">{renderActions('file', file)}</div>
-          </div>;
-        })}
-      </div> : <div className="divide-y divide-slate-100">
-        {visibleFolders.map((folder) => <div key={`folder-${folder.id}`} className={`p-4 flex items-center justify-between gap-3 hover:bg-slate-50 ${selected.has(keyOf('folder', folder.id)) ? 'bg-indigo-50' : ''}`}>
-          <div className="min-w-0 flex items-center gap-3"><input type="checkbox" checked={selected.has(keyOf('folder', folder.id))} onChange={() => toggleSelected('folder', folder.id)} className="w-4 h-4" /><button type="button" onClick={() => openFolder(folder.id)} className="min-w-0 flex items-center gap-3 text-left"><Folder className="w-6 h-6 text-indigo-500 shrink-0" /><span className="font-bold text-slate-800 truncate">{folder.name}</span></button></div>
-          {renderActions('folder', folder)}
-        </div>)}
-        {visibleFiles.map((file) => <div key={`file-${file.id}`} className={`p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 hover:bg-slate-50 ${selected.has(keyOf('file', file.id)) ? 'bg-indigo-50' : ''}`}>
-          <div className="min-w-0 flex items-center gap-3"><input type="checkbox" checked={selected.has(keyOf('file', file.id))} onChange={() => toggleSelected('file', file.id)} className="w-4 h-4" /><File className="w-6 h-6 text-slate-500 shrink-0" /><div className="min-w-0"><p className="font-bold text-slate-800 truncate">{file.original_name}</p><p className="text-xs text-slate-500">{getFileVisual(file).label} · {formatFileSize(Number(file.file_size))} · {new Date(file.created_at).toLocaleString('vi-VN')}</p></div></div>
-          {renderActions('file', file)}
-        </div>)}
-      </div>}
-    </div>
-
-    {folderModalOpen && <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-black uppercase tracking-widest text-indigo-500">Thư mục Drive</p>
-            <h3 className="font-black text-slate-900">Tạo thư mục mới</h3>
-            <p className="mt-1 text-xs text-slate-500">Thư mục sẽ được tạo trong vị trí hiện tại.</p>
-          </div>
-          <button type="button" onClick={() => { setFolderModalOpen(false); setNewFolderName(''); }} className="p-2 rounded-xl hover:bg-slate-100"><X className="w-5 h-5" /></button>
-        </div>
-        <div className="p-5 space-y-4">
-          <label className="block text-sm font-bold text-slate-900">Tên thư mục
-            <input autoFocus className="mt-2 w-full border border-slate-200 rounded-xl px-3 py-3 text-sm outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50" value={newFolderName} onChange={(e)=>setNewFolderName(e.target.value)} onKeyDown={(e)=>{ if (e.key === 'Enter' && newFolderName.trim()) createFolder(); }} placeholder="Ví dụ: Setup game, Tài liệu, Ảnh..." />
-          </label>
-          <div className="rounded-2xl bg-slate-50 p-4 text-xs text-slate-500">
-            Vị trí: <span className="font-bold text-slate-700">{breadcrumb.length ? breadcrumb.map((folder) => folder.name).join(' / ') : 'Drive của tôi'}</span>
-          </div>
-        </div>
-        <div className="p-5 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
-          <button type="button" onClick={() => { setFolderModalOpen(false); setNewFolderName(''); }} className="px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600">Hủy</button>
-          <button type="button" onClick={createFolder} disabled={!newFolderName.trim()} className="px-5 py-3 rounded-xl bg-slate-900 text-white text-sm font-black disabled:opacity-50 inline-flex items-center justify-center gap-2"><Plus className="w-4 h-4" />Tạo thư mục</button>
-        </div>
-      </div>
-    </div>}
-
-    {uploadModalOpen && <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-black uppercase tracking-widest text-indigo-500">Upload Drive</p>
-            <h3 className="font-black text-slate-900">Tải file hoặc thư mục lên Drive</h3>
-            <p className="mt-1 text-xs text-slate-500">Bạn có thể chọn file, chọn cả thư mục hoặc kéo thả trực tiếp vào khung bên dưới.</p>
-          </div>
-          <button type="button" onClick={() => { if (!uploading) { setUploadModalOpen(false); setDragging(false); } }} disabled={uploading} className="p-2 rounded-xl hover:bg-slate-100 disabled:opacity-50"><X className="w-5 h-5" /></button>
-        </div>
-        <div className="p-5 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <label className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl border px-4 py-4 text-sm font-black transition ${uploading ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400' : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:border-indigo-300 hover:bg-indigo-100'}`}>
-              <File className="w-5 h-5" />
-              Chọn file
-              <input className="hidden" type="file" multiple disabled={uploading} onChange={(e)=>{ setSelectedUploadFiles(Array.from<File>(e.currentTarget.files || []).map((file) => ({ file, relativePath: file.name }))); e.currentTarget.value = ''; }} />
-            </label>
-            <label className={`inline-flex cursor-pointer items-center justify-center gap-2 rounded-2xl border px-4 py-4 text-sm font-black transition ${uploading ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400' : 'border-violet-200 bg-violet-50 text-violet-700 hover:border-violet-300 hover:bg-violet-100'}`}>
-              <Folder className="w-5 h-5" />
-              Chọn thư mục
-              <input className="hidden" type="file" multiple disabled={uploading} {...({ webkitdirectory: '', directory: '' } as any)} onChange={(e)=>{ setSelectedUploadFiles(Array.from<File>(e.currentTarget.files || []).map((file) => ({ file, relativePath: (file as WebkitFile).webkitRelativePath || file.name }))); e.currentTarget.value = ''; }} />
-            </label>
-          </div>
-
-          <div onDragOver={(e) => { e.preventDefault(); if (!uploading) setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={handleDrop} className={`rounded-2xl border-2 border-dashed p-8 text-center transition ${dragging ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}>
-            <UploadCloud className="w-10 h-10 mx-auto mb-3" />
-            <p className="text-sm font-black">Kéo thả file hoặc cả thư mục vào đây</p>
-            <p className="text-xs mt-1">Giữ nguyên cấu trúc thư mục con khi trình duyệt hỗ trợ.</p>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-black uppercase tracking-widest text-slate-500">Đã chọn</p>
-            <p className="mt-1 truncate text-sm font-bold text-slate-800">{selectedUploadFiles.length > 0 ? `${selectedUploadFiles.length} file${selectedUploadFiles[0]?.relativePath ? ` · ${selectedUploadFiles[0].relativePath}` : ''}` : 'Chưa chọn file nào'}</p>
-          </div>
-
-          <input className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50" value={note} disabled={uploading} onChange={(e)=>setNote(e.target.value)} placeholder="Ghi chú file (không bắt buộc)" />
-
-          {uploading && <div className="space-y-2">
-            <div className="h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-indigo-600 transition-all" style={{ width: `${progress}%` }} /></div>
-            <p className="text-center text-xs font-bold text-indigo-600">Đang tải lên {progress}%</p>
-          </div>}
-        </div>
-        <div className="p-5 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
-          <button type="button" onClick={() => { setUploadModalOpen(false); setDragging(false); }} disabled={uploading} className="px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 disabled:opacity-50">Hủy</button>
-          <button type="button" onClick={() => uploadFiles()} disabled={selectedUploadFiles.length === 0 || uploading} className="px-5 py-3 rounded-xl bg-indigo-600 text-white text-sm font-black disabled:opacity-50 inline-flex items-center justify-center gap-2"><UploadCloud className="w-4 h-4" />{uploading ? `${progress}%` : `Tải lên${selectedUploadFiles.length ? ` (${selectedUploadFiles.length})` : ''}`}</button>
-        </div>
-      </div>
-    </div>}
-
-    {(preview || previewLoading) && <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
-          <div className="min-w-0 flex items-center gap-3">
-            <div className={`hidden sm:flex h-12 w-12 items-center justify-center rounded-2xl ${preview?.file ? getFileVisual(preview.file).iconClass : 'bg-slate-50 text-slate-400'}`}><File className="w-7 h-7" /></div>
-            <div className="min-w-0">
-              <p className="text-xs font-black uppercase tracking-widest text-indigo-500">Xem trước file</p>
-              <h3 className="font-black text-slate-900 truncate">{preview?.file.original_name || 'Đang tải...'}</h3>
-              {preview?.file && <p className="text-xs text-slate-500 mt-1">{getFileVisual(preview.file).label} · {formatFileSize(Number(preview.file.file_size))} · {preview.file.mime_type || 'Không rõ loại file'}</p>}
-            </div>
-          </div>
-          <button type="button" onClick={() => setPreview(null)} className="p-2 rounded-xl hover:bg-slate-100"><X className="w-5 h-5" /></button>
-        </div>
-        <div className="grid min-h-[420px] flex-1 overflow-hidden lg:grid-cols-[1fr_280px]">
-          <div className="overflow-auto bg-slate-100 p-5">
-            {previewLoading ? <div className="flex h-full min-h-[360px] items-center justify-center rounded-3xl bg-white text-sm font-bold text-slate-500">Đang tải preview...</div> : preview?.kind === 'image' && previewObjectUrl ? <div className="flex min-h-[65vh] items-center justify-center"><img src={previewObjectUrl} alt={preview.file.original_name} className="max-h-[72vh] max-w-full rounded-3xl bg-white object-contain shadow-2xl" /></div> : preview?.kind === 'pdf' && previewObjectUrl ? <iframe src={previewObjectUrl} title={preview.file.original_name} className="h-[72vh] w-full rounded-3xl bg-white shadow-xl" /> : preview?.kind === 'text' ? <div className="space-y-3"><pre className="max-h-[72vh] whitespace-pre-wrap break-words rounded-3xl bg-slate-950 p-5 text-xs leading-relaxed text-slate-100 shadow-xl overflow-auto">{preview.content}</pre>{preview.truncated && <p className="text-xs font-bold text-amber-600">Preview đã được cắt ngắn để tải nhanh.</p>}</div> : <div className="flex min-h-[420px] flex-col items-center justify-center rounded-3xl bg-white text-center shadow-sm"><File className="w-16 h-16 text-slate-300 mb-4" /><p className="font-black text-slate-900">Chưa hỗ trợ xem trước loại file này</p><p className="mt-1 max-w-sm text-sm text-slate-500">Bạn vẫn có thể tải file về máy hoặc tạo link chia sẻ.</p></div>}
-          </div>
-          <div className="border-t border-slate-100 bg-white p-5 lg:border-l lg:border-t-0">
-            <p className="text-xs font-black uppercase tracking-widest text-slate-400">Thông tin file</p>
-            {preview?.file && <div className="mt-4 space-y-3 text-sm">
-              <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Tên file</p><p className="mt-1 break-words font-bold text-slate-900">{preview.file.original_name}</p></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Dung lượng</p><p className="mt-1 font-bold text-slate-900">{formatFileSize(Number(preview.file.file_size))}</p></div>
-                <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Loại</p><p className="mt-1 font-bold text-slate-900">{getFileVisual(preview.file).label}</p></div>
-              </div>
-              <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Ngày tải</p><p className="mt-1 font-bold text-slate-900">{new Date(preview.file.created_at).toLocaleString('vi-VN')}</p></div>
-              {preview.file.note && <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Ghi chú</p><p className="mt-1 break-words font-bold text-slate-900">{preview.file.note}</p></div>}
-              <div className="space-y-2 pt-2">
-                <a href={`${API_BASE_URL}/drive/download/${preview.file.id}`} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-black text-white"><Download className="w-4 h-4" />Tải xuống</a>
-                <button type="button" onClick={() => shareFile(preview.file)} className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50"><Link className="w-4 h-4" />{preview.file.share_token ? 'Copy link chia sẻ' : 'Tạo link chia sẻ'}</button>
-              </div>
-            </div>}
-          </div>
-        </div>
-      </div>
-    </div>}
-
-    {moveModalOpen && <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xl max-h-[85vh] overflow-hidden flex flex-col">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-black uppercase tracking-widest text-indigo-500">Di chuyển</p>
-            <h3 className="font-black text-slate-900">Chọn thư mục đích cho {selectedCount} mục</h3>
-          </div>
-          <button type="button" onClick={() => setMoveModalOpen(false)} className="p-2 rounded-xl hover:bg-slate-100"><X className="w-5 h-5" /></button>
-        </div>
-        <div className="p-5 overflow-auto space-y-2">
-          <button type="button" onClick={() => setMoveTargetId('root')} className={`w-full text-left rounded-2xl border px-4 py-3 text-sm font-bold ${moveTargetId === 'root' ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 hover:bg-slate-50'}`}>Drive của tôi</button>
-          {visibleFoldersForMove.map((folder) => <button key={folder.id} type="button" onClick={() => setMoveTargetId(String(folder.id))} className={`w-full text-left rounded-2xl border px-4 py-3 text-sm font-bold ${moveTargetId === String(folder.id) ? 'border-indigo-300 bg-indigo-50 text-indigo-700' : 'border-slate-200 hover:bg-slate-50'}`} style={{ paddingLeft: `${16 + folder.depth * 20}px` }}><Folder className="w-4 h-4 inline mr-2 text-indigo-500" />{folder.name}<span className="ml-2 text-xs font-normal text-slate-400">{folder.path}</span></button>)}
-          {folderTree.length === 0 && <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">Chưa có thư mục nào. Có thể di chuyển về Drive của tôi.</div>}
-        </div>
-        <div className="p-5 border-t border-slate-100 flex items-center justify-end gap-2">
-          <button type="button" onClick={() => setMoveModalOpen(false)} className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold text-slate-600">Hủy</button>
-          <button type="button" onClick={async () => { await moveSelected(); setMoveModalOpen(false); }} className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-black">Di chuyển</button>
-        </div>
-      </div>
-    </div>}
+    <DriveMoveModal open={moveModalOpen} selectedCount={selectedCount} moveTargetId={moveTargetId} folders={visibleFoldersForMove} onSetMoveTargetId={setMoveTargetId} onClose={() => setMoveModalOpen(false)} onMove={async () => { await moveSelected(); setMoveModalOpen(false); }} />
   </div>;
 };
 

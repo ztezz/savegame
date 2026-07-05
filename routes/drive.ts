@@ -82,6 +82,17 @@ const isPreviewableText = (mimeType: string | null, originalName: string) => {
   );
 };
 
+const isOfficePreviewable = (mimeType: string | null, originalName: string) => {
+  const ext = path.extname(originalName).toLowerCase();
+  return Boolean(
+    [".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx"].includes(ext) ||
+    mimeType?.includes("officedocument") ||
+    mimeType === "application/msword" ||
+    mimeType === "application/vnd.ms-excel" ||
+    mimeType === "application/vnd.ms-powerpoint"
+  );
+};
+
 const buildFileMeta = (file: any) => ({
   id: file.id,
   original_name: file.original_name,
@@ -489,6 +500,9 @@ driveRouter.get("/api/drive/files/:id/preview", authenticateToken, async (req: a
     const meta = buildFileMeta(file);
     if (file.mime_type?.startsWith("image/")) return res.json({ kind: "image", file: meta });
     if (file.mime_type === "application/pdf") return res.json({ kind: "pdf", file: meta });
+    if (file.mime_type?.startsWith("video/")) return res.json({ kind: "video", file: meta });
+    if (file.mime_type?.startsWith("audio/")) return res.json({ kind: "audio", file: meta });
+    if (isOfficePreviewable(file.mime_type, file.original_name)) return res.json({ kind: "office", file: meta });
     if (isPreviewableText(file.mime_type, file.original_name)) {
       const content = fs.readFileSync(filePath, "utf8").slice(0, 200000);
       return res.json({ kind: "text", file: meta, content, truncated: Number(file.file_size) > 200000 });
@@ -584,6 +598,31 @@ driveRouter.get("/api/drive/share/:token/download", async (req, res) => {
     return res.download(filePath, file.original_name);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Drive share download failed" });
+  }
+});
+
+driveRouter.get("/api/drive/share/:token/raw", async (req, res) => {
+  if (!isUsingDatabase()) return res.status(404).json({ error: "Share not found" });
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT df.original_name, df.stored_name, df.mime_type
+       FROM drive_shares ds
+       JOIN drive_files df ON df.id = ds.file_id
+       WHERE ds.token = $1 AND ds.disabled_at IS NULL AND df.deleted_at IS NULL
+         AND (ds.expires_at IS NULL OR ds.expires_at > CURRENT_TIMESTAMP)`,
+      [req.params.token]
+    );
+    const file = rows[0];
+    if (!file) return res.status(404).json({ error: "Share not found" });
+
+    const filePath = path.join(DRIVE_DIR, file.stored_name);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Physical file not found" });
+    res.setHeader("Content-Type", file.mime_type || "application/octet-stream");
+    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(file.original_name)}"`);
+    return res.sendFile(filePath);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Drive share preview failed" });
   }
 });
 
