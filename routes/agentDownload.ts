@@ -22,17 +22,6 @@ function resolveExePath(): string | null {
     return fs.existsSync(AGENT_EXE_PATH) ? AGENT_EXE_PATH : null;
   }
 
-  // Default: look in backend/file/ first, then legacy paths
-  const candidates = [
-    path.resolve(process.cwd(), "file", EXE_NAME),
-    path.resolve(process.cwd(), "..", "windows-save-restore-agent", "dist", EXE_NAME),
-    path.resolve(process.cwd(), "downloads", EXE_NAME),
-  ];
-
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate;
-  }
-
   return null;
 }
 

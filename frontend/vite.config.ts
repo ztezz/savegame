@@ -22,7 +22,7 @@ export default defineConfig(({ mode }) => {
       host: true,
       proxy: {
         '/api': {
-          target: env.VITE_API_URL || 'https://api-savegame.datdaihcm.pro',
+          target: env.VITE_API_URL || 'https://thzi-luugame.hf.space',
           changeOrigin: true,
         },
       },

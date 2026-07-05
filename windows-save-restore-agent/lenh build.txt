@@ -1,0 +1,2 @@
+cd windows-save-restore-agent
+.\build-exe.ps1

@@ -1,0 +1,21 @@
+# Local runtime config/secrets
+.env
+agent.key
+
+# Python environment/cache
+.venv/
+__pycache__/
+*.py[cod]
+
+# Build artifacts
+build/
+dist/
+*.spec
+
+# Logs/runtime output
+logs/
+*.log
+
+# Local temp files
+*.tmp
+*.bak
