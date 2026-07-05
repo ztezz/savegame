@@ -24,6 +24,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const lastMessageIdRef = useRef(0);
   const isAdmin = currentUser?.role === 'Admin' || currentUser?.username === 'admin';
 
   const scrollToBottom = () => {
@@ -34,13 +35,19 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
 
   const fetchMessages = async (initial = false) => {
     try {
-      const lastId = initial || messages.length === 0 ? 0 : messages[messages.length - 1].id;
+      const lastId = initial ? 0 : lastMessageIdRef.current;
       const res = await api.get('/community/messages', { params: lastId ? { afterId: lastId } : { limit: 80 } });
       const incoming = Array.isArray(res.data) ? res.data : [];
       if (initial) {
         setMessages(incoming);
+        lastMessageIdRef.current = incoming.length > 0 ? incoming[incoming.length - 1].id : 0;
       } else if (incoming.length > 0) {
-        setMessages((current) => [...current, ...incoming].slice(-200));
+        setMessages((current) => {
+          const existingIds = new Set(current.map((item) => item.id));
+          const merged = [...current, ...incoming.filter((item) => !existingIds.has(item.id))].slice(-200);
+          lastMessageIdRef.current = merged.length > 0 ? merged[merged.length - 1].id : 0;
+          return merged;
+        });
       }
       if (incoming.length > 0 || initial) scrollToBottom();
     } catch (err: any) {
@@ -63,7 +70,12 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
     setSending(true);
     try {
       const res = await api.post('/community/messages', { message: text });
-      setMessages((current) => [...current, res.data].slice(-200));
+      setMessages((current) => {
+        if (current.some((item) => item.id === res.data.id)) return current;
+        const merged = [...current, res.data].slice(-200);
+        lastMessageIdRef.current = merged.length > 0 ? merged[merged.length - 1].id : 0;
+        return merged;
+      });
       setMessage('');
       scrollToBottom();
     } catch (err: any) {
@@ -76,7 +88,11 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
   const deleteMessage = async (id: number) => {
     try {
       await api.delete(`/community/messages/${id}`);
-      setMessages((current) => current.filter((item) => item.id !== id));
+      setMessages((current) => {
+        const next = current.filter((item) => item.id !== id);
+        lastMessageIdRef.current = next.length > 0 ? next[next.length - 1].id : 0;
+        return next;
+      });
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Xóa tin nhắn thất bại', 'error');
     }
@@ -87,6 +103,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
     try {
       await api.delete('/community/messages');
       setMessages([]);
+      lastMessageIdRef.current = 0;
       showToast('Đã xóa phòng chat', 'success');
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Xóa phòng chat thất bại', 'error');

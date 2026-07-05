@@ -4,6 +4,22 @@ import { authenticateToken, isAdmin } from "../middleware/auth.js";
 
 export const communityRouter = Router();
 
+communityRouter.get("/api/community/stats", authenticateToken, isAdmin, async (_req: any, res) => {
+  if (!isUsingDatabase()) return res.json({ messageCount: 0, userCount: 0, latestAt: null });
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT COUNT(*)::int AS message_count,
+              COUNT(DISTINCT user_id)::int AS user_count,
+              MAX(created_at) AS latest_at
+       FROM community_messages`
+    );
+    res.json(rows[0] || { message_count: 0, user_count: 0, latest_at: null });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to load chat stats" });
+  }
+});
+
 communityRouter.get("/api/community/messages", authenticateToken, async (req: any, res) => {
   if (!isUsingDatabase()) return res.json([]);
 
@@ -82,5 +98,23 @@ communityRouter.delete("/api/community/messages", authenticateToken, isAdmin, as
     res.json({ success: true, deleted: result.rowCount || 0 });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to clear chat" });
+  }
+});
+
+communityRouter.post("/api/community/cleanup", authenticateToken, isAdmin, async (req: any, res) => {
+  if (!isUsingDatabase()) return res.json({ success: true, deleted: 0 });
+  const keepLatest = Math.max(0, Math.min(Number(req.body?.keepLatest || 200), 5000));
+
+  try {
+    const result = await pool.query(
+      `DELETE FROM community_messages
+       WHERE id NOT IN (
+         SELECT id FROM community_messages ORDER BY id DESC LIMIT $1
+       )`,
+      [keepLatest]
+    );
+    res.json({ success: true, keepLatest, deleted: result.rowCount || 0 });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to cleanup chat" });
   }
 });

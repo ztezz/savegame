@@ -44,6 +44,9 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const [storageUsage, setStorageUsage] = useState<any>(null);
   const [cleanupPreview, setCleanupPreview] = useState<any>(null);
   const [cleanupLoading, setCleanupLoading] = useState(false);
+  const [chatStats, setChatStats] = useState<any>(null);
+  const [chatKeepLatest, setChatKeepLatest] = useState(200);
+  const [chatManaging, setChatManaging] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -60,6 +63,8 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           setAuditLogs(logs.data || []);
           const storage = await api.get('/system/storage');
           setStorageUsage(storage.data);
+          const chat = await api.get('/community/stats');
+          setChatStats(chat.data);
         } catch {
           showToast('Không tải được dữ liệu quản trị', 'warning');
         }
@@ -136,6 +141,39 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       showToast(err.response?.data?.error || 'Dọn dẹp storage thất bại', 'error');
     } finally {
       setCleanupLoading(false);
+    }
+  };
+
+  const refreshChatStats = async () => {
+    const chat = await api.get('/community/stats');
+    setChatStats(chat.data);
+  };
+
+  const cleanupChat = async () => {
+    if (!isAdmin) return;
+    setChatManaging(true);
+    try {
+      const res = await api.post('/community/cleanup', { keepLatest: chatKeepLatest });
+      showToast(`Đã dọn ${res.data.deleted} tin nhắn cũ`, 'success');
+      await refreshChatStats();
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Dọn phòng chat thất bại', 'error');
+    } finally {
+      setChatManaging(false);
+    }
+  };
+
+  const clearChat = async () => {
+    if (!isAdmin || !window.confirm('Xóa toàn bộ tin nhắn trong phòng chat cộng đồng?')) return;
+    setChatManaging(true);
+    try {
+      await api.delete('/community/messages');
+      showToast('Đã xóa toàn bộ phòng chat', 'success');
+      await refreshChatStats();
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Xóa phòng chat thất bại', 'error');
+    } finally {
+      setChatManaging(false);
     }
   };
 
@@ -258,6 +296,39 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         </div>}
 
         {cleanupPreview?.dryRun && cleanupPreview.candidates > 0 && <button type="button" onClick={() => runStorageCleanup(false)} disabled={cleanupLoading} className="px-5 py-3 bg-red-600 text-white rounded-xl text-sm font-bold disabled:opacity-50">Xóa các bản save cũ</button>}
+      </div>}
+
+      {isAdmin && <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 space-y-4 xl:col-span-2">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2"><Monitor className="w-4 h-4" />Quản lý phòng chat</h3>
+            <p className="text-xs text-slate-500 mt-1">Theo dõi và dọn dẹp tin nhắn trong phòng chat cộng đồng.</p>
+          </div>
+          <button type="button" onClick={refreshChatStats} className="px-4 py-2 rounded-xl border border-slate-200 text-sm font-bold">Làm mới</button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
+            <p className="text-xs text-slate-500">Tổng tin nhắn</p>
+            <p className="font-bold text-slate-800">{chatStats?.message_count || 0}</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
+            <p className="text-xs text-slate-500">Người tham gia</p>
+            <p className="font-bold text-slate-800">{chatStats?.user_count || 0}</p>
+          </div>
+          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3">
+            <p className="text-xs text-slate-500">Tin mới nhất</p>
+            <p className="font-bold text-slate-800">{chatStats?.latest_at ? new Date(chatStats.latest_at).toLocaleString('vi-VN') : 'Chưa có'}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-3 items-end pt-2 border-t border-slate-100">
+          <label className="block text-sm">Giữ lại số tin mới nhất
+            <input className="w-full mt-1 border rounded-lg px-3 py-2" type="number" min="0" max="5000" value={chatKeepLatest} onChange={(e)=>setChatKeepLatest(parseInt(e.target.value || '0', 10))} />
+          </label>
+          <button type="button" onClick={cleanupChat} disabled={chatManaging} className="px-5 py-3 bg-slate-900 text-white rounded-xl text-sm font-bold disabled:opacity-50">Dọn tin cũ</button>
+          <button type="button" onClick={clearChat} disabled={chatManaging} className="px-5 py-3 bg-red-600 text-white rounded-xl text-sm font-bold disabled:opacity-50">Xóa toàn bộ</button>
+        </div>
       </div>}
     </div>
 
