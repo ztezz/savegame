@@ -337,7 +337,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
     const poll = setInterval(() => {
       fetchRestoreStatuses();
       fetchAgentOnlineStatus();
-    }, 3000);
+    }, 15000);
 
     return () => clearInterval(poll);
   }, []);

@@ -51,6 +51,7 @@ export const uploadWithProgress = async (
     let simulatedProgress = 0;
     let lastProgressTime = Date.now();
     let lastProgressLoaded = 0;
+    let simulateProgressTimer: ReturnType<typeof setTimeout> | null = null;
     
     // Calculate file size from FormData
     let totalFileSize = 0;
@@ -69,35 +70,22 @@ export const uploadWithProgress = async (
       if (!hasRealProgress && simulatedProgress < 90) {
         simulatedProgress += Math.random() * 15;
         onProgress(Math.min(Math.floor(simulatedProgress), 90));
-        setTimeout(simulateProgress, 800);
+        simulateProgressTimer = setTimeout(simulateProgress, 800);
       }
     };
     
     const simulateTimer = setTimeout(simulateProgress, 2000);
 
     // Track upload progress
-    let zeroProgressCount = 0;
     xhr.upload.addEventListener('progress', (e) => {
       hasRealProgress = true;
       clearTimeout(simulateTimer);
+      if (simulateProgressTimer) clearTimeout(simulateProgressTimer);
       const currentTime = Date.now();
       const timeDiff = Math.max(currentTime - lastProgressTime, 1);
       const loadedDiff = e.loaded - lastProgressLoaded;
       lastProgressTime = currentTime;
       lastProgressLoaded = e.loaded;
-      
-      // Detect stalled within progress (no new data)
-      if (loadedDiff === 0) {
-        zeroProgressCount++;
-        if (zeroProgressCount > 10) {
-          console.error('❌ Upload stalled - no new data for 10+ progress events, aborting');
-          xhr.abort();
-          reject(new Error('Upload stalled - no new data received'));
-          return;
-        }
-      } else {
-        zeroProgressCount = 0;
-      }
       
       if (e.lengthComputable) {
         const percentComplete = Math.round((e.loaded / e.total) * 100);
@@ -135,6 +123,7 @@ export const uploadWithProgress = async (
 
     xhr.addEventListener('load', () => {
       clearTimeout(simulateTimer);
+      if (simulateProgressTimer) clearTimeout(simulateProgressTimer);
       clearTimeout(stallTimeout);
       console.log(`✅ Response received: ${xhr.status}`);
       if (xhr.status >= 200 && xhr.status < 300) {
@@ -154,6 +143,7 @@ export const uploadWithProgress = async (
 
     xhr.addEventListener('error', (err) => {
       clearTimeout(simulateTimer);
+      if (simulateProgressTimer) clearTimeout(simulateProgressTimer);
       clearTimeout(stallTimeout);
       console.error('❌ Upload error:', err);
       reject(new Error('Upload failed - Network error'));
@@ -161,6 +151,7 @@ export const uploadWithProgress = async (
 
     xhr.addEventListener('abort', () => {
       clearTimeout(simulateTimer);
+      if (simulateProgressTimer) clearTimeout(simulateProgressTimer);
       clearTimeout(stallTimeout);
       console.error('❌ Upload aborted');
       reject(new Error('Upload aborted'));
@@ -168,6 +159,7 @@ export const uploadWithProgress = async (
 
     xhr.addEventListener('timeout', () => {
       clearTimeout(simulateTimer);
+      if (simulateProgressTimer) clearTimeout(simulateProgressTimer);
       clearTimeout(stallTimeout);
       console.error('❌ Upload timeout - Request took too long');
       reject(new Error('Upload timeout - Request took too long'));

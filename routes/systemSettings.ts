@@ -13,6 +13,25 @@ const WINDOWS_AGENT_SETTINGS_KEY = "windowsAgent";
 const WINDOWS_AGENT_DIR = path.join(UPLOADS_DIR_PATH, "agent");
 const WINDOWS_AGENT_PATH = path.join(WINDOWS_AGENT_DIR, WINDOWS_AGENT_FILENAME);
 
+const uploadAgentFile = (req: any, res: any, next: any) => {
+  upload.any()(req, res, (err: any) => {
+    if (!err) return next();
+
+    const message = err?.message || 'Upload failed';
+    console.warn('⚠️ Windows agent upload failed:', message);
+
+    if (message.toLowerCase().includes('request aborted')) {
+      return res.status(499).json({ error: 'Upload bị ngắt kết nối trước khi hoàn tất. Vui lòng thử lại với mạng ổn định hơn.' });
+    }
+
+    if (err?.code === 'LIMIT_FILE_SIZE') {
+      return res.status(413).json({ error: 'File quá lớn so với giới hạn upload hiện tại.' });
+    }
+
+    return res.status(400).json({ error: message });
+  });
+};
+
 function collectStorageUsage(dir: string) {
   const result = { totalBytes: 0, fileCount: 0, directories: [] as Array<{ name: string; bytes: number; files: number }> };
   if (!fs.existsSync(dir)) return result;
@@ -100,7 +119,7 @@ settingsRouter.put('/api/system/settings', authenticateToken, isAdmin, async (re
   }
 });
 
-settingsRouter.post('/api/system/agent/windows', authenticateToken, isAdmin, upload.any(), async (req: any, res) => {
+settingsRouter.post('/api/system/agent/windows', authenticateToken, isAdmin, uploadAgentFile, async (req: any, res) => {
   const files = Array.isArray(req.files) ? req.files : [];
   const file = files[0];
   const version = String(req.body?.version || '').trim();

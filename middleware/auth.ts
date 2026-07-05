@@ -65,11 +65,11 @@ export const authenticateToken = async (req: any, res: any, next: any) => {
           console.log('✅ User loaded from DB:', req.user);
         } else {
           console.log('⚠️  User not found in database');
-          req.user = user;
+          return res.status(401).json({ error: 'User no longer exists. Please sign in again.' });
         }
       } catch (dbErr: any) {
         console.error('⚠️  DB error fetching user:', dbErr.message);
-        req.user = user;
+        return res.status(500).json({ error: 'Authentication database error' });
       }
     } else {
       req.user = user;
