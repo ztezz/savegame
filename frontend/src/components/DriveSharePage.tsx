@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Download, File, ShieldCheck } from 'lucide-react';
 import api, { API_BASE_URL } from '../utils/api';
+import PdfPreview from './dashboard/drive/PdfPreview';
 
 interface SharedFile {
   id: number;
@@ -19,6 +20,11 @@ const formatFileSize = (size: number) => {
   if (!size) return '0 B';
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const isPdf = (file: SharedFile) => {
+  const name = file.original_name.toLowerCase();
+  return file.mime_type === 'application/pdf' || name.endsWith('.pdf');
 };
 
 export default function DriveSharePage({ token }: DriveSharePageProps) {
@@ -43,7 +49,7 @@ export default function DriveSharePage({ token }: DriveSharePageProps) {
   }, [token]);
 
   return <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,#dbeafe,transparent_35%),linear-gradient(135deg,#f8fafc,#eef2ff)] flex items-center justify-center p-5">
-    <div className="w-full max-w-2xl">
+      <div className="w-full max-w-5xl">
       <div className="mb-6 text-center">
         <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-white/70 px-4 py-2 text-xs font-black uppercase tracking-widest text-indigo-600 shadow-sm">
           <ShieldCheck className="w-4 h-4" /> CloudSave Drive Share
@@ -70,6 +76,12 @@ export default function DriveSharePage({ token }: DriveSharePageProps) {
                 {file.note && <p className="mt-4 rounded-2xl bg-white border border-slate-200 p-3 text-sm text-slate-600">{file.note}</p>}
               </div>
             </div>
+
+            {isPdf(file) && <PdfPreview
+              src={`${API_BASE_URL}/drive/share/${encodeURIComponent(token)}/raw`}
+              title={file.original_name}
+              downloadUrl={`${API_BASE_URL}/drive/share/${encodeURIComponent(token)}/download`}
+            />}
 
             <a href={`${API_BASE_URL}/drive/share/${encodeURIComponent(token)}/download`} className="w-full inline-flex items-center justify-center gap-3 rounded-2xl bg-slate-950 px-5 py-4 text-sm font-black text-white shadow-lg shadow-slate-200 hover:bg-indigo-700 transition">
               <Download className="w-5 h-5" /> Tải file xuống

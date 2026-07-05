@@ -4,6 +4,7 @@ import { API_BASE_URL } from '../../../utils/api';
 import { DriveFile, PreviewState } from './driveTypes';
 import { formatFileSize, getFileVisual } from './driveUtils';
 import MediaPlayer from './MediaPlayer';
+import PdfPreview from './PdfPreview';
 
 type Props = {
   preview: PreviewState | null;
@@ -25,7 +26,7 @@ const DrivePreviewModal: React.FC<Props> = ({ preview, previewLoading, previewOb
       return <div className="flex min-h-[65vh] items-center justify-center"><img src={previewObjectUrl} alt={preview.file.original_name} className="max-h-[72vh] max-w-full rounded-3xl bg-white object-contain shadow-2xl" /></div>;
     }
     if (preview.kind === 'pdf' && previewObjectUrl) {
-      return <iframe src={previewObjectUrl} title={preview.file.original_name} className="h-[72vh] w-full rounded-3xl bg-white shadow-xl" />;
+      return <PdfPreview src={previewObjectUrl} title={preview.file.original_name} downloadUrl={`${API_BASE_URL}/drive/download/${preview.file.id}`} />;
     }
     if (preview.kind === 'video' && previewObjectUrl) {
       return <MediaPlayer src={previewObjectUrl} title={preview.file.original_name} type="video" />;
