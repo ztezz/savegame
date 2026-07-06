@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Download, Eye, Link, Pencil, RotateCcw, Trash2, X } from 'lucide-react';
-import api, { API_BASE_URL, downloadWithProgress } from '../../../utils/api';
+import api, { API_BASE_URL } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
 import { copyToClipboard } from '../../../utils/clipboard';
 import DrivePreviewModal from '../drive/DrivePreviewModal';
@@ -269,11 +269,18 @@ const DriveTab: React.FC = () => {
   };
 
   const downloadFile = async (file: DriveFile) => {
-    try {
-      await downloadWithProgress(`/drive/download/${file.id}`, file.original_name, () => undefined);
-    } catch (err: any) {
-      showToast(err.message || 'Tải xuống thất bại', 'error');
+    const token = localStorage.getItem('token');
+    if (!token) {
+      showToast('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại', 'error');
+      return;
     }
+
+    const link = document.createElement('a');
+    link.href = `${API_BASE_URL}/drive/download/${file.id}?token=${encodeURIComponent(token)}`;
+    link.download = file.original_name;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const moveSelected = async () => {
