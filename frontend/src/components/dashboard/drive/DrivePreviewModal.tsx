@@ -1,6 +1,5 @@
 import React from 'react';
 import { Download, File, Link, X } from 'lucide-react';
-import { API_BASE_URL } from '../../../utils/api';
 import { DriveFile, PreviewState } from './driveTypes';
 import { formatFileSize, getFileVisual } from './driveUtils';
 import MediaPlayer from './MediaPlayer';
@@ -13,9 +12,10 @@ type Props = {
   officePreviewUrl: string | null;
   onClose: () => void;
   onShareFile: (file: DriveFile) => void;
+  onDownloadFile: (file: DriveFile) => void;
 };
 
-const DrivePreviewModal: React.FC<Props> = ({ preview, previewLoading, previewObjectUrl, officePreviewUrl, onClose, onShareFile }) => {
+const DrivePreviewModal: React.FC<Props> = ({ preview, previewLoading, previewObjectUrl, officePreviewUrl, onClose, onShareFile, onDownloadFile }) => {
   if (!preview && !previewLoading) return null;
 
   const renderPreviewContent = () => {
@@ -26,7 +26,7 @@ const DrivePreviewModal: React.FC<Props> = ({ preview, previewLoading, previewOb
       return <div className="flex min-h-[65vh] items-center justify-center"><img src={previewObjectUrl} alt={preview.file.original_name} className="max-h-[72vh] max-w-full rounded-3xl bg-white object-contain shadow-2xl" /></div>;
     }
     if (preview.kind === 'pdf' && previewObjectUrl) {
-      return <PdfPreview src={previewObjectUrl} title={preview.file.original_name} downloadUrl={`${API_BASE_URL}/drive/download/${preview.file.id}`} />;
+      return <PdfPreview src={previewObjectUrl} title={preview.file.original_name} onDownload={() => onDownloadFile(preview.file)} />;
     }
     if (preview.kind === 'video' && previewObjectUrl) {
       return <MediaPlayer src={previewObjectUrl} title={preview.file.original_name} type="video" />;
@@ -70,7 +70,7 @@ const DrivePreviewModal: React.FC<Props> = ({ preview, previewLoading, previewOb
             <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Ngày tải</p><p className="mt-1 font-bold text-slate-900">{new Date(preview.file.created_at).toLocaleString('vi-VN')}</p></div>
             {preview.file.note && <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Ghi chú</p><p className="mt-1 break-words font-bold text-slate-900">{preview.file.note}</p></div>}
             <div className="space-y-2 pt-2">
-              <a href={`${API_BASE_URL}/drive/download/${preview.file.id}`} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-black text-white"><Download className="w-4 h-4" />Tải xuống</a>
+              <button type="button" onClick={() => onDownloadFile(preview.file)} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-black text-white"><Download className="w-4 h-4" />Tải xuống</button>
               <button type="button" onClick={() => onShareFile(preview.file)} className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 hover:bg-slate-50"><Link className="w-4 h-4" />{preview.file.share_token ? 'Copy link chia sẻ' : 'Tạo link chia sẻ'}</button>
             </div>
           </div>}

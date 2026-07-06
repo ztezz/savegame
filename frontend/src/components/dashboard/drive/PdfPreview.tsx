@@ -8,11 +8,12 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 type Props = {
   src: string;
   title: string;
-  downloadUrl: string;
+  onDownload?: () => void;
+  downloadUrl?: string;
   className?: string;
 };
 
-export default function PdfPreview({ src, title, downloadUrl, className = '' }: Props) {
+export default function PdfPreview({ src, title, onDownload, downloadUrl, className = '' }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const renderTaskRef = useRef<pdfjsLib.RenderTask | null>(null);
   const [documentProxy, setDocumentProxy] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
@@ -133,9 +134,11 @@ export default function PdfPreview({ src, title, downloadUrl, className = '' }: 
         <a href={src} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">
           <ExternalLink className="h-4 w-4" /> Mở tab mới
         </a>
-        <a href={downloadUrl} className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-red-600">
+        {onDownload ? <button type="button" onClick={onDownload} className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-red-600">
           <Download className="h-4 w-4" /> Tải PDF
-        </a>
+        </button> : downloadUrl ? <a href={downloadUrl} className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-red-600">
+          <Download className="h-4 w-4" /> Tải PDF
+        </a> : null}
       </div>
     </div>
     <div className="relative flex h-[72vh] min-h-[460px] flex-1 justify-center overflow-auto bg-slate-100 p-4">

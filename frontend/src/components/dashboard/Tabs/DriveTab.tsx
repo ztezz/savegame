@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Download, Eye, Link, Pencil, RotateCcw, Trash2, X } from 'lucide-react';
-import api, { API_BASE_URL } from '../../../utils/api';
+import api, { API_BASE_URL, downloadWithProgress } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
 import { copyToClipboard } from '../../../utils/clipboard';
 import DrivePreviewModal from '../drive/DrivePreviewModal';
@@ -268,6 +268,14 @@ const DriveTab: React.FC = () => {
     }
   };
 
+  const downloadFile = async (file: DriveFile) => {
+    try {
+      await downloadWithProgress(`/drive/download/${file.id}`, file.original_name, () => undefined);
+    } catch (err: any) {
+      showToast(err.message || 'Tải xuống thất bại', 'error');
+    }
+  };
+
   const moveSelected = async () => {
     if (selectedCount === 0 || trashMode) return;
     const target = moveTargetId === 'root' ? null : Number(moveTargetId);
@@ -449,7 +457,7 @@ const DriveTab: React.FC = () => {
       <button type="button" onClick={() => permanentDeleteOne(type, id)} className="text-xs font-bold text-red-600 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" />Xóa hẳn</button>
     </div>;
     return <div className="flex items-center gap-2">
-      {type === 'file' && <a href={`${API_BASE_URL}/drive/download/${id}`} className="text-xs font-bold text-indigo-600 inline-flex items-center gap-1"><Download className="w-3 h-3" />Tải</a>}
+      {type === 'file' && <button type="button" onClick={() => downloadFile(item as DriveFile)} className="text-xs font-bold text-indigo-600 inline-flex items-center gap-1"><Download className="w-3 h-3" />Tải</button>}
       {type === 'file' && <button type="button" onClick={() => openPreview(item as DriveFile)} className="text-xs font-bold text-violet-600 inline-flex items-center gap-1"><Eye className="w-3 h-3" />Xem</button>}
       {type === 'file' && <button type="button" onClick={() => shareFile(item as DriveFile)} className="text-xs font-bold text-emerald-600 inline-flex items-center gap-1"><Link className="w-3 h-3" />{(item as DriveFile).share_token ? 'Copy link' : 'Share'}</button>}
       {type === 'file' && (item as DriveFile).share_token && <button type="button" onClick={() => unshareFile(item as DriveFile)} className="text-xs font-bold text-amber-600 inline-flex items-center gap-1"><X className="w-3 h-3" />Tắt share</button>}
@@ -471,7 +479,7 @@ const DriveTab: React.FC = () => {
 
     <DriveUploadModal open={uploadModalOpen} uploading={uploading} dragging={dragging} progress={progress} uploadStatus={uploadStatus} selectedUploadFiles={selectedUploadFiles} note={note} onSetDragging={setDragging} onSetSelectedUploadFiles={setSelectedUploadFiles} onSetNote={setNote} onDrop={handleDrop} onClose={() => { if (!uploading) { setUploadModalOpen(false); setDragging(false); } }} onCancelUpload={cancelUpload} onUpload={() => uploadFiles()} />
 
-    <DrivePreviewModal preview={preview} previewLoading={previewLoading} previewObjectUrl={previewObjectUrl} officePreviewUrl={officePreviewUrl} onClose={closePreview} onShareFile={shareFile} />
+    <DrivePreviewModal preview={preview} previewLoading={previewLoading} previewObjectUrl={previewObjectUrl} officePreviewUrl={officePreviewUrl} onClose={closePreview} onShareFile={shareFile} onDownloadFile={downloadFile} />
 
     <DriveMoveModal open={moveModalOpen} selectedCount={selectedCount} moveTargetId={moveTargetId} folders={visibleFoldersForMove} onSetMoveTargetId={setMoveTargetId} onClose={() => setMoveModalOpen(false)} onMove={async () => { await moveSelected(); setMoveModalOpen(false); }} />
   </div>;
