@@ -32,6 +32,14 @@ const ChangePasswordModal = lazy(() => import('./dashboard/Modals/ChangePassword
 // Types and Constants
 import { GameSave, UserAccount, RestoreStatusItem } from './dashboard/types';
 
+type DashboardTab = 'dashboard' | 'library' | 'drive' | 'community' | 'devices' | 'settings' | 'logs' | 'users' | 'activation' | 'category' | 'account';
+const DASHBOARD_TABS: DashboardTab[] = ['dashboard', 'library', 'drive', 'community', 'devices', 'settings', 'logs', 'users', 'activation', 'category', 'account'];
+
+const getInitialDashboardTab = (): DashboardTab => {
+  const saved = localStorage.getItem('dashboardActiveTab');
+  return DASHBOARD_TABS.includes(saved as DashboardTab) ? saved as DashboardTab : 'dashboard';
+};
+
 export default function Dashboard({ onLogout, currentUser }: { onLogout: () => void, currentUser: any }) {
   const { showToast } = useToast();
   const { categories, fetchCategories: refetchCategories } = useDynamicCategories();
@@ -49,7 +57,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   const [filterCategory, setFilterCategory] = useState('All');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'name' | 'category'>('name');
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'library' | 'drive' | 'community' | 'devices' | 'settings' | 'logs' | 'users' | 'activation' | 'category' | 'account'>('dashboard');
+  const [activeTab, setActiveTab] = useState<DashboardTab>(getInitialDashboardTab);
   
   // Activation Files State
   const [activationFiles, setActivationFiles] = useState<ActivationFile[]>([]);
@@ -97,6 +105,10 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [changePasswordLoading, setChangePasswordLoading] = useState(false);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('dashboardDarkMode') === '1');
+
+  useEffect(() => {
+    localStorage.setItem('dashboardActiveTab', activeTab);
+  }, [activeTab]);
 
   useEffect(() => {
     localStorage.setItem('dashboardDarkMode', darkMode ? '1' : '0');
