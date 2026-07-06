@@ -297,6 +297,17 @@ driveRouter.post("/api/drive/upload/finalize", authenticateToken, express.json({
   }
 });
 
+driveRouter.delete("/api/drive/upload/:sessionId", authenticateToken, async (req: any, res) => {
+  const session = uploadSessions.get(req.params.sessionId);
+  if (!session || session.userId !== req.user.id) return res.status(404).json({ error: "Upload session not found" });
+
+  for (const chunk of session.chunks) {
+    if (fs.existsSync(chunk.path)) fs.unlinkSync(chunk.path);
+  }
+  uploadSessions.delete(req.params.sessionId);
+  res.json({ success: true });
+});
+
 driveRouter.get("/api/drive/folders/tree", authenticateToken, async (req: any, res) => {
   if (!isUsingDatabase()) return res.json([]);
 

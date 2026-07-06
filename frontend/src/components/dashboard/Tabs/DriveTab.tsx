@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Download, Eye, Link, Pencil, RotateCcw, Trash2, X } from 'lucide-react';
 import api, { API_BASE_URL } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
@@ -80,6 +80,9 @@ const DriveTab: React.FC = () => {
   const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
   const [officePreviewUrl, setOfficePreviewUrl] = useState<string | null>(null);
   const [usage, setUsage] = useState<DriveUsage | null>(null);
+  const [uploadStatus, setUploadStatus] = useState('');
+  const cancelUploadRef = useRef(false);
+  const activeUploadSessionsRef = useRef<string[]>([]);
 
   const allItems = [
     ...folders.map((folder) => ({ type: 'folder' as const, id: folder.id, name: folder.name })),
@@ -175,6 +178,9 @@ const DriveTab: React.FC = () => {
   const uploadFiles = async (uploadFilesInput = selectedUploadFiles) => {
     if (uploadFilesInput.length === 0 || trashMode) return;
     setUploading(true);
+    cancelUploadRef.current = false;
+    activeUploadSessionsRef.current = [];
+    setUploadStatus('Đang chuẩn bị upload...');
     setProgress(0);
     try {
       const uploadChunkWithRetry = async (sessionId: string, chunkIndex: number, totalChunks: number, chunk: Blob) => {
@@ -196,6 +202,8 @@ const DriveTab: React.FC = () => {
 
       let uploadedFiles = 0;
       for (const item of uploadFilesInput) {
+        if (cancelUploadRef.current) throw new Error('Upload đã hủy');
+        setUploadStatus(`Đang upload ${item.file.name}`);
         const init = await api.post('/drive/upload/init', {
           fileName: item.file.name,
           fileSize: item.file.size,
@@ -205,9 +213,11 @@ const DriveTab: React.FC = () => {
           folderId: currentFolderId,
         });
         const { sessionId, chunkSize } = init.data;
+        activeUploadSessionsRef.current.push(sessionId);
         const totalChunks = Math.ceil(item.file.size / chunkSize);
 
         for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+          if (cancelUploadRef.current) throw new Error('Upload đã hủy');
           const start = chunkIndex * chunkSize;
           const end = Math.min(start + chunkSize, item.file.size);
           const chunk = item.file.slice(start, end);
@@ -217,6 +227,7 @@ const DriveTab: React.FC = () => {
         }
 
         await api.post('/drive/upload/finalize', { sessionId });
+        activeUploadSessionsRef.current = activeUploadSessionsRef.current.filter((id) => id !== sessionId);
         uploadedFiles++;
         setProgress(Math.round((uploadedFiles / uploadFilesInput.length) * 100));
       }
@@ -229,9 +240,19 @@ const DriveTab: React.FC = () => {
     } catch (err: any) {
       showToast(err.response?.data?.error || err.message || 'Upload Drive thất bại', 'error');
     } finally {
+      if (cancelUploadRef.current && activeUploadSessionsRef.current.length > 0) {
+        await Promise.all(activeUploadSessionsRef.current.map((sessionId) => api.delete(`/drive/upload/${sessionId}`).catch(() => undefined)));
+      }
+      activeUploadSessionsRef.current = [];
       setUploading(false);
+      setUploadStatus('');
       setDragging(false);
     }
+  };
+
+  const cancelUpload = () => {
+    cancelUploadRef.current = true;
+    setUploadStatus('Đang hủy upload...');
   };
 
   const renameItem = async (type: 'file' | 'folder', id: number, currentName: string) => {
@@ -448,7 +469,7 @@ const DriveTab: React.FC = () => {
 
     <DriveFolderModal open={folderModalOpen} folderName={newFolderName} breadcrumb={breadcrumb} onChangeFolderName={setNewFolderName} onClose={() => { setFolderModalOpen(false); setNewFolderName(''); }} onCreate={createFolder} />
 
-    <DriveUploadModal open={uploadModalOpen} uploading={uploading} dragging={dragging} progress={progress} selectedUploadFiles={selectedUploadFiles} note={note} onSetDragging={setDragging} onSetSelectedUploadFiles={setSelectedUploadFiles} onSetNote={setNote} onDrop={handleDrop} onClose={() => { if (!uploading) { setUploadModalOpen(false); setDragging(false); } }} onUpload={() => uploadFiles()} />
+    <DriveUploadModal open={uploadModalOpen} uploading={uploading} dragging={dragging} progress={progress} uploadStatus={uploadStatus} selectedUploadFiles={selectedUploadFiles} note={note} onSetDragging={setDragging} onSetSelectedUploadFiles={setSelectedUploadFiles} onSetNote={setNote} onDrop={handleDrop} onClose={() => { if (!uploading) { setUploadModalOpen(false); setDragging(false); } }} onCancelUpload={cancelUpload} onUpload={() => uploadFiles()} />
 
     <DrivePreviewModal preview={preview} previewLoading={previewLoading} previewObjectUrl={previewObjectUrl} officePreviewUrl={officePreviewUrl} onClose={closePreview} onShareFile={shareFile} />
 

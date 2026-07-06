@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MessageCircle, Search, Send, Shield, Smile, Trash2, Users } from 'lucide-react';
+import { Copy, MessageCircle, Search, Send, Shield, Smile, Trash2, Users } from 'lucide-react';
 import api from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
 
@@ -162,6 +162,15 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
 
   const findReply = (id?: number | null) => id ? messages.find((item) => item.id === id) : null;
 
+  const copyMessage = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('Đã copy tin nhắn', 'success');
+    } catch {
+      showToast('Không copy được tin nhắn', 'error');
+    }
+  };
+
   const clearChat = async () => {
     if (!window.confirm('Xóa toàn bộ phòng chat cộng đồng?')) return;
     try {
@@ -191,6 +200,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
         <div className="flex items-center gap-2 rounded-full border border-sky-100 bg-sky-50 px-3 py-2 text-sm">
           <Search className="h-4 w-4 text-sky-500" />
           <input value={chatSearch} onChange={(e) => setChatSearch(e.target.value)} placeholder="Tìm trong phòng chat..." className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-700 outline-none placeholder:text-slate-400" />
+          {chatSearch && <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-black text-sky-600">{visibleMessages.length}</span>}
           {chatSearch && <button type="button" onClick={() => setChatSearch('')} className="text-xs font-black text-slate-400">Xóa</button>}
         </div>
       </div>
@@ -222,6 +232,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
               {((mine && !isAi) || isAdmin) && <button type="button" onClick={() => deleteMessage(item.id)} className={`mt-2 text-[10px] font-bold inline-flex items-center gap-1 ${mine ? 'text-sky-100 hover:text-white' : 'text-red-500'}`}><Trash2 className="w-3 h-3" />Xóa</button>}
               <div className="mt-2 flex flex-wrap gap-1">
                 <button type="button" onClick={() => setReplyTo(item)} className={`text-[10px] font-black ${mine ? 'text-sky-100 hover:text-white' : 'text-sky-600'}`}>Trả lời</button>
+                <button type="button" onClick={() => copyMessage(item.message)} className={`inline-flex items-center gap-1 text-[10px] font-black ${mine ? 'text-sky-100 hover:text-white' : 'text-slate-500'}`}><Copy className="h-3 w-3" />Copy</button>
                 {['👍', '😂', '❤️'].map((emoji) => <button key={emoji} type="button" onClick={() => toggleReaction(item.id, emoji)} className={`text-[11px] ${mine ? 'hover:bg-white/10' : 'hover:bg-slate-100'} rounded-full px-1`}>{emoji}</button>)}
               </div>
             </div>

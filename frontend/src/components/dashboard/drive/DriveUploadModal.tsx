@@ -17,9 +17,11 @@ type Props = {
   onDrop: (event: React.DragEvent<HTMLDivElement>) => void;
   onClose: () => void;
   onUpload: () => void;
+  onCancelUpload?: () => void;
+  uploadStatus?: string;
 };
 
-const DriveUploadModal: React.FC<Props> = ({ open, uploading, dragging, progress, selectedUploadFiles, note, onSetDragging, onSetSelectedUploadFiles, onSetNote, onDrop, onClose, onUpload }) => {
+const DriveUploadModal: React.FC<Props> = ({ open, uploading, dragging, progress, selectedUploadFiles, note, onSetDragging, onSetSelectedUploadFiles, onSetNote, onDrop, onClose, onUpload, onCancelUpload, uploadStatus }) => {
   if (!open) return null;
 
   return <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -62,10 +64,11 @@ const DriveUploadModal: React.FC<Props> = ({ open, uploading, dragging, progress
         {uploading && <div className="space-y-2">
           <div className="h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-indigo-600 transition-all" style={{ width: `${progress}%` }} /></div>
           <p className="text-center text-xs font-bold text-indigo-600">Đang tải lên {progress}%</p>
+          {uploadStatus && <p className="text-center text-xs font-semibold text-slate-500">{uploadStatus}</p>}
         </div>}
       </div>
       <div className="p-5 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
-        <button type="button" onClick={onClose} disabled={uploading} className="px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 disabled:opacity-50">Hủy</button>
+        <button type="button" onClick={uploading ? onCancelUpload : onClose} className="px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 disabled:opacity-50">{uploading ? 'Hủy upload' : 'Hủy'}</button>
         <button type="button" onClick={onUpload} disabled={selectedUploadFiles.length === 0 || uploading} className="px-5 py-3 rounded-xl bg-indigo-600 text-white text-sm font-black disabled:opacity-50 inline-flex items-center justify-center gap-2"><UploadCloud className="w-4 h-4" />{uploading ? `${progress}%` : `Tải lên${selectedUploadFiles.length ? ` (${selectedUploadFiles.length})` : ''}`}</button>
       </div>
     </div>
