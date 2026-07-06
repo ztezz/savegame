@@ -105,7 +105,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       showToast(`Test AI thành công: ${res.data.latencyMs}ms`, 'success');
     } catch (err: any) {
       const message = err.response?.data?.error || 'Test model thất bại';
-      setAiTestResult({ success: false, error: message, status: err.response?.data?.status });
+      setAiTestResult({ success: false, error: message, status: err.response?.data?.status, rawPreview: err.response?.data?.rawPreview });
       showToast(message, 'error', 5000);
     } finally {
       setAiTesting(false);
@@ -476,6 +476,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           <p className="font-black text-slate-900">Kiểm tra model</p>
           <p className="text-xs text-slate-500">Nên bấm test sau khi nhập API key/model. Nếu test lỗi thì bot trong chat cũng sẽ không trả lời.</p>
           {aiTestResult && <p className={aiTestResult.success ? 'mt-2 text-xs font-semibold text-emerald-700' : 'mt-2 text-xs font-semibold text-red-600'}>{aiTestResult.success ? `${aiTestResult.reply} (${aiTestResult.latencyMs}ms)` : aiTestResult.error}</p>}
+          {aiTestResult?.rawPreview && <pre className="mt-2 max-h-28 overflow-auto rounded-xl bg-slate-950 p-3 text-[10px] font-semibold text-amber-100">{aiTestResult.rawPreview}</pre>}
         </div>
         <button type="button" onClick={testAiModel} disabled={aiTesting || !settings.ai?.apiKey || !settings.ai?.model} className="inline-flex items-center justify-center rounded-xl bg-amber-500 px-5 py-3 text-sm font-black text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-50">{aiTesting ? 'Đang test...' : 'Test model'}</button>
       </div>

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool, isUsingDatabase } from "../config/database.js";
 import { authenticateToken, isAdmin } from "../middleware/auth.js";
+import { compactJsonPreview, extractAiText } from "../utils/aiResponse.js";
 
 export const communityRouter = Router();
 
@@ -79,7 +80,9 @@ async function generateAiReply() {
   }
 
   const data: any = await response.json();
-  return String(data?.choices?.[0]?.message?.content || '').trim().slice(0, 1000) || null;
+  const reply = extractAiText(data).slice(0, 1000);
+  if (!reply) throw new Error(`9router returned no readable content: ${compactJsonPreview(data, 220)}`);
+  return reply;
 }
 
 async function insertAiMessage(message: string) {

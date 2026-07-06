@@ -5,6 +5,7 @@ import { pool, isUsingDatabase } from "../config/database.js";
 import { upload, UPLOADS_DIR_PATH } from "../config/multer.js";
 import { authenticateToken, isAdmin } from "../middleware/auth.js";
 import { writeAudit } from "../utils/audit.js";
+import { compactJsonPreview, extractAiText } from "../utils/aiResponse.js";
 
 export const settingsRouter = Router();
 
@@ -182,8 +183,13 @@ settingsRouter.post('/api/system/ai/test', authenticateToken, isAdmin, async (re
       });
     }
 
-    const reply = String(data?.choices?.[0]?.message?.content || '').trim();
-    if (!reply) return res.status(400).json({ error: '9router trả về thành công nhưng không có nội dung phản hồi' });
+    const reply = extractAiText(data);
+    if (!reply) {
+      return res.status(400).json({
+        error: '9router trả về thành công nhưng không đọc được nội dung phản hồi',
+        rawPreview: data ? compactJsonPreview(data) : rawText.slice(0, 500),
+      });
+    }
 
     res.json({ success: true, model: settings.model, latencyMs: Date.now() - startedAt, reply });
   } catch (err: any) {
