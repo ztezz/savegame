@@ -221,7 +221,7 @@ communityRouter.get("/api/community/messages", authenticateToken, async (req: an
     params.push(limit);
 
     const { rows } = await pool.query(
-      `SELECT cm.id, cm.user_id, cm.message, cm.sender_type, cm.reply_to_id, cm.reactions_json, cm.edited_at, cm.created_at,
+      `SELECT cm.id, cm.user_id, cm.message, cm.sender_type, cm.reply_to_id, cm.reactions_json, cm.edited_at, cm.pinned_at, cm.created_at,
               COALESCE(u.username, 'ai-bot') AS username,
               COALESCE(cm.display_name, u.display_name) AS display_name,
               COALESCE(u.role, CASE WHEN cm.sender_type = 'ai' THEN 'AI' ELSE NULL END) AS role
@@ -261,7 +261,7 @@ communityRouter.post("/api/community/messages", authenticateToken, async (req: a
     const { rows } = await pool.query(
       `INSERT INTO community_messages (user_id, message, reply_to_id)
        VALUES ($1, $2, $3)
-       RETURNING id, user_id, message, sender_type, display_name, reply_to_id, reactions_json, edited_at, created_at`,
+       RETURNING id, user_id, message, sender_type, display_name, reply_to_id, reactions_json, edited_at, pinned_at, created_at`,
       [req.user.id, message, replyToId]
     );
 
@@ -302,6 +302,24 @@ communityRouter.post("/api/community/messages/:id/reactions", authenticateToken,
     res.json({ reactions_json: updated.rows[0].reactions_json });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to update reaction" });
+  }
+});
+
+communityRouter.post("/api/community/messages/:id/pin", authenticateToken, isAdmin, async (req: any, res) => {
+  const id = Number(req.params.id);
+  const pinned = req.body?.pinned !== false;
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid message id" });
+  if (!isUsingDatabase()) return res.status(404).json({ error: "Message not found" });
+
+  try {
+    const { rows } = await pool.query(
+      `UPDATE community_messages SET pinned_at = ${pinned ? 'NOW()' : 'NULL'} WHERE id = $1 RETURNING id, pinned_at`,
+      [id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: "Message not found" });
+    res.json(rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to update pinned message" });
   }
 });
 
