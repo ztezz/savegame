@@ -77,6 +77,7 @@ const DEFAULT_SETTINGS = {
   sync: { autoSyncEnabled: false, syncIntervalMinutes: 5, maxUploadSizeMb: 2048, retentionDays: 30, retryLimit: 2 },
   ui: { compactMode: false, language: "vi", showAdvancedStats: true },
   technical: { smtpHost: "", smtpPort: 587, smtpSecure: false, backupEnabled: false },
+  ai: { enabled: false, provider: "9router", apiKey: "", model: "cx/gpt-5.5", botName: "Mây Mặn", baseUrl: "https://api.9router.com/v1", humorLevel: "funny" },
   windowsAgent: { filename: WINDOWS_AGENT_FILENAME, version: "", size: 0, updatedAt: null, available: false }
 };
 
@@ -86,6 +87,8 @@ settingsRouter.get('/api/system/settings', authenticateToken, async (_req: any, 
     const { rows } = await pool.query('SELECT key, value_json FROM system_settings');
     const data: any = { ...DEFAULT_SETTINGS };
     for (const row of rows) data[row.key] = row.value_json;
+    data.ai = { ...DEFAULT_SETTINGS.ai, ...(data.ai || {}) };
+    if (data.ai.apiKey) data.ai.apiKey = '********';
     data.windowsAgent = {
       ...DEFAULT_SETTINGS.windowsAgent,
       ...(data.windowsAgent || {}),
@@ -99,17 +102,24 @@ settingsRouter.get('/api/system/settings', authenticateToken, async (_req: any, 
 
 settingsRouter.put('/api/system/settings', authenticateToken, isAdmin, async (req: any, res) => {
   const payload = req.body || {};
-  const keys = ['security', 'sync', 'ui', 'technical', WINDOWS_AGENT_SETTINGS_KEY];
+  const keys = ['security', 'sync', 'ui', 'technical', 'ai', WINDOWS_AGENT_SETTINGS_KEY];
   if (!isUsingDatabase()) return res.json({ success: true, settings: { ...DEFAULT_SETTINGS, ...payload } });
 
   try {
     for (const key of keys) {
       if (payload[key] === undefined) continue;
+      let value = payload[key];
+      if (key === 'ai') {
+        const existing = await pool.query("SELECT value_json FROM system_settings WHERE key = 'ai'");
+        const existingAi = existing.rows[0]?.value_json || DEFAULT_SETTINGS.ai;
+        value = { ...DEFAULT_SETTINGS.ai, ...existingAi, ...payload.ai };
+        if (payload.ai?.apiKey === '********') value.apiKey = existingAi.apiKey || '';
+      }
       await pool.query(
         `INSERT INTO system_settings (key, value_json, updated_by, updated_at)
          VALUES ($1, $2::jsonb, $3, NOW())
          ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json, updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
-        [key, JSON.stringify(payload[key]), req.user?.id || null]
+        [key, JSON.stringify(value), req.user?.id || null]
       );
     }
     await writeAudit(req.user?.id || null, 'UPDATE', 'system_settings', { keys: Object.keys(payload) });

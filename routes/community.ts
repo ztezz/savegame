@@ -4,6 +4,16 @@ import { authenticateToken, isAdmin } from "../middleware/auth.js";
 
 export const communityRouter = Router();
 
+const DEFAULT_AI_SETTINGS = {
+  enabled: false,
+  provider: "9router",
+  apiKey: "",
+  model: "cx/gpt-5.5",
+  botName: "Mây Mặn",
+  baseUrl: "https://api.9router.com/v1",
+  humorLevel: "funny",
+};
+
 async function getActiveBan(userId: number) {
   const { rows } = await pool.query(
     `SELECT cb.user_id, cb.reason, cb.banned_until, cb.created_at, u.username, u.display_name
@@ -13,6 +23,73 @@ async function getActiveBan(userId: number) {
     [userId]
   );
   return rows[0] || null;
+}
+
+async function getAiSettings() {
+  const { rows } = await pool.query("SELECT value_json FROM system_settings WHERE key = 'ai'");
+  return { ...DEFAULT_AI_SETTINGS, ...(rows[0]?.value_json || {}) };
+}
+
+async function fetchRecentChatContext(limit = 12) {
+  const { rows } = await pool.query(
+    `SELECT cm.message, cm.sender_type, cm.display_name,
+            COALESCE(cm.display_name, u.display_name, u.username, 'Thành viên') AS author
+     FROM community_messages cm
+     LEFT JOIN users u ON u.id = cm.user_id
+     ORDER BY cm.id DESC
+     LIMIT $1`,
+    [limit]
+  );
+  return rows.reverse().map((row: any) => ({
+    role: row.sender_type === 'ai' ? 'assistant' : 'user',
+    content: `${row.author}: ${row.message}`,
+  }));
+}
+
+async function generateAiReply() {
+  const settings = await getAiSettings();
+  if (!settings.enabled || !settings.apiKey) return null;
+
+  const baseUrl = String(settings.baseUrl || DEFAULT_AI_SETTINGS.baseUrl).replace(/\/+$/, '');
+  const context = await fetchRecentChatContext();
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${settings.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: settings.model || DEFAULT_AI_SETTINGS.model,
+      temperature: settings.humorLevel === 'chaos' ? 0.95 : 0.75,
+      max_tokens: 180,
+      messages: [
+        {
+          role: 'system',
+          content: `Bạn là ${settings.botName || DEFAULT_AI_SETTINGS.botName}, AI trong phòng chat cộng đồng CloudSave. Trả lời bằng tiếng Việt, thân thiện, hài hước duyên dáng, hơi cà khịa nhẹ nhưng không xúc phạm. Không quá 3 câu. Nếu người dùng hỏi kỹ thuật thì trả lời hữu ích trước rồi mới pha trò.`,
+        },
+        ...context,
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`9router error ${response.status}: ${text.slice(0, 200)}`);
+  }
+
+  const data: any = await response.json();
+  return String(data?.choices?.[0]?.message?.content || '').trim().slice(0, 1000) || null;
+}
+
+async function insertAiMessage(message: string) {
+  const settings = await getAiSettings();
+  const { rows } = await pool.query(
+    `INSERT INTO community_messages (user_id, message, sender_type, display_name)
+     VALUES (NULL, $1, 'ai', $2)
+     RETURNING id, user_id, message, sender_type, display_name, created_at`,
+    [message, settings.botName || DEFAULT_AI_SETTINGS.botName]
+  );
+  return { ...rows[0], username: 'ai-bot', role: 'AI' };
 }
 
 communityRouter.get("/api/community/bans", authenticateToken, isAdmin, async (_req: any, res) => {
@@ -114,9 +191,12 @@ communityRouter.get("/api/community/messages", authenticateToken, async (req: an
     params.push(limit);
 
     const { rows } = await pool.query(
-      `SELECT cm.id, cm.user_id, cm.message, cm.created_at, u.username, u.display_name, u.role
+      `SELECT cm.id, cm.user_id, cm.message, cm.sender_type, cm.created_at,
+              COALESCE(u.username, 'ai-bot') AS username,
+              COALESCE(cm.display_name, u.display_name) AS display_name,
+              COALESCE(u.role, CASE WHEN cm.sender_type = 'ai' THEN 'AI' ELSE NULL END) AS role
        FROM community_messages cm
-       JOIN users u ON u.id = cm.user_id
+       LEFT JOIN users u ON u.id = cm.user_id
        ${where}
        ORDER BY cm.id DESC
        LIMIT $${params.length}`,
@@ -149,11 +229,21 @@ communityRouter.post("/api/community/messages", authenticateToken, async (req: a
     const { rows } = await pool.query(
       `INSERT INTO community_messages (user_id, message)
        VALUES ($1, $2)
-       RETURNING id, user_id, message, created_at`,
+       RETURNING id, user_id, message, sender_type, display_name, created_at`,
       [req.user.id, message]
     );
 
-    res.status(201).json({ ...rows[0], username: req.user.username, display_name: req.user.display_name || req.user.username, role: req.user.role });
+    const userMessage = { ...rows[0], username: req.user.username, display_name: req.user.display_name || req.user.username, role: req.user.role };
+    res.status(201).json({ message: userMessage, aiMessage: null });
+
+    void (async () => {
+      try {
+        const aiReply = await generateAiReply();
+        if (aiReply) await insertAiMessage(aiReply);
+      } catch (aiErr: any) {
+        console.warn('AI chat reply failed:', aiErr?.message || aiErr);
+      }
+    })();
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to send message" });
   }

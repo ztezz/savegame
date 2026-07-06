@@ -212,10 +212,15 @@ export async function initializeSchema() {
 
       CREATE TABLE IF NOT EXISTS community_messages (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
         message TEXT NOT NULL,
+        sender_type VARCHAR(20) NOT NULL DEFAULT 'user',
+        display_name VARCHAR(100),
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE community_messages ALTER COLUMN user_id DROP NOT NULL;
+      ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS sender_type VARCHAR(20) NOT NULL DEFAULT 'user';
+      ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS display_name VARCHAR(100);
       CREATE INDEX IF NOT EXISTS idx_community_messages_created ON community_messages(created_at DESC);
 
       CREATE TABLE IF NOT EXISTS community_bans (

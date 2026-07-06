@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { Shield, RefreshCw, Monitor, Server, UploadCloud, Download, CheckCircle2, AlertCircle, Save, FolderOpen, HardDrive, MessageCircle, SlidersHorizontal } from 'lucide-react';
+import { Shield, RefreshCw, Monitor, Server, UploadCloud, Download, CheckCircle2, AlertCircle, Save, FolderOpen, HardDrive, MessageCircle, SlidersHorizontal, Bot } from 'lucide-react';
 import api from '../../../utils/api';
 import { API_ORIGIN, uploadWithProgress } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
@@ -19,6 +19,7 @@ const defaultSettings = {
   sync: { autoSyncEnabled: false, syncIntervalMinutes: 5, maxUploadSizeMb: 2048, retentionDays: 30, retryLimit: 2 },
   ui: { compactMode: false, language: 'vi', showAdvancedStats: true },
   technical: { smtpHost: '', smtpPort: 587, smtpSecure: false, backupEnabled: false },
+  ai: { enabled: false, provider: '9router', apiKey: '', model: 'cx/gpt-5.5', botName: 'Mây Mặn', baseUrl: 'https://api.9router.com/v1', humorLevel: 'funny' },
   windowsAgent: { filename: 'Cloudsave.exe', version: '', size: 0, updatedAt: null, available: false }
 };
 
@@ -411,6 +412,45 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           <button type="button" onClick={cleanupChat} disabled={chatManaging} className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white disabled:opacity-50">Dọn tin cũ</button>
           <button type="button" onClick={clearChat} disabled={chatManaging} className="rounded-xl bg-red-600 px-5 py-3 text-sm font-black text-white disabled:opacity-50">Xóa toàn bộ</button>
         </div>
+      </div>
+    </div>}
+
+    {isAdmin && <div className="rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><Bot className="h-4 w-4 text-amber-600" />AI tán gẫu 9router</h3>
+          <p className="mt-1 text-xs text-slate-500">Thêm bot vui tính vào phòng chat cộng đồng. API key được lưu trong cài đặt hệ thống và không hiển thị lại sau khi lưu.</p>
+        </div>
+        <span className={settings.ai?.enabled ? 'rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-black text-emerald-700' : 'rounded-full bg-slate-100 px-3 py-1 text-[11px] font-black text-slate-500'}>{settings.ai?.enabled ? 'Đang bật' : 'Đang tắt'}</span>
+      </div>
+      <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-amber-100 bg-white p-4 text-sm">
+          <span>
+            <span className="block font-bold text-slate-900">Bật AI trong phòng chat</span>
+            <span className="mt-1 block text-xs text-slate-500">Bot sẽ tự trả lời sau mỗi tin nhắn mới nếu cấu hình hợp lệ.</span>
+          </span>
+          <input className="h-5 w-5 accent-amber-500" type="checkbox" checked={!!settings.ai?.enabled} onChange={(e)=>setSettings((s:any)=>({...s,ai:{...s.ai,enabled:e.target.checked}}))} />
+        </label>
+        <label className="block rounded-2xl border border-amber-100 bg-white p-4 text-sm font-bold text-slate-900">Tên bot
+          <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-50" value={settings.ai?.botName || ''} onChange={(e)=>setSettings((s:any)=>({...s,ai:{...s.ai,botName:e.target.value}}))} placeholder="Mây Mặn" />
+        </label>
+        <label className="block rounded-2xl border border-amber-100 bg-white p-4 text-sm font-bold text-slate-900">9router API key
+          <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-50" type="password" value={settings.ai?.apiKey || ''} onChange={(e)=>setSettings((s:any)=>({...s,ai:{...s.ai,apiKey:e.target.value}}))} placeholder="sk-..." />
+          <span className="mt-2 block text-xs font-semibold text-slate-500">Nếu đang hiện ******** thì key cũ sẽ được giữ nguyên khi lưu.</span>
+        </label>
+        <label className="block rounded-2xl border border-amber-100 bg-white p-4 text-sm font-bold text-slate-900">Model
+          <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-50" value={settings.ai?.model || ''} onChange={(e)=>setSettings((s:any)=>({...s,ai:{...s.ai,model:e.target.value}}))} placeholder="cx/gpt-5.5" />
+        </label>
+        <label className="block rounded-2xl border border-amber-100 bg-white p-4 text-sm font-bold text-slate-900">Base URL
+          <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-50" value={settings.ai?.baseUrl || ''} onChange={(e)=>setSettings((s:any)=>({...s,ai:{...s.ai,baseUrl:e.target.value}}))} placeholder="https://api.9router.com/v1" />
+        </label>
+        <label className="block rounded-2xl border border-amber-100 bg-white p-4 text-sm font-bold text-slate-900">Độ hài hước
+          <select className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-50" value={settings.ai?.humorLevel || 'funny'} onChange={(e)=>setSettings((s:any)=>({...s,ai:{...s.ai,humorLevel:e.target.value}}))}>
+            <option value="light">Vui nhẹ</option>
+            <option value="funny">Hài hước</option>
+            <option value="chaos">Lầy hơn chút</option>
+          </select>
+        </label>
       </div>
     </div>}
 

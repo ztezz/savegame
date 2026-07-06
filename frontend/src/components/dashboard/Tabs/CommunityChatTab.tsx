@@ -9,6 +9,7 @@ interface ChatMessage {
   username: string;
   display_name?: string | null;
   role?: string;
+  sender_type?: 'user' | 'ai';
   message: string;
   created_at: string;
 }
@@ -70,9 +71,10 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
     setSending(true);
     try {
       const res = await api.post('/community/messages', { message: text });
+      const nextMessages = res.data?.message ? [res.data.message, res.data.aiMessage].filter(Boolean) : [res.data];
       setMessages((current) => {
-        if (current.some((item) => item.id === res.data.id)) return current;
-        const merged = [...current, res.data].slice(-200);
+        const existingIds = new Set(current.map((item) => item.id));
+        const merged = [...current, ...nextMessages.filter((item) => !existingIds.has(item.id))].slice(-200);
         lastMessageIdRef.current = merged.length > 0 ? merged[merged.length - 1].id : 0;
         return merged;
       });
@@ -126,14 +128,15 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
       <div ref={listRef} className="flex-1 overflow-y-auto p-5 space-y-4 bg-slate-50">
         {loading ? <div className="text-sm text-slate-500">Đang tải tin nhắn...</div> : messages.length === 0 ? <div className="h-full flex items-center justify-center text-center text-slate-500 text-sm">Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện.</div> : messages.map((item) => {
           const mine = item.user_id === currentUser?.id || item.username === currentUser?.username;
+          const isAi = item.sender_type === 'ai' || item.role === 'AI';
           return <div key={item.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[82%] rounded-2xl px-4 py-3 shadow-sm ${mine ? 'bg-indigo-600 text-white rounded-br-md' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-md'}`}>
+            <div className={`max-w-[82%] rounded-2xl px-4 py-3 shadow-sm ${mine ? 'bg-indigo-600 text-white rounded-br-md' : isAi ? 'border border-amber-200 bg-amber-50 text-slate-800 rounded-bl-md' : 'bg-white border border-slate-200 text-slate-800 rounded-bl-md'}`}>
               <div className="flex items-center justify-between gap-3 mb-1">
-                <span className={`text-xs font-black ${mine ? 'text-indigo-100' : 'text-slate-500'}`}>{item.display_name || item.username}{item.role === 'Admin' && <Shield className="inline w-3 h-3 ml-1" />}</span>
+                <span className={`text-xs font-black ${mine ? 'text-indigo-100' : isAi ? 'text-amber-700' : 'text-slate-500'}`}>{item.display_name || item.username}{item.role === 'Admin' && <Shield className="inline w-3 h-3 ml-1" />}{isAi && <span className="ml-1 rounded-full bg-amber-200 px-1.5 py-0.5 text-[9px] text-amber-800">AI</span>}</span>
                 <span className={`text-[10px] ${mine ? 'text-indigo-100' : 'text-slate-400'}`}>{new Date(item.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
               <p className="text-sm whitespace-pre-wrap break-words leading-6">{item.message}</p>
-              {(mine || isAdmin) && <button type="button" onClick={() => deleteMessage(item.id)} className={`mt-2 text-[10px] font-bold inline-flex items-center gap-1 ${mine ? 'text-indigo-100 hover:text-white' : 'text-red-500'}`}><Trash2 className="w-3 h-3" />Xóa</button>}
+              {((mine && !isAi) || isAdmin) && <button type="button" onClick={() => deleteMessage(item.id)} className={`mt-2 text-[10px] font-bold inline-flex items-center gap-1 ${mine ? 'text-indigo-100 hover:text-white' : 'text-red-500'}`}><Trash2 className="w-3 h-3" />Xóa</button>}
             </div>
           </div>;
         })}
@@ -149,7 +152,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
       <div className="bg-white border border-slate-200 rounded-3xl p-5">
         <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center mb-4"><Users className="w-6 h-6" /></div>
         <h4 className="font-black text-slate-900">Thông tin phòng</h4>
-        <p className="text-sm text-slate-500 mt-2 leading-6">Tin nhắn được lưu trong database và tự làm mới mỗi 4 giây. Mỗi người có thể xóa tin của mình, admin có thể xóa mọi tin.</p>
+        <p className="text-sm text-slate-500 mt-2 leading-6">Tin nhắn được lưu trong database và tự làm mới mỗi 4 giây. Nếu AI được bật, bot sẽ tự vào tán gẫu sau tin nhắn mới.</p>
       </div>
       {isAdmin && <button type="button" onClick={clearChat} className="w-full px-4 py-3 rounded-2xl border border-red-200 text-red-600 font-black text-sm hover:bg-red-50">Xóa toàn bộ chat</button>}
     </aside>
