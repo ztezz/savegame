@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MessageCircle, Send, Shield, Smile, Trash2, Users } from 'lucide-react';
+import { MessageCircle, Search, Send, Shield, Smile, Trash2, Users } from 'lucide-react';
 import api from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
 
@@ -35,10 +35,15 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  const [chatSearch, setChatSearch] = useState('');
+  const [aiTyping, setAiTyping] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   const lastMessageIdRef = useRef(0);
   const isAdmin = currentUser?.role === 'Admin' || currentUser?.username === 'admin';
   const quickEmojis = ['😀', '😂', '🤣', '😍', '😎', '🤔', '😭', '😡', '👍', '🙏', '🔥', '🎮', '❤️', '✨', '💯', '🍻'];
+  const visibleMessages = chatSearch.trim()
+    ? messages.filter((item) => `${item.display_name || item.username} ${item.message}`.toLowerCase().includes(chatSearch.trim().toLowerCase()))
+    : messages;
 
   const scrollToBottom = () => {
     requestAnimationFrame(() => {
@@ -97,6 +102,8 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
     const text = message.trim();
     if (!text || sending) return;
     setSending(true);
+    const mentionsAi = /@ai|@mây mặn|mây mặn/i.test(text);
+    if (mentionsAi) setAiTyping(true);
     try {
       const res = await api.post('/community/messages', { message: text, replyToId: replyTo?.id || null });
       const nextMessages = res.data?.message ? [res.data.message, res.data.aiMessage].filter(Boolean) : [res.data];
@@ -113,6 +120,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
       showToast(err.response?.data?.error || 'Gửi tin nhắn thất bại', 'error');
     } finally {
       setSending(false);
+      if (mentionsAi) window.setTimeout(() => setAiTyping(false), 5000);
     }
   };
 
@@ -179,11 +187,19 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
         <div className="text-xs bg-white/20 text-white px-3 py-1.5 rounded-full font-bold backdrop-blur">Live polling</div>
       </div>
 
+      <div className="border-b border-sky-100 bg-white px-4 py-3">
+        <div className="flex items-center gap-2 rounded-full border border-sky-100 bg-sky-50 px-3 py-2 text-sm">
+          <Search className="h-4 w-4 text-sky-500" />
+          <input value={chatSearch} onChange={(e) => setChatSearch(e.target.value)} placeholder="Tìm trong phòng chat..." className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-700 outline-none placeholder:text-slate-400" />
+          {chatSearch && <button type="button" onClick={() => setChatSearch('')} className="text-xs font-black text-slate-400">Xóa</button>}
+        </div>
+      </div>
+
       <div ref={listRef} onScroll={handleScroll} className="relative flex-1 overflow-y-auto p-4 sm:p-6 space-y-4" style={telegramPattern}>
-        {loading ? <div className="rounded-2xl bg-white/80 px-4 py-3 text-sm font-semibold text-slate-500 shadow-sm backdrop-blur">Đang tải tin nhắn...</div> : messages.length === 0 ? <div className="h-full flex items-center justify-center text-center text-slate-600 text-sm"><div className="rounded-3xl bg-white/80 px-6 py-5 shadow-sm backdrop-blur">Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện.</div></div> : messages.map((item, index) => {
+        {loading ? <div className="rounded-2xl bg-white/80 px-4 py-3 text-sm font-semibold text-slate-500 shadow-sm backdrop-blur">Đang tải tin nhắn...</div> : visibleMessages.length === 0 ? <div className="h-full flex items-center justify-center text-center text-slate-600 text-sm"><div className="rounded-3xl bg-white/80 px-6 py-5 shadow-sm backdrop-blur">{chatSearch ? 'Không tìm thấy tin nhắn phù hợp.' : 'Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện.'}</div></div> : visibleMessages.map((item, index) => {
           const mine = item.user_id === currentUser?.id || item.username === currentUser?.username;
           const isAi = item.sender_type === 'ai' || item.role === 'AI';
-          const previous = messages[index - 1];
+          const previous = visibleMessages[index - 1];
           const reply = findReply(item.reply_to_id);
           const showDay = !previous || new Date(previous.created_at).toDateString() !== new Date(item.created_at).toDateString();
           return <React.Fragment key={item.id}>
@@ -213,6 +229,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
           </React.Fragment>;
         })}
         {sending && <div className="flex justify-end"><div className="rounded-full bg-white/80 px-4 py-2 text-xs font-bold text-sky-700 shadow-sm backdrop-blur">Đang gửi...</div></div>}
+        {aiTyping && <div className="flex justify-start"><div className="rounded-full bg-amber-50 px-4 py-2 text-xs font-bold text-amber-700 shadow-sm backdrop-blur">AI đang gõ...</div></div>}
         {showScrollButton && <button type="button" onClick={scrollToBottom} className="sticky bottom-3 left-full ml-auto flex h-10 w-10 items-center justify-center rounded-full bg-white text-sky-600 shadow-lg transition hover:bg-sky-50">↓</button>}
       </div>
 

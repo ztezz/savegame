@@ -177,6 +177,23 @@ const DriveTab: React.FC = () => {
     setUploading(true);
     setProgress(0);
     try {
+      const uploadChunkWithRetry = async (sessionId: string, chunkIndex: number, totalChunks: number, chunk: Blob) => {
+        let lastError: any;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            await api.post('/drive/upload/chunk', chunk, {
+              params: { sessionId, chunkIndex, totalChunks },
+              headers: { 'Content-Type': 'application/octet-stream' },
+            });
+            return;
+          } catch (err) {
+            lastError = err;
+            if (attempt < 3) await new Promise((resolve) => window.setTimeout(resolve, attempt * 800));
+          }
+        }
+        throw lastError;
+      };
+
       let uploadedFiles = 0;
       for (const item of uploadFilesInput) {
         const init = await api.post('/drive/upload/init', {
@@ -194,10 +211,7 @@ const DriveTab: React.FC = () => {
           const start = chunkIndex * chunkSize;
           const end = Math.min(start + chunkSize, item.file.size);
           const chunk = item.file.slice(start, end);
-          await api.post('/drive/upload/chunk', chunk, {
-            params: { sessionId, chunkIndex, totalChunks },
-            headers: { 'Content-Type': 'application/octet-stream' },
-          });
+          await uploadChunkWithRetry(sessionId, chunkIndex, totalChunks, chunk);
           const fileProgress = totalChunks > 0 ? (chunkIndex + 1) / totalChunks : 1;
           setProgress(Math.round(((uploadedFiles + fileProgress) / uploadFilesInput.length) * 100));
         }

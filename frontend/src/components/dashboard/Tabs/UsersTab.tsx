@@ -10,6 +10,7 @@ interface UsersTabProps {
 }
 
 const UsersTab: React.FC<UsersTabProps> = ({ users, handleOpenUserModal, handleDeleteUser }) => {
+  const formatQuota = (quota?: number | null) => quota ? `${(quota / 1024).toFixed(quota >= 1024 ? 1 : 2)} GB` : 'Mặc định';
   return (
     <div className="col-span-12 space-y-8">
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
@@ -29,6 +30,7 @@ const UsersTab: React.FC<UsersTabProps> = ({ users, handleOpenUserModal, handleD
                 <th className="px-6 py-4">Tên tài khoản</th>
                 <th className="px-6 py-4">Tên đăng nhập</th>
                 <th className="px-6 py-4">Vai trò</th>
+                <th className="px-6 py-4">Quota Drive</th>
                 <th className="px-6 py-4">Trạng thái</th>
                 <th className="px-6 py-4 text-right">Hành động</th>
               </tr>
@@ -55,6 +57,7 @@ const UsersTab: React.FC<UsersTabProps> = ({ users, handleOpenUserModal, handleD
                       {user.role}
                     </span>
                   </td>
+                  <td className="px-6 py-4 text-xs font-black text-slate-500">{formatQuota(user.drive_quota_mb)}</td>
                   <td className="px-6 py-4">
                     <span className={`px-2 py-1 text-[10px] font-black rounded uppercase ${user.status === 'Active' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                       {user.status === 'Active' ? 'Hoạt động' : 'Đã khóa'}
