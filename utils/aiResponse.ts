@@ -9,7 +9,34 @@ const stringifyContentPart = (part: any): string => {
   return '';
 };
 
+export function parseSseAiText(rawText: string): string {
+  const parts: string[] = [];
+  for (const line of rawText.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith('data:')) continue;
+
+    const payload = trimmed.slice(5).trim();
+    if (!payload || payload === '[DONE]') continue;
+
+    try {
+      const chunk = JSON.parse(payload);
+      const text = extractAiText(chunk);
+      if (text) parts.push(text);
+    } catch {
+      continue;
+    }
+  }
+
+  return parts.join('').trim();
+}
+
 export function extractAiText(data: any): string {
+  if (typeof data === 'string') {
+    const sseText = parseSseAiText(data);
+    if (sseText) return sseText;
+    return data.trim();
+  }
+
   const candidates = [
     data?.choices?.[0]?.message?.content,
     data?.choices?.[0]?.text,

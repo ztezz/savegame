@@ -5,7 +5,7 @@ import { pool, isUsingDatabase } from "../config/database.js";
 import { upload, UPLOADS_DIR_PATH } from "../config/multer.js";
 import { authenticateToken, isAdmin } from "../middleware/auth.js";
 import { writeAudit } from "../utils/audit.js";
-import { compactJsonPreview, extractAiText } from "../utils/aiResponse.js";
+import { compactJsonPreview, extractAiText, parseSseAiText } from "../utils/aiResponse.js";
 
 export const settingsRouter = Router();
 
@@ -169,6 +169,7 @@ settingsRouter.post('/api/system/ai/test', authenticateToken, isAdmin, async (re
     });
 
     const rawText = await response.text();
+    const sseReply = parseSseAiText(rawText);
     let data: any = null;
     try {
       data = rawText ? JSON.parse(rawText) : null;
@@ -183,7 +184,7 @@ settingsRouter.post('/api/system/ai/test', authenticateToken, isAdmin, async (re
       });
     }
 
-    const reply = extractAiText(data);
+    const reply = sseReply || extractAiText(data);
     if (!reply) {
       return res.status(400).json({
         error: '9router trả về thành công nhưng không đọc được nội dung phản hồi',
