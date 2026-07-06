@@ -20,6 +20,8 @@ interface UserModalProps {
   setUserRole: (role: 'Admin' | 'User') => void;
   userStatus: 'Active' | 'Locked';
   setUserStatus: (status: 'Active' | 'Locked') => void;
+  userDriveQuotaMb: string;
+  setUserDriveQuotaMb: (quota: string) => void;
 }
 
 const UserModal: React.FC<UserModalProps> = ({
@@ -29,7 +31,8 @@ const UserModal: React.FC<UserModalProps> = ({
   userEmail, setUserEmail,
   userPassword, setUserPassword,
   userRole, setUserRole,
-  userStatus, setUserStatus
+  userStatus, setUserStatus,
+  userDriveQuotaMb, setUserDriveQuotaMb
 }) => {
   return (
     <AnimatePresence>
@@ -118,6 +121,18 @@ const UserModal: React.FC<UserModalProps> = ({
                       <option value="Locked">Khoá lại</option>
                     </select>
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-black uppercase text-slate-400 tracking-widest ml-1">Quota Drive riêng (MB)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={userDriveQuotaMb}
+                    onChange={(e) => setUserDriveQuotaMb(e.target.value)}
+                    placeholder="Để trống dùng mặc định hệ thống"
+                    className="w-full px-4 py-4 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all font-bold text-sm tracking-tight"
+                  />
+                  <p className="text-xs font-semibold text-slate-400 ml-1">Ví dụ: 20480 = 20GB, 102400 = 100GB.</p>
                 </div>
 
                 <div className="pt-4 flex gap-3">

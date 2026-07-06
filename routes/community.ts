@@ -221,7 +221,7 @@ communityRouter.get("/api/community/messages", authenticateToken, async (req: an
     params.push(limit);
 
     const { rows } = await pool.query(
-      `SELECT cm.id, cm.user_id, cm.message, cm.sender_type, cm.created_at,
+      `SELECT cm.id, cm.user_id, cm.message, cm.sender_type, cm.reply_to_id, cm.reactions_json, cm.created_at,
               COALESCE(u.username, 'ai-bot') AS username,
               COALESCE(cm.display_name, u.display_name) AS display_name,
               COALESCE(u.role, CASE WHEN cm.sender_type = 'ai' THEN 'AI' ELSE NULL END) AS role
@@ -241,8 +241,10 @@ communityRouter.get("/api/community/messages", authenticateToken, async (req: an
 
 communityRouter.post("/api/community/messages", authenticateToken, async (req: any, res) => {
   const message = String(req.body?.message || "").trim();
+  const replyToId = req.body?.replyToId ? Number(req.body.replyToId) : null;
   if (!message) return res.status(400).json({ error: "Message is required" });
   if (message.length > 1000) return res.status(400).json({ error: "Message is too long" });
+  if (replyToId !== null && (!Number.isInteger(replyToId) || replyToId <= 0)) return res.status(400).json({ error: "Invalid reply message id" });
   if (!isUsingDatabase()) return res.status(400).json({ error: "Community chat requires database mode" });
 
   try {
@@ -257,10 +259,10 @@ communityRouter.post("/api/community/messages", authenticateToken, async (req: a
     }
 
     const { rows } = await pool.query(
-      `INSERT INTO community_messages (user_id, message)
-       VALUES ($1, $2)
-       RETURNING id, user_id, message, sender_type, display_name, created_at`,
-      [req.user.id, message]
+      `INSERT INTO community_messages (user_id, message, reply_to_id)
+       VALUES ($1, $2, $3)
+       RETURNING id, user_id, message, sender_type, display_name, reply_to_id, reactions_json, created_at`,
+      [req.user.id, message, replyToId]
     );
 
     const userMessage = { ...rows[0], username: req.user.username, display_name: req.user.display_name || req.user.username, role: req.user.role };
@@ -278,6 +280,28 @@ communityRouter.post("/api/community/messages", authenticateToken, async (req: a
     })();
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to send message" });
+  }
+});
+
+communityRouter.post("/api/community/messages/:id/reactions", authenticateToken, async (req: any, res) => {
+  const id = Number(req.params.id);
+  const emoji = String(req.body?.emoji || '').trim().slice(0, 8);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid message id" });
+  if (!emoji) return res.status(400).json({ error: "Emoji is required" });
+  if (!isUsingDatabase()) return res.status(404).json({ error: "Message not found" });
+
+  try {
+    const { rows } = await pool.query('SELECT reactions_json FROM community_messages WHERE id = $1', [id]);
+    if (!rows[0]) return res.status(404).json({ error: "Message not found" });
+    const reactions = rows[0].reactions_json || {};
+    const users = Array.isArray(reactions[emoji]) ? reactions[emoji] : [];
+    const key = String(req.user.id);
+    reactions[emoji] = users.includes(key) ? users.filter((userId: string) => userId !== key) : [...users, key];
+    if (reactions[emoji].length === 0) delete reactions[emoji];
+    const updated = await pool.query('UPDATE community_messages SET reactions_json = $1::jsonb WHERE id = $2 RETURNING reactions_json', [JSON.stringify(reactions), id]);
+    res.json({ reactions_json: updated.rows[0].reactions_json });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to update reaction" });
   }
 });
 

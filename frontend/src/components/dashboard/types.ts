@@ -30,6 +30,7 @@ export interface UserAccount {
   email: string;
   role: 'Admin' | 'User';
   status: 'Active' | 'Locked';
+  drive_quota_mb?: number | null;
   createdAt: string;
 }
 

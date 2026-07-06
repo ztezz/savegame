@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Download, Eye, Link, Pencil, RotateCcw, Trash2, X } from 'lucide-react';
-import api, { API_BASE_URL, uploadWithProgress } from '../../../utils/api';
+import api, { API_BASE_URL } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
 import { copyToClipboard } from '../../../utils/clipboard';
 import DrivePreviewModal from '../drive/DrivePreviewModal';
@@ -174,18 +174,38 @@ const DriveTab: React.FC = () => {
 
   const uploadFiles = async (uploadFilesInput = selectedUploadFiles) => {
     if (uploadFilesInput.length === 0 || trashMode) return;
-    const formData = new FormData();
-    uploadFilesInput.forEach((item) => {
-      formData.append('files', item.file);
-      formData.append('relativePaths', item.relativePath || item.file.webkitRelativePath || item.file.name);
-    });
-    formData.append('note', note.trim());
-    if (currentFolderId) formData.append('folderId', String(currentFolderId));
-
     setUploading(true);
     setProgress(0);
     try {
-      await uploadWithProgress('/drive/upload', formData, setProgress);
+      let uploadedFiles = 0;
+      for (const item of uploadFilesInput) {
+        const init = await api.post('/drive/upload/init', {
+          fileName: item.file.name,
+          fileSize: item.file.size,
+          mimeType: item.file.type,
+          note: note.trim(),
+          relativePath: item.relativePath || item.file.webkitRelativePath || item.file.name,
+          folderId: currentFolderId,
+        });
+        const { sessionId, chunkSize } = init.data;
+        const totalChunks = Math.ceil(item.file.size / chunkSize);
+
+        for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
+          const start = chunkIndex * chunkSize;
+          const end = Math.min(start + chunkSize, item.file.size);
+          const chunk = item.file.slice(start, end);
+          await api.post('/drive/upload/chunk', chunk, {
+            params: { sessionId, chunkIndex, totalChunks },
+            headers: { 'Content-Type': 'application/octet-stream' },
+          });
+          const fileProgress = totalChunks > 0 ? (chunkIndex + 1) / totalChunks : 1;
+          setProgress(Math.round(((uploadedFiles + fileProgress) / uploadFilesInput.length) * 100));
+        }
+
+        await api.post('/drive/upload/finalize', { sessionId });
+        uploadedFiles++;
+        setProgress(Math.round((uploadedFiles / uploadFilesInput.length) * 100));
+      }
       const folderCount = new Set(uploadFilesInput.map((item) => (item.relativePath || item.file.webkitRelativePath || '').split('/').slice(0, -1).join('/')).filter(Boolean)).size;
       showToast(folderCount ? `Đã tải ${uploadFilesInput.length} file trong ${folderCount} thư mục` : `Đã tải ${uploadFilesInput.length} file lên Drive`, 'success');
       setSelectedUploadFiles([]);

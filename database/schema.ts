@@ -27,6 +27,7 @@ export async function initializeSchema() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) DEFAULT 'User';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'Active';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(100);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS drive_quota_mb INTEGER;
 
       UPDATE users SET role = 'Admin' WHERE username = 'admin' AND role != 'Admin';
       UPDATE users SET display_name = username WHERE display_name IS NULL;
@@ -216,11 +217,15 @@ export async function initializeSchema() {
         message TEXT NOT NULL,
         sender_type VARCHAR(20) NOT NULL DEFAULT 'user',
         display_name VARCHAR(100),
+        reply_to_id INTEGER REFERENCES community_messages(id) ON DELETE SET NULL,
+        reactions_json JSONB NOT NULL DEFAULT '{}'::jsonb,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       ALTER TABLE community_messages ALTER COLUMN user_id DROP NOT NULL;
       ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS sender_type VARCHAR(20) NOT NULL DEFAULT 'user';
       ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS display_name VARCHAR(100);
+      ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS reply_to_id INTEGER REFERENCES community_messages(id) ON DELETE SET NULL;
+      ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS reactions_json JSONB NOT NULL DEFAULT '{}'::jsonb;
       CREATE INDEX IF NOT EXISTS idx_community_messages_created ON community_messages(created_at DESC);
 
       CREATE TABLE IF NOT EXISTS community_bans (

@@ -39,7 +39,10 @@ export interface UploadSession {
   fileName: string;
   totalSize: number;
   chunks: { index: number; path: string }[];
-  gameName: string;
+  gameName?: string;
   note: string;
+  folderId?: number | null;
+  relativePath?: string;
+  mimeType?: string;
   createdAt: number;
 }

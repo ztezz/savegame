@@ -2,7 +2,7 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import api, { uploadWithProgress } from '../utils/api';
 import { savesApi } from '../utils/apiClient';
-import { Search, Plus, User, LogOut, Lock } from 'lucide-react';
+import { Search, Plus, User, LogOut, Lock, Moon, Sun } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { useDynamicCategories } from '../hooks/useDynamicCategories';
 
@@ -91,10 +91,16 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   const [userRole, setUserRole] = useState<'Admin' | 'User'>('User');
   const [userStatus, setUserStatus] = useState<'Active' | 'Locked'>('Active');
   const [userPassword, setUserPassword] = useState('');
+  const [userDriveQuotaMb, setUserDriveQuotaMb] = useState('');
 
   // Change Password State
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [changePasswordLoading, setChangePasswordLoading] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('dashboardDarkMode') === '1');
+
+  useEffect(() => {
+    localStorage.setItem('dashboardDarkMode', darkMode ? '1' : '0');
+  }, [darkMode]);
 
   const pageTitles: Record<typeof activeTab, { title: string; description: string }> = {
     dashboard: {
@@ -202,6 +208,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
       setUserEmail(user.email);
       setUserRole(user.role);
       setUserStatus(user.status);
+      setUserDriveQuotaMb(user.drive_quota_mb ? String(user.drive_quota_mb) : '');
     } else {
       setEditingUser(null);
       setUserUsername('');
@@ -209,6 +216,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
       setUserEmail('');
       setUserRole('User');
       setUserStatus('Active');
+      setUserDriveQuotaMb('');
     }
     setUserPassword('');
     setShowUserModal(true);
@@ -253,6 +261,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
         email: userEmail,
         role: userRole,
         status: userStatus,
+        drive_quota_mb: userDriveQuotaMb ? Number(userDriveQuotaMb) : null,
         password: userPassword || undefined
       };
 
@@ -716,15 +725,15 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
     });
 
   return (
-    <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
+    <div className={`flex h-screen font-sans overflow-hidden ${darkMode ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-50'}`}>
       <Sidebar activeTab={activeTab} setActiveTab={(tab) => setActiveTab(tab as any)} currentUser={currentUser} onLogout={onLogout} onOpenChangePassword={() => setShowChangePasswordModal(true)} />
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="min-h-20 bg-white border-b border-slate-200 px-5 lg:px-8 py-4 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 shrink-0">
+        <header className="min-h-20 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-5 lg:px-8 py-4 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 shrink-0">
           <div className="flex flex-col lg:flex-row lg:items-center gap-4 min-w-0">
             <div className="min-w-0">
-              <h2 className="text-lg font-black text-slate-900 truncate">{pageTitles[activeTab].title}</h2>
+              <h2 className="text-lg font-black text-slate-900 dark:text-white truncate">{pageTitles[activeTab].title}</h2>
               <p className="text-xs text-slate-500 mt-1 hidden sm:block">{pageTitles[activeTab].description}</p>
             </div>
             {activeTab === 'library' && (
@@ -770,6 +779,13 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
                 <div className="w-px h-10 bg-slate-100 hidden sm:block"></div>
               </>
             )}
+            <button
+              onClick={() => setDarkMode((value) => !value)}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+              title={darkMode ? 'Tắt dark mode' : 'Bật dark mode'}
+            >
+              {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </button>
             {(activeTab === 'library' || activeTab === 'dashboard') && (
               <button 
                 onClick={handleOpenNew}
@@ -1027,6 +1043,8 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
           setUserRole={setUserRole}
           userStatus={userStatus}
           setUserStatus={setUserStatus}
+          userDriveQuotaMb={userDriveQuotaMb}
+          setUserDriveQuotaMb={setUserDriveQuotaMb}
         />
       </Suspense>
 

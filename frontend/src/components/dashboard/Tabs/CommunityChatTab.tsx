@@ -16,6 +16,8 @@ interface ChatMessage {
   display_name?: string | null;
   role?: string;
   sender_type?: 'user' | 'ai';
+  reply_to_id?: number | null;
+  reactions_json?: Record<string, string[]>;
   message: string;
   created_at: string;
 }
@@ -32,6 +34,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
   const [sending, setSending] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
   const lastMessageIdRef = useRef(0);
   const isAdmin = currentUser?.role === 'Admin' || currentUser?.username === 'admin';
@@ -95,7 +98,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
     if (!text || sending) return;
     setSending(true);
     try {
-      const res = await api.post('/community/messages', { message: text });
+      const res = await api.post('/community/messages', { message: text, replyToId: replyTo?.id || null });
       const nextMessages = res.data?.message ? [res.data.message, res.data.aiMessage].filter(Boolean) : [res.data];
       setMessages((current) => {
         const existingIds = new Set(current.map((item) => item.id));
@@ -104,6 +107,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
         return merged;
       });
       setMessage('');
+      setReplyTo(null);
       scrollToBottom();
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Gửi tin nhắn thất bại', 'error');
@@ -139,6 +143,17 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
     }
   };
 
+  const toggleReaction = async (id: number, emoji: string) => {
+    try {
+      const res = await api.post(`/community/messages/${id}/reactions`, { emoji });
+      setMessages((current) => current.map((item) => item.id === id ? { ...item, reactions_json: res.data.reactions_json } : item));
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Không cập nhật được reaction', 'error');
+    }
+  };
+
+  const findReply = (id?: number | null) => id ? messages.find((item) => item.id === id) : null;
+
   const clearChat = async () => {
     if (!window.confirm('Xóa toàn bộ phòng chat cộng đồng?')) return;
     try {
@@ -169,6 +184,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
           const mine = item.user_id === currentUser?.id || item.username === currentUser?.username;
           const isAi = item.sender_type === 'ai' || item.role === 'AI';
           const previous = messages[index - 1];
+          const reply = findReply(item.reply_to_id);
           const showDay = !previous || new Date(previous.created_at).toDateString() !== new Date(item.created_at).toDateString();
           return <React.Fragment key={item.id}>
             {showDay && <div className="sticky top-2 z-10 flex justify-center"><span className="rounded-full bg-white/80 px-3 py-1 text-[11px] font-black text-sky-700 shadow-sm backdrop-blur">{formatDay(item.created_at)}</span></div>}
@@ -179,8 +195,19 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
                 <span className={`text-xs font-black ${mine ? 'text-sky-100' : isAi ? 'text-amber-700' : 'text-sky-700'}`}>{item.display_name || item.username}{item.role === 'Admin' && <Shield className="inline w-3 h-3 ml-1" />}{isAi && <span className="ml-1 rounded-full bg-amber-200 px-1.5 py-0.5 text-[9px] text-amber-800">AI</span>}</span>
                 <span className={`text-[10px] ${mine ? 'text-sky-100' : 'text-slate-400'}`}>{new Date(item.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
+              {reply && <div className={`mb-2 rounded-xl border-l-4 px-3 py-2 text-xs ${mine ? 'border-white/70 bg-white/10 text-sky-50' : 'border-sky-300 bg-sky-50 text-slate-600'}`}>
+                <p className="font-black">{reply.display_name || reply.username}</p>
+                <p className="line-clamp-2">{reply.message}</p>
+              </div>}
               <p className="text-sm whitespace-pre-wrap break-words leading-6">{item.message}</p>
+              {item.reactions_json && Object.keys(item.reactions_json).length > 0 && <div className="mt-2 flex flex-wrap gap-1">
+                {Object.entries(item.reactions_json as Record<string, string[]>).map(([emoji, users]) => <button key={emoji} type="button" onClick={() => toggleReaction(item.id, emoji)} className={`rounded-full px-2 py-0.5 text-xs font-bold ${mine ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-600'}`}>{emoji} {users.length}</button>)}
+              </div>}
               {((mine && !isAi) || isAdmin) && <button type="button" onClick={() => deleteMessage(item.id)} className={`mt-2 text-[10px] font-bold inline-flex items-center gap-1 ${mine ? 'text-sky-100 hover:text-white' : 'text-red-500'}`}><Trash2 className="w-3 h-3" />Xóa</button>}
+              <div className="mt-2 flex flex-wrap gap-1">
+                <button type="button" onClick={() => setReplyTo(item)} className={`text-[10px] font-black ${mine ? 'text-sky-100 hover:text-white' : 'text-sky-600'}`}>Trả lời</button>
+                {['👍', '😂', '❤️'].map((emoji) => <button key={emoji} type="button" onClick={() => toggleReaction(item.id, emoji)} className={`text-[11px] ${mine ? 'hover:bg-white/10' : 'hover:bg-slate-100'} rounded-full px-1`}>{emoji}</button>)}
+              </div>
             </div>
             </div>
           </React.Fragment>;
@@ -190,6 +217,13 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
       </div>
 
       <form onSubmit={sendMessage} className="border-t border-sky-100 bg-sky-50/80 p-4 backdrop-blur">
+        {replyTo && <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border-l-4 border-sky-400 bg-white px-4 py-2 text-sm shadow-sm">
+          <div className="min-w-0">
+            <p className="font-black text-sky-700">Đang trả lời {replyTo.display_name || replyTo.username}</p>
+            <p className="truncate text-xs text-slate-500">{replyTo.message}</p>
+          </div>
+          <button type="button" onClick={() => setReplyTo(null)} className="rounded-full px-2 py-1 text-xs font-black text-slate-400 hover:bg-slate-100">Hủy</button>
+        </div>}
         <div className="relative mb-3">
           <button type="button" onClick={() => setEmojiOpen((open) => !open)} disabled={sending} className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-2 text-xs font-black uppercase tracking-widest text-sky-500 shadow-sm transition hover:bg-sky-100 disabled:opacity-50"><Smile className="h-3.5 w-3.5" />Emoji</button>
           {emojiOpen && <div className="absolute bottom-full left-0 z-20 mb-2 flex max-w-[min(92vw,420px)] gap-2 overflow-x-auto rounded-2xl border border-sky-100 bg-white p-3 shadow-2xl shadow-sky-200/60">

@@ -17,7 +17,7 @@ usersRouter.get("/api/users/me", authenticateToken, async (req: any, res) => {
 
   if (isUsingDatabase()) {
     try {
-      const { rows } = await pool.query('SELECT id, username, display_name, email, role, status, created_at FROM users WHERE id = $1', [userId]);
+      const { rows } = await pool.query('SELECT id, username, display_name, email, role, status, drive_quota_mb, created_at FROM users WHERE id = $1', [userId]);
       if (rows.length === 0) return res.status(404).json({ error: "User not found" });
       return res.json({ ...rows[0], name: rows[0].display_name, createdAt: rows[0].created_at });
     } catch (err: any) {
@@ -67,7 +67,7 @@ usersRouter.put("/api/users/me", authenticateToken, async (req: any, res) => {
 usersRouter.get("/api/users", authenticateToken, isAdmin, async (req, res) => {
   if (isUsingDatabase()) {
     try {
-      const { rows } = await pool.query('SELECT id, username, display_name, email, role, status, created_at FROM users ORDER BY id ASC');
+      const { rows } = await pool.query('SELECT id, username, display_name, email, role, status, drive_quota_mb, created_at FROM users ORDER BY id ASC');
       res.json(rows.map(r => ({ ...r, name: r.display_name, createdAt: r.created_at })));
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -78,14 +78,14 @@ usersRouter.get("/api/users", authenticateToken, isAdmin, async (req, res) => {
 });
 
 usersRouter.post("/api/users", authenticateToken, isAdmin, async (req, res) => {
-  const { username, display_name, email, role, status, password } = req.body;
+  const { username, display_name, email, role, status, password, drive_quota_mb } = req.body;
   const passwordHash = password ? await bcrypt.hash(password, 10) : '';
 
   if (isUsingDatabase()) {
     try {
       const { rows } = await pool.query(
-        'INSERT INTO users (username, display_name, email, role, status, password_hash) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, username, display_name, email, role, status, created_at',
-        [username, display_name || username, email, role, status, passwordHash]
+        'INSERT INTO users (username, display_name, email, role, status, password_hash, drive_quota_mb) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, username, display_name, email, role, status, drive_quota_mb, created_at',
+        [username, display_name || username, email, role, status, passwordHash, drive_quota_mb ? Number(drive_quota_mb) : null]
       );
       res.status(201).json({ ...rows[0], name: rows[0].display_name });
     } catch (err: any) {
@@ -100,18 +100,18 @@ usersRouter.post("/api/users", authenticateToken, isAdmin, async (req, res) => {
 
 usersRouter.put("/api/users/:id", authenticateToken, isAdmin, async (req, res) => {
   const id = parseInt(req.params.id);
-  const { username, display_name, email, role, status, password } = req.body;
+  const { username, display_name, email, role, status, password, drive_quota_mb } = req.body;
 
   if (isUsingDatabase()) {
     try {
-      let query = 'UPDATE users SET username = $1, display_name = $2, email = $3, role = $4, status = $5';
-      let params: any[] = [username, display_name || username, email, role, status, id];
+      let query = 'UPDATE users SET username = $1, display_name = $2, email = $3, role = $4, status = $5, drive_quota_mb = $6';
+      let params: any[] = [username, display_name || username, email, role, status, drive_quota_mb ? Number(drive_quota_mb) : null, id];
       if (password) {
         const passwordHash = await bcrypt.hash(password, 10);
-        query += ', password_hash = $6 WHERE id = $7';
-        params = [username, display_name || username, email, role, status, passwordHash, id];
+        query += ', password_hash = $7 WHERE id = $8';
+        params = [username, display_name || username, email, role, status, drive_quota_mb ? Number(drive_quota_mb) : null, passwordHash, id];
       } else {
-        query += ' WHERE id = $6';
+        query += ' WHERE id = $7';
       }
       await pool.query(query, params);
       res.json({ message: "User updated" });
