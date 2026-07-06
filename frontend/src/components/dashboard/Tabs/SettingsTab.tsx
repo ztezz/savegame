@@ -52,6 +52,8 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const [banUserId, setBanUserId] = useState('');
   const [banDurationMinutes, setBanDurationMinutes] = useState(60);
   const [banReason, setBanReason] = useState('');
+  const [aiTesting, setAiTesting] = useState(false);
+  const [aiTestResult, setAiTestResult] = useState<any>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -90,6 +92,23 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       showToast(err.response?.data?.error || 'Lưu cài đặt thất bại', 'error');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const testAiModel = async () => {
+    if (!isAdmin || aiTesting) return;
+    setAiTesting(true);
+    setAiTestResult(null);
+    try {
+      const res = await api.post('/system/ai/test', { ai: settings.ai });
+      setAiTestResult(res.data);
+      showToast(`Test AI thành công: ${res.data.latencyMs}ms`, 'success');
+    } catch (err: any) {
+      const message = err.response?.data?.error || 'Test model thất bại';
+      setAiTestResult({ success: false, error: message, status: err.response?.data?.status });
+      showToast(message, 'error', 5000);
+    } finally {
+      setAiTesting(false);
     }
   };
 
@@ -419,7 +438,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><Bot className="h-4 w-4 text-amber-600" />AI tán gẫu 9router</h3>
-          <p className="mt-1 text-xs text-slate-500">Thêm bot vui tính vào phòng chat cộng đồng. API key được lưu trong cài đặt hệ thống và không hiển thị lại sau khi lưu.</p>
+          <p className="mt-1 text-xs text-slate-500">Thêm bot vui tính vào phòng chat cộng đồng. API key được lưu trong cài đặt hệ thống và không hiển thị lại sau khi lưu. Sau khi test thành công, bấm Lưu cài đặt hệ thống để bot chat dùng cấu hình này.</p>
         </div>
         <span className={settings.ai?.enabled ? 'rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-black text-emerald-700' : 'rounded-full bg-slate-100 px-3 py-1 text-[11px] font-black text-slate-500'}>{settings.ai?.enabled ? 'Đang bật' : 'Đang tắt'}</span>
       </div>
@@ -451,6 +470,14 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
             <option value="chaos">Lầy hơn chút</option>
           </select>
         </label>
+      </div>
+      <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-amber-100 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="text-sm">
+          <p className="font-black text-slate-900">Kiểm tra model</p>
+          <p className="text-xs text-slate-500">Nên bấm test sau khi nhập API key/model. Nếu test lỗi thì bot trong chat cũng sẽ không trả lời.</p>
+          {aiTestResult && <p className={aiTestResult.success ? 'mt-2 text-xs font-semibold text-emerald-700' : 'mt-2 text-xs font-semibold text-red-600'}>{aiTestResult.success ? `${aiTestResult.reply} (${aiTestResult.latencyMs}ms)` : aiTestResult.error}</p>}
+        </div>
+        <button type="button" onClick={testAiModel} disabled={aiTesting || !settings.ai?.apiKey || !settings.ai?.model} className="inline-flex items-center justify-center rounded-xl bg-amber-500 px-5 py-3 text-sm font-black text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-50">{aiTesting ? 'Đang test...' : 'Test model'}</button>
       </div>
     </div>}
 

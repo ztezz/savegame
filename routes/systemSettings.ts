@@ -81,6 +81,19 @@ const DEFAULT_SETTINGS = {
   windowsAgent: { filename: WINDOWS_AGENT_FILENAME, version: "", size: 0, updatedAt: null, available: false }
 };
 
+async function getStoredAiSettings() {
+  if (!isUsingDatabase()) return DEFAULT_SETTINGS.ai;
+  const { rows } = await pool.query("SELECT value_json FROM system_settings WHERE key = 'ai'");
+  return { ...DEFAULT_SETTINGS.ai, ...(rows[0]?.value_json || {}) };
+}
+
+async function resolveAiSettings(payload: any = {}) {
+  const stored = await getStoredAiSettings();
+  const next = { ...stored, ...(payload || {}) };
+  if (payload?.apiKey === '********') next.apiKey = stored.apiKey || '';
+  return next;
+}
+
 settingsRouter.get('/api/system/settings', authenticateToken, async (_req: any, res) => {
   if (!isUsingDatabase()) return res.json(DEFAULT_SETTINGS);
   try {
@@ -126,6 +139,55 @@ settingsRouter.put('/api/system/settings', authenticateToken, isAdmin, async (re
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Database error' });
+  }
+});
+
+settingsRouter.post('/api/system/ai/test', authenticateToken, isAdmin, async (req: any, res) => {
+  try {
+    const settings = await resolveAiSettings(req.body?.ai || req.body || {});
+    if (!settings.apiKey) return res.status(400).json({ error: 'Chưa cấu hình 9router API key' });
+    if (!settings.model) return res.status(400).json({ error: 'Chưa cấu hình model AI' });
+
+    const baseUrl = String(settings.baseUrl || DEFAULT_SETTINGS.ai.baseUrl).replace(/\/+$/, '');
+    const startedAt = Date.now();
+    const response = await fetch(`${baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${settings.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: settings.model,
+        temperature: 0.7,
+        max_tokens: 80,
+        messages: [
+          { role: 'system', content: 'Bạn là bot kiểm tra kết nối. Trả lời tiếng Việt ngắn gọn, vui vẻ.' },
+          { role: 'user', content: 'Test model: hãy trả lời một câu hài hước ngắn.' },
+        ],
+      }),
+    });
+
+    const rawText = await response.text();
+    let data: any = null;
+    try {
+      data = rawText ? JSON.parse(rawText) : null;
+    } catch {
+      data = null;
+    }
+
+    if (!response.ok) {
+      return res.status(400).json({
+        error: data?.error?.message || data?.message || rawText.slice(0, 300) || `9router trả lỗi HTTP ${response.status}`,
+        status: response.status,
+      });
+    }
+
+    const reply = String(data?.choices?.[0]?.message?.content || '').trim();
+    if (!reply) return res.status(400).json({ error: '9router trả về thành công nhưng không có nội dung phản hồi' });
+
+    res.json({ success: true, model: settings.model, latencyMs: Date.now() - startedAt, reply });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Không test được model AI' });
   }
 });
 

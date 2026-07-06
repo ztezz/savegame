@@ -49,6 +49,7 @@ async function fetchRecentChatContext(limit = 12) {
 async function generateAiReply() {
   const settings = await getAiSettings();
   if (!settings.enabled || !settings.apiKey) return null;
+  if (settings.apiKey === '********') return null;
 
   const baseUrl = String(settings.baseUrl || DEFAULT_AI_SETTINGS.baseUrl).replace(/\/+$/, '');
   const context = await fetchRecentChatContext();
@@ -90,6 +91,17 @@ async function insertAiMessage(message: string) {
     [message, settings.botName || DEFAULT_AI_SETTINGS.botName]
   );
   return { ...rows[0], username: 'ai-bot', role: 'AI' };
+}
+
+async function insertAiErrorMessage(error: string) {
+  const message = `AI đang bật nhưng chưa trả lời được: ${error}`.slice(0, 1000);
+  const { rows } = await pool.query(
+    `INSERT INTO community_messages (user_id, message, sender_type, display_name)
+     VALUES (NULL, $1, 'ai', $2)
+     RETURNING id`,
+    [message, 'AI System']
+  );
+  return rows[0];
 }
 
 communityRouter.get("/api/community/bans", authenticateToken, isAdmin, async (_req: any, res) => {
@@ -241,7 +253,9 @@ communityRouter.post("/api/community/messages", authenticateToken, async (req: a
         const aiReply = await generateAiReply();
         if (aiReply) await insertAiMessage(aiReply);
       } catch (aiErr: any) {
-        console.warn('AI chat reply failed:', aiErr?.message || aiErr);
+        const message = aiErr?.message || String(aiErr);
+        console.warn('AI chat reply failed:', message);
+        await insertAiErrorMessage(message.slice(0, 220)).catch(() => undefined);
       }
     })();
   } catch (err: any) {
