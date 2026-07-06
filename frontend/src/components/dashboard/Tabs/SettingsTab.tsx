@@ -45,7 +45,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const [cleanupPreview, setCleanupPreview] = useState<any>(null);
   const [cleanupLoading, setCleanupLoading] = useState(false);
   const [chatStats, setChatStats] = useState<any>(null);
-  const [chatKeepLatest, setChatKeepLatest] = useState(200);
+  const [chatKeepLatest, setChatKeepLatest] = useState(10000);
   const [chatManaging, setChatManaging] = useState(false);
   const [chatBans, setChatBans] = useState<any[]>([]);
   const [chatUsers, setChatUsers] = useState<any[]>([]);
@@ -426,7 +426,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         </div>
         <div className="mt-4 grid grid-cols-1 gap-3 border-t border-slate-100 pt-4 md:grid-cols-[1fr_auto_auto] md:items-end">
           <label className="block text-sm font-bold text-slate-900">Giữ lại số tin mới nhất
-            <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50" type="number" min="0" max="5000" value={chatKeepLatest} onChange={(e)=>setChatKeepLatest(parseInt(e.target.value || '0', 10))} />
+            <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50" type="number" min="0" max="10000" value={chatKeepLatest} onChange={(e)=>setChatKeepLatest(Math.max(0, Math.min(parseInt(e.target.value || '0', 10), 10000)))} />
           </label>
           <button type="button" onClick={cleanupChat} disabled={chatManaging} className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white disabled:opacity-50">Dọn tin cũ</button>
           <button type="button" onClick={clearChat} disabled={chatManaging} className="rounded-xl bg-red-600 px-5 py-3 text-sm font-black text-white disabled:opacity-50">Xóa toàn bộ</button>

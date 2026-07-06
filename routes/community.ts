@@ -313,7 +313,7 @@ communityRouter.delete("/api/community/messages", authenticateToken, isAdmin, as
 
 communityRouter.post("/api/community/cleanup", authenticateToken, isAdmin, async (req: any, res) => {
   if (!isUsingDatabase()) return res.json({ success: true, deleted: 0 });
-  const keepLatest = Math.max(0, Math.min(Number(req.body?.keepLatest || 200), 5000));
+  const keepLatest = Math.max(0, Math.min(Number(req.body?.keepLatest || 10000), 10000));
 
   try {
     const result = await pool.query(
