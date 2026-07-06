@@ -2,7 +2,7 @@
 import React from 'react';
 import { 
   LayoutDashboard, Library, Laptop, 
-  Settings, User, KeyRound, HardDrive, MessageCircle, FileText
+  Settings, User, KeyRound, HardDrive, MessageCircle, FileText, Tags
 } from 'lucide-react';
 
 type TabType = 'dashboard' | 'library' | 'drive' | 'community' | 'devices' | 'settings' | 'logs' | 'users' | 'activation' | 'category' | 'account';
@@ -47,7 +47,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, currentUser,
           onClick={() => setActiveTab('category')}
           className={`w-full flex items-center gap-3 p-3 rounded-xl text-sm font-semibold transition-all ${activeTab === 'category' ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
         >
-          <Library className="w-4 h-4" />
+          <Tags className="w-4 h-4" />
           Quản lý thể loại
         </button>
         <button 

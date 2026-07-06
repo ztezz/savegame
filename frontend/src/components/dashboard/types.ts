@@ -49,5 +49,25 @@ export interface RestoreStatusItem {
 }
 
 export const CATEGORIES = [
-  'RPG', 'Action', 'Adventure', 'Simulation', 'Indie', 'Strategy', 'Sports', 'Other'
+  'RPG',
+  'Action',
+  'Adventure',
+  'Simulation',
+  'Indie',
+  'Strategy',
+  'Sports',
+  'Racing',
+  'Shooter',
+  'Fighting',
+  'Puzzle',
+  'Horror',
+  'Survival',
+  'Open World',
+  'Sandbox',
+  'Platformer',
+  'MMO',
+  'MOBA',
+  'Card',
+  'Other',
+  'Uncategorized'
 ];

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Eye, EyeOff, Lock } from 'lucide-react';
+import { useToast } from '../../../context/ToastContext';
 
 interface ChangePasswordModalProps {
   show: boolean;
@@ -10,6 +11,7 @@ interface ChangePasswordModalProps {
 }
 
 const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ show, onClose, onSubmit, loading = false }) => {
+  const { showToast } = useToast();
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -20,11 +22,11 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ show, onClose
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
-      alert('Mật khẩu mới và xác nhận không khớp!');
+      showToast('Mật khẩu mới và xác nhận không khớp!', 'error');
       return;
     }
     if (newPassword.length < 6) {
-      alert('Mật khẩu phải có ít nhất 6 ký tự!');
+      showToast('Mật khẩu phải có ít nhất 6 ký tự!', 'error');
       return;
     }
     onSubmit(oldPassword, newPassword, confirmPassword);

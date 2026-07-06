@@ -44,6 +44,15 @@ export async function initializeSchema() {
         END IF;
       END $$;
 
+      CREATE TABLE IF NOT EXISTS categories (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name VARCHAR(50) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, name)
+      );
+      CREATE INDEX IF NOT EXISTS idx_categories_user_name ON categories(user_id, name);
+
       CREATE TABLE IF NOT EXISTS saves (
         id SERIAL PRIMARY KEY,
         game_id INTEGER NOT NULL REFERENCES games(id) ON DELETE CASCADE,

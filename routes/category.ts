@@ -9,10 +9,13 @@ categoryRouter.get('/api/category/list', authenticateToken, async (req: any, res
   try {
     if (isUsingDatabase()) {
       const { rows } = await pool.query(
-        `SELECT DISTINCT category FROM games WHERE user_id = $1 AND category IS NOT NULL AND category != 'Uncategorized' ORDER BY category`,
+        `SELECT name FROM categories WHERE user_id = $1
+         UNION
+         SELECT DISTINCT category AS name FROM games WHERE user_id = $1 AND category IS NOT NULL AND category != 'Uncategorized'
+         ORDER BY name`,
         [req.user.id]
       );
-      const categories = rows.map(r => ({ id: r.category, name: r.category }));
+      const categories = rows.map(r => ({ id: r.name, name: r.name }));
       res.json({ categories });
     } else {
       res.json({ categories: [] });
@@ -33,18 +36,24 @@ categoryRouter.post('/api/category/create', authenticateToken, async (req: any, 
 
   try {
     if (isUsingDatabase()) {
-      // Just validate - category will be created when a game is created/updated with this category
       const { rows } = await pool.query(
-        `SELECT COUNT(*) as count FROM games WHERE user_id = $1 AND category = $2`,
+        `SELECT 1 FROM categories WHERE user_id = $1 AND name = $2
+         UNION
+         SELECT 1 FROM games WHERE user_id = $1 AND category = $2
+         LIMIT 1`,
         [req.user.id, name.trim()]
       );
       
-      if (rows[0].count > 0) {
+      if (rows.length > 0) {
         return res.status(409).json({ error: 'Category already exists' });
       }
 
-      // Create a placeholder game with this category (optional, or just acknowledge success)
-      res.json({ message: 'Category created successfully', category: { id: name, name: name } });
+      await pool.query(
+        `INSERT INTO categories (user_id, name) VALUES ($1, $2)`,
+        [req.user.id, name.trim()]
+      );
+
+      res.json({ message: 'Category created successfully', category: { id: name.trim(), name: name.trim() } });
     } else {
       res.json({ message: 'Category created successfully' });
     }
@@ -64,11 +73,44 @@ categoryRouter.post('/api/category/update', authenticateToken, async (req: any, 
 
   try {
     if (isUsingDatabase()) {
-      // Update all games with old category to new category
-      await pool.query(
-        `UPDATE games SET category = $1 WHERE user_id = $2 AND category = $3`,
-        [name.trim(), req.user.id, id]
-      );
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        const { rows } = await client.query(
+          `SELECT 1 FROM categories WHERE user_id = $1 AND name = $2 AND name != $3
+           UNION
+           SELECT 1 FROM games WHERE user_id = $1 AND category = $2 AND category != $3
+           LIMIT 1`,
+          [req.user.id, name.trim(), id]
+        );
+
+        if (rows.length > 0) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'Category already exists' });
+        }
+
+        await client.query(
+          `INSERT INTO categories (user_id, name) VALUES ($1, $2)
+           ON CONFLICT (user_id, name) DO NOTHING`,
+          [req.user.id, id]
+        );
+        await client.query(
+          `UPDATE categories SET name = $1 WHERE user_id = $2 AND name = $3`,
+          [name.trim(), req.user.id, id]
+        );
+        await client.query(
+          `UPDATE games SET category = $1 WHERE user_id = $2 AND category = $3`,
+          [name.trim(), req.user.id, id]
+        );
+
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
       res.json({ message: 'Category updated successfully' });
     } else {
       res.json({ message: 'Category updated successfully' });
@@ -89,11 +131,24 @@ categoryRouter.post('/api/category/delete', authenticateToken, async (req: any, 
 
   try {
     if (isUsingDatabase()) {
-      // Set games with this category to Uncategorized
-      await pool.query(
-        `UPDATE games SET category = 'Uncategorized' WHERE user_id = $1 AND category = $2`,
-        [req.user.id, id]
-      );
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query(
+          `DELETE FROM categories WHERE user_id = $1 AND name = $2`,
+          [req.user.id, id]
+        );
+        await client.query(
+          `UPDATE games SET category = 'Uncategorized' WHERE user_id = $1 AND category = $2`,
+          [req.user.id, id]
+        );
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
       res.json({ message: 'Category deleted successfully' });
     } else {
       res.json({ message: 'Category deleted successfully' });

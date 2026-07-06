@@ -164,7 +164,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
       setGameHistory(res.data);
     } catch (err) {
       console.error(err);
-      alert('Không thể tải lịch sử');
+      showToast('Không thể tải lịch sử', 'error');
     } finally {
       setHistoryLoading(false);
     }
@@ -264,7 +264,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
       fetchUsers();
       setShowUserModal(false);
     } catch (err) {
-      alert('Lưu người dùng thất bại');
+      showToast('Lưu người dùng thất bại', 'error');
     }
   };
 
@@ -274,7 +274,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
         await api.delete(`/users/${id}`);
         fetchUsers();
       } catch (err) {
-        alert('Xoá thất bại');
+        showToast('Xoá thất bại', 'error');
       }
     }
   };
@@ -416,7 +416,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
 
   const handleSelectDirectory = async () => {
     if (!('showDirectoryPicker' in window)) {
-      alert('Trình duyệt của bạn không hỗ trợ API truy cập thư mục. Vui lòng sử dụng Chrome hoặc Edge phiên bản mới nhất.');
+      showToast('Trình duyệt của bạn không hỗ trợ API truy cập thư mục. Vui lòng sử dụng Chrome hoặc Edge phiên bản mới nhất.', 'error', 5000);
       return;
     }
     try {

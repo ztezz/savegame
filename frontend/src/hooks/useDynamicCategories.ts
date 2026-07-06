@@ -1,7 +1,29 @@
 import { useState, useEffect } from 'react';
 import api from '../utils/api';
 
-const DEFAULT_CATEGORIES = ['RPG', 'Action', 'Adventure', 'Simulation', 'Indie', 'Strategy', 'Sports', 'Other', 'Uncategorized'];
+const DEFAULT_CATEGORIES = [
+  'RPG',
+  'Action',
+  'Adventure',
+  'Simulation',
+  'Indie',
+  'Strategy',
+  'Sports',
+  'Racing',
+  'Shooter',
+  'Fighting',
+  'Puzzle',
+  'Horror',
+  'Survival',
+  'Open World',
+  'Sandbox',
+  'Platformer',
+  'MMO',
+  'MOBA',
+  'Card',
+  'Other',
+  'Uncategorized'
+];
 
 export const useDynamicCategories = () => {
   const [categories, setCategories] = useState<string[]>(DEFAULT_CATEGORIES);
