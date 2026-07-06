@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { MessageCircle, Send, Shield, Trash2, Users } from 'lucide-react';
+import { MessageCircle, Send, Shield, Smile, Trash2, Users } from 'lucide-react';
 import api from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
 
@@ -27,6 +27,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
   const listRef = useRef<HTMLDivElement | null>(null);
   const lastMessageIdRef = useRef(0);
   const isAdmin = currentUser?.role === 'Admin' || currentUser?.username === 'admin';
+  const quickEmojis = ['😀', '😂', '🤣', '😍', '😎', '🤔', '👍', '🔥', '🎮', '❤️'];
 
   const scrollToBottom = () => {
     requestAnimationFrame(() => {
@@ -87,6 +88,17 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
     }
   };
 
+  const handleMessageKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey) return;
+    event.preventDefault();
+    if (!message.trim() || sending) return;
+    event.currentTarget.form?.requestSubmit();
+  };
+
+  const addEmoji = (emoji: string) => {
+    setMessage((current) => `${current}${emoji}`);
+  };
+
   const deleteMessage = async (id: number) => {
     try {
       await api.delete(`/community/messages/${id}`);
@@ -142,9 +154,15 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
         })}
       </div>
 
-      <form onSubmit={sendMessage} className="p-4 border-t border-slate-100 bg-white flex gap-3">
-        <textarea value={message} onChange={(e)=>setMessage(e.target.value)} maxLength={1000} rows={2} placeholder="Nhập tin nhắn..." className="flex-1 resize-none border border-slate-200 rounded-2xl px-4 py-3 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100" />
-        <button type="submit" disabled={!message.trim() || sending} className="px-5 rounded-2xl bg-indigo-600 text-white font-black disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"><Send className="w-4 h-4" />Gửi</button>
+      <form onSubmit={sendMessage} className="border-t border-slate-100 bg-white p-4">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1 text-xs font-black uppercase tracking-widest text-slate-400"><Smile className="h-3.5 w-3.5" />Emoji</span>
+          {quickEmojis.map((emoji) => <button key={emoji} type="button" onClick={() => addEmoji(emoji)} disabled={sending} className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-50 text-lg transition hover:bg-indigo-50 disabled:opacity-50">{emoji}</button>)}
+        </div>
+        <div className="flex gap-3">
+          <textarea value={message} onChange={(e)=>setMessage(e.target.value)} onKeyDown={handleMessageKeyDown} maxLength={1000} rows={2} placeholder="Nhập tin nhắn... Enter để gửi, Shift+Enter để xuống dòng" className="flex-1 resize-none border border-slate-200 rounded-2xl px-4 py-3 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100" />
+          <button type="submit" disabled={!message.trim() || sending} className="px-5 rounded-2xl bg-indigo-600 text-white font-black disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"><Send className="w-4 h-4" />Gửi</button>
+        </div>
       </form>
     </div>
 
