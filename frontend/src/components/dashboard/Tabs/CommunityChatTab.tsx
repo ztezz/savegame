@@ -18,6 +18,7 @@ interface ChatMessage {
   sender_type?: 'user' | 'ai';
   reply_to_id?: number | null;
   reactions_json?: Record<string, string[]>;
+  edited_at?: string | null;
   message: string;
   created_at: string;
 }
@@ -37,6 +38,8 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [chatSearch, setChatSearch] = useState('');
   const [aiTyping, setAiTyping] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+  const [editingText, setEditingText] = useState('');
   const listRef = useRef<HTMLDivElement | null>(null);
   const lastMessageIdRef = useRef(0);
   const isAdmin = currentUser?.role === 'Admin' || currentUser?.username === 'admin';
@@ -151,6 +154,24 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
     }
   };
 
+  const startEdit = (item: ChatMessage) => {
+    setEditingMessageId(item.id);
+    setEditingText(item.message);
+  };
+
+  const saveEdit = async () => {
+    if (!editingMessageId || !editingText.trim()) return;
+    try {
+      const res = await api.patch(`/community/messages/${editingMessageId}`, { message: editingText.trim() });
+      setMessages((current) => current.map((item) => item.id === editingMessageId ? { ...item, message: res.data.message, edited_at: res.data.edited_at } : item));
+      setEditingMessageId(null);
+      setEditingText('');
+      showToast('Đã sửa tin nhắn', 'success');
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Sửa tin nhắn thất bại', 'error');
+    }
+  };
+
   const toggleReaction = async (id: number, emoji: string) => {
     try {
       const res = await api.post(`/community/messages/${id}/reactions`, { emoji });
@@ -225,13 +246,21 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
                 <p className="font-black">{reply.display_name || reply.username}</p>
                 <p className="line-clamp-2">{reply.message}</p>
               </div>}
-              <p className="text-sm whitespace-pre-wrap break-words leading-6">{item.message}</p>
+              {editingMessageId === item.id ? <div className="space-y-2">
+                <textarea value={editingText} onChange={(e) => setEditingText(e.target.value)} maxLength={1000} rows={3} className="w-full resize-none rounded-xl border border-sky-100 bg-white/90 px-3 py-2 text-sm text-slate-800 outline-none focus:border-sky-300" />
+                <div className="flex gap-2">
+                  <button type="button" onClick={saveEdit} className="rounded-lg bg-emerald-500 px-3 py-1 text-xs font-black text-white">Lưu</button>
+                  <button type="button" onClick={() => { setEditingMessageId(null); setEditingText(''); }} className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">Hủy</button>
+                </div>
+              </div> : <p className="text-sm whitespace-pre-wrap break-words leading-6">{item.message}</p>}
+              {item.edited_at && <p className={`mt-1 text-[10px] font-semibold ${mine ? 'text-sky-100' : 'text-slate-400'}`}>đã sửa</p>}
               {item.reactions_json && Object.keys(item.reactions_json).length > 0 && <div className="mt-2 flex flex-wrap gap-1">
                 {Object.entries(item.reactions_json as Record<string, string[]>).map(([emoji, users]) => <button key={emoji} type="button" onClick={() => toggleReaction(item.id, emoji)} className={`rounded-full px-2 py-0.5 text-xs font-bold ${mine ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-600'}`}>{emoji} {users.length}</button>)}
               </div>}
               {((mine && !isAi) || isAdmin) && <button type="button" onClick={() => deleteMessage(item.id)} className={`mt-2 text-[10px] font-bold inline-flex items-center gap-1 ${mine ? 'text-sky-100 hover:text-white' : 'text-red-500'}`}><Trash2 className="w-3 h-3" />Xóa</button>}
               <div className="mt-2 flex flex-wrap gap-1">
                 <button type="button" onClick={() => setReplyTo(item)} className={`text-[10px] font-black ${mine ? 'text-sky-100 hover:text-white' : 'text-sky-600'}`}>Trả lời</button>
+                {((mine && !isAi) || isAdmin) && <button type="button" onClick={() => startEdit(item)} className={`text-[10px] font-black ${mine ? 'text-sky-100 hover:text-white' : 'text-slate-500'}`}>Sửa</button>}
                 <button type="button" onClick={() => copyMessage(item.message)} className={`inline-flex items-center gap-1 text-[10px] font-black ${mine ? 'text-sky-100 hover:text-white' : 'text-slate-500'}`}><Copy className="h-3 w-3" />Copy</button>
                 {['👍', '😂', '❤️'].map((emoji) => <button key={emoji} type="button" onClick={() => toggleReaction(item.id, emoji)} className={`text-[11px] ${mine ? 'hover:bg-white/10' : 'hover:bg-slate-100'} rounded-full px-1`}>{emoji}</button>)}
               </div>

@@ -219,6 +219,7 @@ export async function initializeSchema() {
         display_name VARCHAR(100),
         reply_to_id INTEGER REFERENCES community_messages(id) ON DELETE SET NULL,
         reactions_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+        edited_at TIMESTAMP,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
       ALTER TABLE community_messages ALTER COLUMN user_id DROP NOT NULL;
@@ -226,6 +227,7 @@ export async function initializeSchema() {
       ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS display_name VARCHAR(100);
       ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS reply_to_id INTEGER REFERENCES community_messages(id) ON DELETE SET NULL;
       ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS reactions_json JSONB NOT NULL DEFAULT '{}'::jsonb;
+      ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP;
       CREATE INDEX IF NOT EXISTS idx_community_messages_created ON community_messages(created_at DESC);
 
       CREATE TABLE IF NOT EXISTS community_bans (
