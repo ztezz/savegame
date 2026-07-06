@@ -62,8 +62,9 @@ async function generateAiReply() {
     },
     body: JSON.stringify({
       model: settings.model || DEFAULT_AI_SETTINGS.model,
+      stream: false,
       temperature: settings.humorLevel === 'chaos' ? 0.95 : 0.75,
-      max_tokens: 180,
+      max_tokens: 1024,
       messages: [
         {
           role: 'system',
@@ -89,7 +90,13 @@ async function generateAiReply() {
   }
 
   const reply = (sseReply || extractAiText(data)).slice(0, 1000);
-  if (!reply) throw new Error(`9router returned no readable content: ${(data ? compactJsonPreview(data, 220) : rawText.slice(0, 220))}`);
+  if (!reply) {
+    const lengthLimited = rawText.includes('"finish_reason":"length"');
+    throw new Error(lengthLimited
+      ? 'Model hit output length before producing visible content. Try again or use a less reasoning-heavy model.'
+      : `9router returned no readable content: ${(data ? compactJsonPreview(data, 220) : rawText.slice(0, 220))}`
+    );
+  }
   return reply;
 }
 

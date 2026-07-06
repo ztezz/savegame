@@ -159,8 +159,9 @@ settingsRouter.post('/api/system/ai/test', authenticateToken, isAdmin, async (re
       },
       body: JSON.stringify({
         model: settings.model,
+        stream: false,
         temperature: 0.7,
-        max_tokens: 80,
+        max_tokens: 1024,
         messages: [
           { role: 'system', content: 'Bạn là bot kiểm tra kết nối. Trả lời tiếng Việt ngắn gọn, vui vẻ.' },
           { role: 'user', content: 'Test model: hãy trả lời một câu hài hước ngắn.' },
@@ -186,8 +187,11 @@ settingsRouter.post('/api/system/ai/test', authenticateToken, isAdmin, async (re
 
     const reply = sseReply || extractAiText(data);
     if (!reply) {
+      const lengthLimited = rawText.includes('"finish_reason":"length"');
       return res.status(400).json({
-        error: '9router trả về thành công nhưng không đọc được nội dung phản hồi',
+        error: lengthLimited
+          ? 'Model đã hết giới hạn output trước khi sinh nội dung. Hãy test lại hoặc đổi sang model ít reasoning hơn.'
+          : '9router trả về thành công nhưng không đọc được nội dung phản hồi',
         rawPreview: data ? compactJsonPreview(data) : rawText.slice(0, 500),
       });
     }

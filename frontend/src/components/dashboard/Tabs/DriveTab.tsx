@@ -193,7 +193,7 @@ const DriveTab: React.FC = () => {
       setUploadModalOpen(false);
       await fetchFiles();
     } catch (err: any) {
-      showToast(err.message.includes('413') ? 'Drive đã vượt dung lượng cho phép. Hãy dọn thùng rác hoặc tăng quota.' : err.message || 'Upload Drive thất bại', 'error');
+      showToast(err.response?.data?.error || err.message || 'Upload Drive thất bại', 'error');
     } finally {
       setUploading(false);
       setDragging(false);

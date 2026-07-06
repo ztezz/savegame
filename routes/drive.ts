@@ -12,6 +12,11 @@ export const driveRouter = Router();
 
 const DRIVE_DIR = path.join(UPLOADS_DIR_PATH, "drive");
 
+const formatSize = (bytes: number) => {
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}GB`;
+  return `${(bytes / (1024 * 1024)).toFixed(0)}MB`;
+};
+
 if (!fs.existsSync(DRIVE_DIR)) {
   fs.mkdirSync(DRIVE_DIR, { recursive: true });
 }
@@ -26,6 +31,16 @@ const driveUpload = multer({
   }),
   limits: { fileSize: MAX_FILE_SIZE },
 });
+
+const handleDriveUpload = (req: any, res: any, next: any) => {
+  driveUpload.fields([{ name: "files", maxCount: 500 }, { name: "file", maxCount: 1 }])(req, res, (err: any) => {
+    if (!err) return next();
+    if (err?.code === "LIMIT_FILE_SIZE") {
+      return res.status(413).json({ error: `File vượt quá giới hạn ${formatSize(MAX_FILE_SIZE)} mỗi file` });
+    }
+    return res.status(400).json({ error: err?.message || "Drive upload failed" });
+  });
+};
 
 const parseId = (value: unknown) => {
   const id = Number(value);
@@ -293,7 +308,7 @@ driveRouter.post("/api/drive/folders", authenticateToken, async (req: any, res) 
   }
 });
 
-driveRouter.post("/api/drive/upload", authenticateToken, driveUpload.fields([{ name: "files", maxCount: 500 }, { name: "file", maxCount: 1 }]), async (req: any, res) => {
+driveRouter.post("/api/drive/upload", authenticateToken, handleDriveUpload, async (req: any, res) => {
   const fieldFiles = req.files as Record<string, Express.Multer.File[]> | undefined;
   const files = [...(fieldFiles?.files || []), ...(fieldFiles?.file || [])];
   const note = String(req.body?.note || "").trim() || null;
