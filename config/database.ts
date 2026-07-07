@@ -165,6 +165,22 @@ class RecoveringPool {
 
 export const pool = new RecoveringPool(dbConfig);
 
+let databaseKeepAliveInterval: NodeJS.Timeout | null = null;
+
+export const startDatabaseKeepAlive = () => {
+  if (databaseKeepAliveInterval) return;
+
+  databaseKeepAliveInterval = setInterval(async () => {
+    try {
+      await pool.query('SELECT 1');
+    } catch (err: any) {
+      console.error('Database keep-alive ping failed:', err?.message || err);
+    }
+  }, 5 * 60 * 1000);
+
+  databaseKeepAliveInterval.unref?.();
+};
+
 export const isUsingDatabase = () => {
   return process.env.DATABASE_URL || process.env.DB_HOST || TEST_DB_URL;
 };

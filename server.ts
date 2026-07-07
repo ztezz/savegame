@@ -9,7 +9,7 @@ import * as fs from "fs";
 
 // Config imports
 import { JWT_SECRET, NODE_ENV, PORT, FRONTEND_ORIGIN } from "./config/environment.js";
-import { pool } from "./config/database.js";
+import { pool, startDatabaseKeepAlive } from "./config/database.js";
 import { UPLOADS_DIR_PATH } from "./config/multer.js";
 
 // Database initialization
@@ -44,6 +44,7 @@ async function startServer() {
 
   // Initialize database schema
   await initializeSchema();
+  startDatabaseKeepAlive();
 
   // Start upload session cleanup interval
   startUploadSessionCleanupInterval();
