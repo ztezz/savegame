@@ -6,6 +6,24 @@ export const formatFileSize = (size: number) => {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+export const formatFileType = (file: DriveFile) => {
+  const name = file.original_name.toLowerCase();
+  const ext = name.includes('.') ? name.split('.').pop()?.toUpperCase() : '';
+  const mime = (file.mime_type || '').toLowerCase();
+
+  if (mime === 'application/pdf' || ext === 'PDF') return 'PDF';
+  if (mime.startsWith('image/')) return ext ? `Ảnh ${ext}` : 'Ảnh';
+  if (mime.startsWith('video/')) return ext ? `Video ${ext}` : 'Video';
+  if (mime.startsWith('audio/')) return ext ? `Audio ${ext}` : 'Audio';
+  if (mime.includes('zip') || ['ZIP', 'RAR', '7Z', 'TAR', 'GZ'].includes(ext || '')) return ext || 'File nén';
+  if (['DOC', 'DOCX'].includes(ext || '')) return 'Word';
+  if (['XLS', 'XLSX'].includes(ext || '')) return 'Excel';
+  if (['PPT', 'PPTX'].includes(ext || '')) return 'PowerPoint';
+  if (['TXT', 'MD', 'CSV', 'JSON', 'XML', 'LOG'].includes(ext || '')) return ext || 'Văn bản';
+  if (['EXE', 'MSI', 'APK', 'DMG'].includes(ext || '')) return ext || 'Cài đặt';
+  return ext || 'File';
+};
+
 export const getFileKind = (file: DriveFile): Exclude<FileFilter, 'all' | 'folders'> => {
   const name = file.original_name.toLowerCase();
   const mime = (file.mime_type || '').toLowerCase();

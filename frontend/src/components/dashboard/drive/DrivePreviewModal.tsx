@@ -1,7 +1,7 @@
 import React from 'react';
 import { Download, File, Link, X } from 'lucide-react';
 import { DriveFile, PreviewState } from './driveTypes';
-import { formatFileSize, getFileVisual } from './driveUtils';
+import { formatFileSize, formatFileType, getFileVisual } from './driveUtils';
 import MediaPlayer from './MediaPlayer';
 import PdfPreview from './PdfPreview';
 
@@ -52,7 +52,7 @@ const DrivePreviewModal: React.FC<Props> = ({ preview, previewLoading, previewOb
           <div className="min-w-0">
             <p className="text-xs font-black uppercase tracking-widest text-indigo-500">Xem trước file</p>
             <h3 className="font-black text-slate-900 truncate">{preview?.file.original_name || 'Đang tải...'}</h3>
-            {preview?.file && <p className="text-xs text-slate-500 mt-1">{getFileVisual(preview.file).label} · {formatFileSize(Number(preview.file.file_size))} · {preview.file.mime_type || 'Không rõ loại file'}</p>}
+            {preview?.file && <p className="text-xs text-slate-500 mt-1">{formatFileType(preview.file)} · {formatFileSize(Number(preview.file.file_size))}</p>}
           </div>
         </div>
         <button type="button" onClick={onClose} className="p-2 rounded-xl hover:bg-slate-100"><X className="w-5 h-5" /></button>
@@ -65,7 +65,7 @@ const DrivePreviewModal: React.FC<Props> = ({ preview, previewLoading, previewOb
             <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Tên file</p><p className="mt-1 break-words font-bold text-slate-900">{preview.file.original_name}</p></div>
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Dung lượng</p><p className="mt-1 font-bold text-slate-900">{formatFileSize(Number(preview.file.file_size))}</p></div>
-              <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Loại</p><p className="mt-1 font-bold text-slate-900">{getFileVisual(preview.file).label}</p></div>
+              <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Loại</p><p className="mt-1 font-bold text-slate-900">{formatFileType(preview.file)}</p></div>
             </div>
             <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Ngày tải</p><p className="mt-1 font-bold text-slate-900">{new Date(preview.file.created_at).toLocaleString('vi-VN')}</p></div>
             {preview.file.note && <div className="rounded-2xl bg-slate-50 p-3"><p className="text-xs text-slate-500">Ghi chú</p><p className="mt-1 break-words font-bold text-slate-900">{preview.file.note}</p></div>}
