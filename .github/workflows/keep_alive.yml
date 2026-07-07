@@ -17,3 +17,11 @@ jobs:
         echo "Dang ping vao backend..."
         STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://thzi-luugame.hf.space/api/health)
         echo "Backend tra ve HTTP Status Code: $STATUS_CODE"
+        
+        # Kiểm tra nếu không phải HTTP 200 thì bắt workflow phải Fail
+        if [ "$STATUS_CODE" -ne 200 ]; then
+          echo "❌ Backend dang co van de (Status: $STATUS_CODE)!"
+          exit 1
+        else
+          echo "✅ Backend hoat dong hoan hao."
+        fi
