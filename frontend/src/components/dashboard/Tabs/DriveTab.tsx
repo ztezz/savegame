@@ -11,6 +11,7 @@ import DriveContent from '../drive/DriveContent';
 import DriveHeader from '../drive/DriveHeader';
 import DriveToolbar from '../drive/DriveToolbar';
 import DriveSelectionBar from '../drive/DriveSelectionBar';
+import DriveShareModal from '../drive/DriveShareModal';
 import { DriveFile, DriveFolder, DriveUsage, FileFilter, PreviewState, UploadItem } from '../drive/driveTypes';
 import { getFileKind } from '../drive/driveUtils';
 
@@ -81,6 +82,9 @@ const DriveTab: React.FC = () => {
   const [officePreviewUrl, setOfficePreviewUrl] = useState<string | null>(null);
   const [usage, setUsage] = useState<DriveUsage | null>(null);
   const [uploadStatus, setUploadStatus] = useState('');
+  const [shareFileTarget, setShareFileTarget] = useState<DriveFile | null>(null);
+  const [shareExpiresInHours, setShareExpiresInHours] = useState('never');
+  const [shareSaving, setShareSaving] = useState(false);
   const cancelUploadRef = useRef(false);
   const activeUploadSessionsRef = useRef<string[]>([]);
 
@@ -387,7 +391,7 @@ const DriveTab: React.FC = () => {
         const raw = await api.get(`/drive/files/${file.id}/raw`, { responseType: 'blob' });
         setPreviewObjectUrl(URL.createObjectURL(raw.data));
       } else if (res.data.kind === 'office') {
-        const token = file.share_token || (await api.post(`/drive/files/${file.id}/share`)).data.token;
+        const token = file.share_token || (await api.post(`/drive/files/${file.id}/share`, { expiresInHours: 'never' })).data.token;
         const publicRawUrl = `${API_BASE_URL}/drive/share/${encodeURIComponent(token)}/raw`;
         setOfficePreviewUrl(`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(publicRawUrl)}`);
       }
@@ -398,27 +402,53 @@ const DriveTab: React.FC = () => {
     }
   };
 
-  const shareFile = async (file: DriveFile) => {
+  const getShareUrl = (token?: string | null) => token ? `${window.location.origin}/share/${encodeURIComponent(token)}` : '';
+
+  const openShareModal = (file: DriveFile) => {
     if (trashMode) return;
+    setShareFileTarget(file);
+    setShareExpiresInHours(file.share_expires_at ? '24' : 'never');
+  };
+
+  const createOrUpdateShare = async () => {
+    if (!shareFileTarget) return;
+    setShareSaving(true);
     try {
-      const token = file.share_token || (await api.post(`/drive/files/${file.id}/share`)).data.token;
-      const shareUrl = `${window.location.origin}/share/${encodeURIComponent(token)}`;
+      const res = await api.post(`/drive/files/${shareFileTarget.id}/share`, { expiresInHours: shareExpiresInHours });
+      const updatedFile = { ...shareFileTarget, share_token: res.data.token, share_expires_at: res.data.expiresAt || null };
+      setShareFileTarget(updatedFile);
+      setFiles((items) => items.map((item) => item.id === updatedFile.id ? updatedFile : item));
+      const shareUrl = getShareUrl(res.data.token);
       const copied = await copyToClipboard(shareUrl);
-      showToast(copied ? 'Đã copy link chia sẻ' : shareUrl, copied ? 'success' : 'info');
-      if (!file.share_token) await fetchFiles();
+      showToast(copied ? 'Đã tạo và copy link chia sẻ' : 'Đã tạo link chia sẻ', copied ? 'success' : 'success');
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Tạo link chia sẻ thất bại', 'error');
+    } finally {
+      setShareSaving(false);
     }
   };
 
-  const unshareFile = async (file: DriveFile) => {
-    if (!file.share_token || !window.confirm('Tắt link chia sẻ của file này?')) return;
+  const copyShareLink = async () => {
+    if (!shareFileTarget?.share_token) return;
+    const shareUrl = getShareUrl(shareFileTarget.share_token);
+    const copied = await copyToClipboard(shareUrl);
+    showToast(copied ? 'Đã copy link chia sẻ' : shareUrl, copied ? 'success' : 'info');
+  };
+
+  const unshareFile = async (file = shareFileTarget) => {
+    if (!file?.share_token) return;
+    if (!window.confirm('Tắt link chia sẻ của file này?')) return;
+    setShareSaving(true);
     try {
       await api.delete(`/drive/files/${file.id}/share`);
+      const updatedFile = { ...file, share_token: null, share_expires_at: null };
+      setFiles((items) => items.map((item) => item.id === updatedFile.id ? updatedFile : item));
+      setShareFileTarget(updatedFile);
       showToast('Đã tắt link chia sẻ', 'success');
-      await fetchFiles();
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Tắt chia sẻ thất bại', 'error');
+    } finally {
+      setShareSaving(false);
     }
   };
 
@@ -459,17 +489,17 @@ const DriveTab: React.FC = () => {
   const renderActions = (type: 'file' | 'folder', item: DriveFile | DriveFolder) => {
     const name = type === 'file' ? (item as DriveFile).original_name : (item as DriveFolder).name;
     const id = item.id;
-    if (trashMode) return <div className="flex items-center gap-2">
-      <button type="button" onClick={() => restoreOne(type, id)} className="text-xs font-bold text-emerald-600 inline-flex items-center gap-1"><RotateCcw className="w-3 h-3" />Khôi phục</button>
-      <button type="button" onClick={() => permanentDeleteOne(type, id)} className="text-xs font-bold text-red-600 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" />Xóa hẳn</button>
+    const iconButton = 'inline-flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:text-indigo-600 hover:shadow-md';
+    if (trashMode) return <div className="flex items-center justify-end gap-1.5">
+      <button type="button" title="Khôi phục" onClick={() => restoreOne(type, id)} className={`${iconButton} hover:text-emerald-600`}><RotateCcw className="w-4 h-4" /></button>
+      <button type="button" title="Xóa vĩnh viễn" onClick={() => permanentDeleteOne(type, id)} className={`${iconButton} hover:text-red-600`}><Trash2 className="w-4 h-4" /></button>
     </div>;
-    return <div className="flex items-center gap-2">
-      {type === 'file' && <button type="button" onClick={() => downloadFile(item as DriveFile)} className="text-xs font-bold text-indigo-600 inline-flex items-center gap-1"><Download className="w-3 h-3" />Tải</button>}
-      {type === 'file' && <button type="button" onClick={() => openPreview(item as DriveFile)} className="text-xs font-bold text-violet-600 inline-flex items-center gap-1"><Eye className="w-3 h-3" />Xem</button>}
-      {type === 'file' && <button type="button" onClick={() => shareFile(item as DriveFile)} className="text-xs font-bold text-emerald-600 inline-flex items-center gap-1"><Link className="w-3 h-3" />{(item as DriveFile).share_token ? 'Copy link' : 'Share'}</button>}
-      {type === 'file' && (item as DriveFile).share_token && <button type="button" onClick={() => unshareFile(item as DriveFile)} className="text-xs font-bold text-amber-600 inline-flex items-center gap-1"><X className="w-3 h-3" />Tắt share</button>}
-      <button type="button" onClick={() => renameItem(type, id, name)} className="text-xs font-bold text-slate-600 inline-flex items-center gap-1"><Pencil className="w-3 h-3" />Đổi tên</button>
-      <button type="button" onClick={() => trashOne(type, id)} className="text-xs font-bold text-red-500 inline-flex items-center gap-1"><Trash2 className="w-3 h-3" />Xóa</button>
+    return <div className="flex flex-wrap items-center justify-end gap-1.5">
+      {type === 'file' && <button type="button" title="Tải xuống" onClick={() => downloadFile(item as DriveFile)} className={iconButton}><Download className="w-4 h-4" /></button>}
+      {type === 'file' && <button type="button" title="Xem trước" onClick={() => openPreview(item as DriveFile)} className={iconButton}><Eye className="w-4 h-4" /></button>}
+      {type === 'file' && <button type="button" title={(item as DriveFile).share_token ? 'Quản lý chia sẻ' : 'Chia sẻ'} onClick={() => openShareModal(item as DriveFile)} className={`${iconButton} ${(item as DriveFile).share_token ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : ''}`}><Link className="w-4 h-4" /></button>}
+      <button type="button" title="Đổi tên" onClick={() => renameItem(type, id, name)} className={iconButton}><Pencil className="w-4 h-4" /></button>
+      <button type="button" title="Đưa vào thùng rác" onClick={() => trashOne(type, id)} className={`${iconButton} hover:text-red-600`}><Trash2 className="w-4 h-4" /></button>
     </div>;
   };
 
@@ -486,7 +516,9 @@ const DriveTab: React.FC = () => {
 
     <DriveUploadModal open={uploadModalOpen} uploading={uploading} dragging={dragging} progress={progress} uploadStatus={uploadStatus} selectedUploadFiles={selectedUploadFiles} note={note} onSetDragging={setDragging} onSetSelectedUploadFiles={setSelectedUploadFiles} onSetNote={setNote} onDrop={handleDrop} onClose={() => { if (!uploading) { setUploadModalOpen(false); setDragging(false); } }} onCancelUpload={cancelUpload} onUpload={() => uploadFiles()} />
 
-    <DrivePreviewModal preview={preview} previewLoading={previewLoading} previewObjectUrl={previewObjectUrl} officePreviewUrl={officePreviewUrl} onClose={closePreview} onShareFile={shareFile} onDownloadFile={downloadFile} />
+    <DrivePreviewModal preview={preview} previewLoading={previewLoading} previewObjectUrl={previewObjectUrl} officePreviewUrl={officePreviewUrl} onClose={closePreview} onShareFile={openShareModal} onDownloadFile={downloadFile} />
+
+    <DriveShareModal file={shareFileTarget} open={!!shareFileTarget} shareUrl={getShareUrl(shareFileTarget?.share_token)} expiresInHours={shareExpiresInHours} saving={shareSaving} onSetExpiresInHours={setShareExpiresInHours} onClose={() => setShareFileTarget(null)} onCreateOrUpdate={createOrUpdateShare} onCopy={copyShareLink} onUnshare={() => unshareFile()} />
 
     <DriveMoveModal open={moveModalOpen} selectedCount={selectedCount} moveTargetId={moveTargetId} folders={visibleFoldersForMove} onSetMoveTargetId={setMoveTargetId} onClose={() => setMoveModalOpen(false)} onMove={async () => { await moveSelected(); setMoveModalOpen(false); }} />
   </div>;

@@ -121,6 +121,13 @@ const buildFileMeta = (file: any) => ({
   created_at: file.created_at,
 });
 
+const parseShareExpiry = (value: unknown) => {
+  if (value === null || value === undefined || value === '' || value === 'never') return null;
+  const hours = Number(value);
+  if (!Number.isFinite(hours) || hours <= 0) return null;
+  return Math.min(Math.round(hours), 24 * 365);
+};
+
 const getDefaultDriveQuotaBytes = async () => {
   try {
     const { rows } = await pool.query("SELECT value_json FROM system_settings WHERE key = 'drive'");
@@ -365,7 +372,7 @@ driveRouter.get("/api/drive/files", authenticateToken, async (req: any, res) => 
         [req.user.id, search, likeSearch]
       );
       const files = await pool.query(
-        `SELECT df.id, df.original_name, df.mime_type, df.file_size, df.note, df.created_at, df.deleted_at, ds.token AS share_token
+        `SELECT df.id, df.original_name, df.mime_type, df.file_size, df.note, df.created_at, df.deleted_at, ds.token AS share_token, ds.expires_at AS share_expires_at
          FROM drive_files df
          LEFT JOIN drive_shares ds ON ds.file_id = df.id AND ds.user_id = df.user_id AND ds.disabled_at IS NULL
          WHERE df.user_id = $1 AND df.deleted_at IS NOT NULL AND ($2 = '' OR df.original_name ILIKE $3 OR COALESCE(df.note, '') ILIKE $3)
@@ -388,7 +395,7 @@ driveRouter.get("/api/drive/files", authenticateToken, async (req: any, res) => 
     );
 
     const { rows } = await pool.query(
-      `SELECT df.id, df.original_name, df.mime_type, df.file_size, df.note, df.created_at, df.deleted_at, ds.token AS share_token
+      `SELECT df.id, df.original_name, df.mime_type, df.file_size, df.note, df.created_at, df.deleted_at, ds.token AS share_token, ds.expires_at AS share_expires_at
        FROM drive_files df
        LEFT JOIN drive_shares ds ON ds.file_id = df.id AND ds.user_id = df.user_id AND ds.disabled_at IS NULL
        WHERE df.user_id = $1 AND df.deleted_at IS NULL
@@ -679,22 +686,34 @@ driveRouter.post("/api/drive/files/:id/share", authenticateToken, async (req: an
     const file = await pool.query("SELECT id FROM drive_files WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL", [id, req.user.id]);
     if (!file.rows[0]) return res.status(404).json({ error: "File not found" });
 
+    const expiresInHours = parseShareExpiry(req.body?.expiresInHours);
+
     const existing = await pool.query(
-      "SELECT token FROM drive_shares WHERE user_id = $1 AND file_id = $2 AND disabled_at IS NULL",
+      "SELECT token, expires_at FROM drive_shares WHERE user_id = $1 AND file_id = $2 AND disabled_at IS NULL",
       [req.user.id, id]
     );
-    if (existing.rows[0]) return res.json({ token: existing.rows[0].token });
+    if (existing.rows[0]) {
+      const { rows } = await pool.query(
+        `UPDATE drive_shares
+         SET expires_at = CASE WHEN $3::int IS NULL THEN NULL ELSE CURRENT_TIMESTAMP + ($3::int * INTERVAL '1 hour') END,
+             created_at = CURRENT_TIMESTAMP
+         WHERE user_id = $1 AND file_id = $2 AND disabled_at IS NULL
+         RETURNING token, expires_at`,
+        [req.user.id, id, expiresInHours]
+      );
+      return res.json({ token: rows[0].token, expiresAt: rows[0].expires_at });
+    }
 
     const token = crypto.randomBytes(24).toString("hex");
     const { rows } = await pool.query(
-      `INSERT INTO drive_shares (user_id, file_id, token, disabled_at)
-       VALUES ($1, $2, $3, NULL)
+      `INSERT INTO drive_shares (user_id, file_id, token, expires_at, disabled_at)
+       VALUES ($1, $2, $3, CASE WHEN $4::int IS NULL THEN NULL ELSE CURRENT_TIMESTAMP + ($4::int * INTERVAL '1 hour') END, NULL)
        ON CONFLICT (user_id, file_id)
-       DO UPDATE SET token = EXCLUDED.token, disabled_at = NULL, created_at = CURRENT_TIMESTAMP
-       RETURNING token`,
-      [req.user.id, id, token]
+       DO UPDATE SET token = EXCLUDED.token, expires_at = EXCLUDED.expires_at, disabled_at = NULL, created_at = CURRENT_TIMESTAMP
+       RETURNING token, expires_at`,
+      [req.user.id, id, token, expiresInHours]
     );
-    res.status(201).json({ token: rows[0].token });
+    res.status(201).json({ token: rows[0].token, expiresAt: rows[0].expires_at });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Drive share failed" });
   }

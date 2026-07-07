@@ -7,6 +7,7 @@ export interface DriveFile {
   created_at: string;
   deleted_at?: string | null;
   share_token?: string | null;
+  share_expires_at?: string | null;
 }
 
 export interface DriveFolder {
