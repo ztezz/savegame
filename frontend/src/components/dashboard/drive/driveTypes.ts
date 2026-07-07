@@ -24,6 +24,7 @@ export interface DriveUsage {
   activeFiles: number;
   trashFiles: number;
   quotaBytes: number;
+  quotaSource?: 'user' | 'system';
 }
 
 export type FileFilter = 'all' | 'folders' | 'images' | 'documents' | 'installers' | 'archives' | 'other';

@@ -3,6 +3,7 @@ import * as path from "path";
 import * as fs from "fs";
 import { pool, isUsingDatabase } from "../config/database.js";
 import { upload, UPLOADS_DIR_PATH } from "../config/multer.js";
+import { DRIVE_QUOTA_BYTES } from "../config/environment.js";
 import { authenticateToken, isAdmin } from "../middleware/auth.js";
 import { writeAudit } from "../utils/audit.js";
 import { compactJsonPreview, extractAiText, parseSseAiText } from "../utils/aiResponse.js";
@@ -76,6 +77,7 @@ function collectStorageUsage(dir: string) {
 const DEFAULT_SETTINGS = {
   security: { enforceStrongPassword: true, sessionTimeoutMinutes: 120, allowSelfRegister: false },
   sync: { autoSyncEnabled: false, syncIntervalMinutes: 5, maxUploadSizeMb: 2048, retentionDays: 30, retryLimit: 2 },
+  drive: { defaultQuotaMb: Math.round(DRIVE_QUOTA_BYTES / (1024 * 1024)) },
   ui: { compactMode: false, language: "vi", showAdvancedStats: true },
   technical: { smtpHost: "", smtpPort: 587, smtpSecure: false, backupEnabled: false },
   ai: { enabled: false, provider: "9router", apiKey: "", model: "cx/gpt-5.5", botName: "Mây Mặn", baseUrl: "https://api.9router.com/v1", humorLevel: "funny" },
@@ -101,6 +103,7 @@ settingsRouter.get('/api/system/settings', authenticateToken, async (_req: any, 
     const { rows } = await pool.query('SELECT key, value_json FROM system_settings');
     const data: any = { ...DEFAULT_SETTINGS };
     for (const row of rows) data[row.key] = row.value_json;
+    data.drive = { ...DEFAULT_SETTINGS.drive, ...(data.drive || {}) };
     data.ai = { ...DEFAULT_SETTINGS.ai, ...(data.ai || {}) };
     if (data.ai.apiKey) data.ai.apiKey = '********';
     data.windowsAgent = {
@@ -116,7 +119,7 @@ settingsRouter.get('/api/system/settings', authenticateToken, async (_req: any, 
 
 settingsRouter.put('/api/system/settings', authenticateToken, isAdmin, async (req: any, res) => {
   const payload = req.body || {};
-  const keys = ['security', 'sync', 'ui', 'technical', 'ai', WINDOWS_AGENT_SETTINGS_KEY];
+  const keys = ['security', 'sync', 'drive', 'ui', 'technical', 'ai', WINDOWS_AGENT_SETTINGS_KEY];
   if (!isUsingDatabase()) return res.json({ success: true, settings: { ...DEFAULT_SETTINGS, ...payload } });
 
   try {
@@ -128,6 +131,10 @@ settingsRouter.put('/api/system/settings', authenticateToken, isAdmin, async (re
         const existingAi = existing.rows[0]?.value_json || DEFAULT_SETTINGS.ai;
         value = { ...DEFAULT_SETTINGS.ai, ...existingAi, ...payload.ai };
         if (payload.ai?.apiKey === '********') value.apiKey = existingAi.apiKey || '';
+      }
+      if (key === 'drive') {
+        const defaultQuotaMb = Math.max(1, Math.min(Number(payload.drive?.defaultQuotaMb || DEFAULT_SETTINGS.drive.defaultQuotaMb), 1048576));
+        value = { ...DEFAULT_SETTINGS.drive, ...payload.drive, defaultQuotaMb };
       }
       await pool.query(
         `INSERT INTO system_settings (key, value_json, updated_by, updated_at)

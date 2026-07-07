@@ -24,6 +24,7 @@ const DriveToolbar: React.FC<Props> = ({ usage, trashMode, breadcrumb, searchTer
         <div>
           <p className="text-xs font-black uppercase tracking-widest text-indigo-500">Dung lượng Drive</p>
           <p className="mt-1 text-sm font-bold text-slate-800">Đã dùng {formatFileSize(usage.totalBytes)} / {formatFileSize(usage.quotaBytes)} ({usagePercent}%)</p>
+          <p className="mt-1 text-[11px] font-semibold text-indigo-500">Giới hạn: {usage.quotaSource === 'user' ? 'quota riêng của tài khoản' : 'cài đặt hệ thống'}</p>
         </div>
         <div className="text-xs text-slate-500 sm:text-right">
           <p>{usage.activeFiles} file active · {formatFileSize(usage.activeBytes)}</p>

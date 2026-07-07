@@ -17,6 +17,7 @@ interface SettingsTabProps {
 const defaultSettings = {
   security: { enforceStrongPassword: true, sessionTimeoutMinutes: 120, allowSelfRegister: false },
   sync: { autoSyncEnabled: false, syncIntervalMinutes: 5, maxUploadSizeMb: 2048, retentionDays: 30, retryLimit: 2 },
+  drive: { defaultQuotaMb: 20480 },
   ui: { compactMode: false, language: 'vi', showAdvancedStats: true },
   technical: { smtpHost: '', smtpPort: 587, smtpSecure: false, backupEnabled: false },
   ai: { enabled: false, provider: '9router', apiKey: '', model: 'cx/gpt-5.5', botName: 'Mây Mặn', baseUrl: 'https://api.9router.com/v1', humorLevel: 'funny' },
@@ -346,6 +347,22 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 font-semibold outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:bg-slate-50" value={settings.technical.smtpHost || ''} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,technical:{...s.technical,smtpHost:e.target.value}}))} placeholder="smtp.example.com" />
         </label>
       </div>
+    </div>
+
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><HardDrive className="h-4 w-4 text-indigo-600" />Drive cá nhân</h3>
+          <p className="mt-1 text-xs text-slate-500">Thiết lập dung lượng tối đa mặc định cho mỗi tài khoản. Quota riêng trong Quản lý người dùng sẽ được ưu tiên hơn giá trị này.</p>
+        </div>
+        <span className="rounded-full bg-indigo-50 px-3 py-1 text-[11px] font-black text-indigo-700">{formatFileSize(Number(settings.drive?.defaultQuotaMb || 0) * 1024 * 1024)}</span>
+      </div>
+      <label className="mt-5 block text-sm font-bold text-slate-900">Dung lượng Drive mặc định
+        <div className="mt-2 flex items-center gap-2">
+          <input className="w-full rounded-xl border border-slate-200 px-3 py-2 font-bold outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:bg-slate-50" type="number" min="1" max="1048576" value={settings.drive?.defaultQuotaMb || 20480} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,drive:{...s.drive,defaultQuotaMb:Math.max(1, parseInt(e.target.value || '1', 10))}}))} />
+          <span className="text-xs font-bold text-slate-400">MB</span>
+        </div>
+      </label>
     </div>
 
     <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">

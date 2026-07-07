@@ -121,6 +121,16 @@ const buildFileMeta = (file: any) => ({
   created_at: file.created_at,
 });
 
+const getDefaultDriveQuotaBytes = async () => {
+  try {
+    const { rows } = await pool.query("SELECT value_json FROM system_settings WHERE key = 'drive'");
+    const quotaMb = Number(rows[0]?.value_json?.defaultQuotaMb || 0);
+    return quotaMb > 0 ? quotaMb * 1024 * 1024 : DRIVE_QUOTA_BYTES;
+  } catch {
+    return DRIVE_QUOTA_BYTES;
+  }
+};
+
 const getDriveUsage = async (userId: number) => {
   const { rows } = await pool.query(
     `SELECT
@@ -135,6 +145,7 @@ const getDriveUsage = async (userId: number) => {
   const row = rows[0] || {};
   const userQuota = await pool.query('SELECT drive_quota_mb FROM users WHERE id = $1', [userId]);
   const quotaMb = Number(userQuota.rows[0]?.drive_quota_mb || 0);
+  const defaultQuotaBytes = await getDefaultDriveQuotaBytes();
   const activeBytes = Number(row.active_bytes || 0);
   const trashBytes = Number(row.trash_bytes || 0);
   return {
@@ -143,7 +154,8 @@ const getDriveUsage = async (userId: number) => {
     totalBytes: activeBytes + trashBytes,
     activeFiles: Number(row.active_files || 0),
     trashFiles: Number(row.trash_files || 0),
-    quotaBytes: quotaMb > 0 ? quotaMb * 1024 * 1024 : DRIVE_QUOTA_BYTES,
+    quotaBytes: quotaMb > 0 ? quotaMb * 1024 * 1024 : defaultQuotaBytes,
+    quotaSource: quotaMb > 0 ? 'user' : 'system',
   };
 };
 
