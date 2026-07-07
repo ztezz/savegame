@@ -12,10 +12,26 @@ import DriveHeader from '../drive/DriveHeader';
 import DriveToolbar from '../drive/DriveToolbar';
 import DriveSelectionBar from '../drive/DriveSelectionBar';
 import DriveShareModal from '../drive/DriveShareModal';
+import DriveConfirmModal from '../drive/DriveConfirmModal';
+import DriveRenameModal from '../drive/DriveRenameModal';
 import { DriveFile, DriveFolder, DriveUsage, FileFilter, PreviewState, UploadItem } from '../drive/driveTypes';
 import { getFileKind } from '../drive/driveUtils';
 
 type SelectionKey = `file-${number}` | `folder-${number}`;
+type DriveItemType = 'file' | 'folder';
+type ConfirmState = {
+  title: string;
+  message: string;
+  confirmLabel?: string;
+  danger?: boolean;
+  action: () => Promise<void> | void;
+} | null;
+type RenameState = {
+  type: DriveItemType;
+  id: number;
+  currentName: string;
+  value: string;
+} | null;
 type FileSystemEntry = {
   name: string;
   isFile: boolean;
@@ -85,6 +101,10 @@ const DriveTab: React.FC = () => {
   const [shareFileTarget, setShareFileTarget] = useState<DriveFile | null>(null);
   const [shareExpiresInHours, setShareExpiresInHours] = useState('never');
   const [shareSaving, setShareSaving] = useState(false);
+  const [confirmState, setConfirmState] = useState<ConfirmState>(null);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  const [renameState, setRenameState] = useState<RenameState>(null);
+  const [renameSaving, setRenameSaving] = useState(false);
   const cancelUploadRef = useRef(false);
   const activeUploadSessionsRef = useRef<string[]>([]);
 
@@ -259,16 +279,41 @@ const DriveTab: React.FC = () => {
     setUploadStatus('Đang hủy upload...');
   };
 
-  const renameItem = async (type: 'file' | 'folder', id: number, currentName: string) => {
-    if (trashMode) return;
-    const name = window.prompt('Tên mới', currentName)?.trim();
-    if (!name || name === currentName) return;
+  const openConfirm = (state: ConfirmState) => setConfirmState(state);
+
+  const runConfirmAction = async () => {
+    if (!confirmState) return;
+    setConfirmLoading(true);
     try {
-      await api.patch(`/drive/${type === 'file' ? 'files' : 'folders'}/${id}`, { name });
+      await confirmState.action();
+      setConfirmState(null);
+    } finally {
+      setConfirmLoading(false);
+    }
+  };
+
+  const renameItem = (type: DriveItemType, id: number, currentName: string) => {
+    if (trashMode) return;
+    setRenameState({ type, id, currentName, value: currentName });
+  };
+
+  const submitRename = async () => {
+    if (!renameState) return;
+    const name = renameState.value.trim();
+    if (!name || name === renameState.currentName) {
+      setRenameState(null);
+      return;
+    }
+    setRenameSaving(true);
+    try {
+      await api.patch(`/drive/${renameState.type === 'file' ? 'files' : 'folders'}/${renameState.id}`, { name });
       showToast('Đã đổi tên', 'success');
+      setRenameState(null);
       await fetchFiles();
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Đổi tên thất bại', 'error');
+    } finally {
+      setRenameSaving(false);
     }
   };
 
@@ -313,8 +358,13 @@ const DriveTab: React.FC = () => {
     }
   };
 
-  const trashSelected = async () => {
-    if (selectedCount === 0 || !window.confirm(`Đưa ${selectedCount} mục vào thùng rác?`)) return;
+  const trashSelected = () => {
+    if (selectedCount === 0) return;
+    openConfirm({
+      title: 'Đưa vào thùng rác?',
+      message: `${selectedCount} mục đã chọn sẽ được chuyển vào thùng rác. Bạn có thể khôi phục lại sau.`,
+      confirmLabel: 'Đưa vào thùng rác',
+      action: async () => {
     try {
       await Promise.all(selectedItems.map((item) => api.delete(`/drive/${item.type === 'file' ? 'files' : 'folders'}/${item.id}`)));
       showToast('Đã đưa vào thùng rác', 'success');
@@ -322,6 +372,8 @@ const DriveTab: React.FC = () => {
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Xóa thất bại', 'error');
     }
+      },
+    });
   };
 
   const restoreSelected = async () => {
@@ -335,8 +387,14 @@ const DriveTab: React.FC = () => {
     }
   };
 
-  const permanentDeleteSelected = async () => {
-    if (selectedCount === 0 || !window.confirm(`Xóa vĩnh viễn ${selectedCount} mục?`)) return;
+  const permanentDeleteSelected = () => {
+    if (selectedCount === 0) return;
+    openConfirm({
+      title: 'Xóa vĩnh viễn?',
+      message: `${selectedCount} mục đã chọn sẽ bị xóa vĩnh viễn và không thể khôi phục.`,
+      confirmLabel: 'Xóa vĩnh viễn',
+      danger: true,
+      action: async () => {
     try {
       await Promise.all(selectedItems.map((item) => api.delete(`/drive/${item.type === 'file' ? 'files' : 'folders'}/${item.id}/permanent`)));
       showToast('Đã xóa vĩnh viễn', 'success');
@@ -344,10 +402,16 @@ const DriveTab: React.FC = () => {
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Xóa vĩnh viễn thất bại', 'error');
     }
+      },
+    });
   };
 
-  const trashOne = async (type: 'file' | 'folder', id: number) => {
-    if (!window.confirm('Đưa mục này vào thùng rác?')) return;
+  const trashOne = (type: DriveItemType, id: number) => {
+    openConfirm({
+      title: 'Đưa vào thùng rác?',
+      message: 'Mục này sẽ được chuyển vào thùng rác. Bạn có thể khôi phục lại sau.',
+      confirmLabel: 'Đưa vào thùng rác',
+      action: async () => {
     try {
       await api.delete(`/drive/${type === 'file' ? 'files' : 'folders'}/${id}`);
       showToast('Đã đưa vào thùng rác', 'success');
@@ -355,6 +419,8 @@ const DriveTab: React.FC = () => {
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Xóa thất bại', 'error');
     }
+      },
+    });
   };
 
   const restoreOne = async (type: 'file' | 'folder', id: number) => {
@@ -367,8 +433,13 @@ const DriveTab: React.FC = () => {
     }
   };
 
-  const permanentDeleteOne = async (type: 'file' | 'folder', id: number) => {
-    if (!window.confirm('Xóa vĩnh viễn mục này?')) return;
+  const permanentDeleteOne = (type: DriveItemType, id: number) => {
+    openConfirm({
+      title: 'Xóa vĩnh viễn?',
+      message: 'Mục này sẽ bị xóa vĩnh viễn và không thể khôi phục.',
+      confirmLabel: 'Xóa vĩnh viễn',
+      danger: true,
+      action: async () => {
     try {
       await api.delete(`/drive/${type === 'file' ? 'files' : 'folders'}/${id}/permanent`);
       showToast('Đã xóa vĩnh viễn', 'success');
@@ -376,6 +447,8 @@ const DriveTab: React.FC = () => {
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Xóa vĩnh viễn thất bại', 'error');
     }
+      },
+    });
   };
 
   const openPreview = async (file: DriveFile) => {
@@ -435,9 +508,8 @@ const DriveTab: React.FC = () => {
     showToast(copied ? 'Đã copy link chia sẻ' : shareUrl, copied ? 'success' : 'info');
   };
 
-  const unshareFile = async (file = shareFileTarget) => {
+  const unshareFileNow = async (file = shareFileTarget) => {
     if (!file?.share_token) return;
-    if (!window.confirm('Tắt link chia sẻ của file này?')) return;
     setShareSaving(true);
     try {
       await api.delete(`/drive/files/${file.id}/share`);
@@ -450,6 +522,16 @@ const DriveTab: React.FC = () => {
     } finally {
       setShareSaving(false);
     }
+  };
+
+  const unshareFile = (file = shareFileTarget) => {
+    if (!file?.share_token) return;
+    openConfirm({
+      title: 'Tắt chia sẻ?',
+      message: 'Link công khai hiện tại sẽ ngừng hoạt động. Bạn có thể tạo lại link mới bất cứ lúc nào.',
+      confirmLabel: 'Tắt chia sẻ',
+      action: () => unshareFileNow(file),
+    });
   };
 
   const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
@@ -521,6 +603,10 @@ const DriveTab: React.FC = () => {
     <DriveShareModal file={shareFileTarget} open={!!shareFileTarget} shareUrl={getShareUrl(shareFileTarget?.share_token)} expiresInHours={shareExpiresInHours} saving={shareSaving} onSetExpiresInHours={setShareExpiresInHours} onClose={() => setShareFileTarget(null)} onCreateOrUpdate={createOrUpdateShare} onCopy={copyShareLink} onUnshare={() => unshareFile()} />
 
     <DriveMoveModal open={moveModalOpen} selectedCount={selectedCount} moveTargetId={moveTargetId} folders={visibleFoldersForMove} onSetMoveTargetId={setMoveTargetId} onClose={() => setMoveModalOpen(false)} onMove={async () => { await moveSelected(); setMoveModalOpen(false); }} />
+
+    <DriveRenameModal open={!!renameState} itemType={renameState?.type || 'file'} value={renameState?.value || ''} loading={renameSaving} onChange={(value) => setRenameState((state) => state ? { ...state, value } : state)} onClose={() => setRenameState(null)} onSubmit={submitRename} />
+
+    <DriveConfirmModal open={!!confirmState} title={confirmState?.title || ''} message={confirmState?.message || ''} confirmLabel={confirmState?.confirmLabel} danger={confirmState?.danger} loading={confirmLoading} onClose={() => setConfirmState(null)} onConfirm={runConfirmAction} />
   </div>;
 };
 
