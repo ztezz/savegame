@@ -25,6 +25,7 @@ const defaultSettings = {
 };
 
 const AGENT_DOWNLOAD_URL = `${API_ORIGIN}/api/agent/download`;
+type SettingsSection = 'core' | 'drive' | 'agent' | 'operations' | 'ai' | 'chat';
 
 const formatFileSize = (size: number) => {
   if (!size) return '0 MB';
@@ -55,6 +56,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const [banReason, setBanReason] = useState('');
   const [aiTesting, setAiTesting] = useState(false);
   const [aiTestResult, setAiTestResult] = useState<any>(null);
+  const [activeSection, setActiveSection] = useState<SettingsSection>('core');
 
   useEffect(() => {
     const load = async () => {
@@ -227,6 +229,17 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     }
   };
 
+  const settingSections: Array<{ key: SettingsSection; label: string; description: string; icon: any; adminOnly?: boolean }> = [
+    { key: 'core', label: 'Cốt lõi', description: 'Bảo mật, giao diện, đồng bộ', icon: Shield },
+    { key: 'drive', label: 'Drive', description: 'Quota mặc định', icon: HardDrive },
+    { key: 'agent', label: 'Windows Agent', description: 'File tải xuống', icon: UploadCloud },
+    { key: 'operations', label: 'Vận hành', description: 'Storage và dọn dẹp', icon: Server, adminOnly: true },
+    { key: 'ai', label: 'AI Chat', description: '9router bot', icon: Bot, adminOnly: true },
+    { key: 'chat', label: 'Quản trị chat', description: 'Khóa và mở khóa', icon: MessageCircle, adminOnly: true },
+  ];
+
+  const visibleSections = settingSections.filter((section) => isAdmin || !section.adminOnly);
+
   return <div className="col-span-12 space-y-6 px-1 sm:px-0">
     <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 p-5 text-white shadow-xl shadow-slate-200/60 sm:p-7">
       <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.45),transparent_55%)]" />
@@ -253,6 +266,19 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
 
     {!isAdmin && <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">Bạn đang ở chế độ chỉ xem. Chỉ quản trị viên mới có thể thay đổi cài đặt hệ thống.</div>}
 
+    <div className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-6">
+        {visibleSections.map((section) => <button key={section.key} type="button" onClick={() => setActiveSection(section.key)} className={`rounded-2xl border p-4 text-left transition ${activeSection === section.key ? 'border-indigo-200 bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'border-slate-100 bg-slate-50 text-slate-700 hover:border-indigo-100 hover:bg-white'}`}>
+          <div className="flex items-center gap-2">
+            <section.icon className={`h-4 w-4 ${activeSection === section.key ? 'text-white' : 'text-indigo-600'}`} />
+            <span className="text-xs font-black uppercase tracking-widest">{section.label}</span>
+          </div>
+          <p className={`mt-2 text-[11px] font-semibold ${activeSection === section.key ? 'text-white/75' : 'text-slate-500'}`}>{section.description}</p>
+        </button>)}
+      </div>
+    </div>
+
+    {activeSection === 'core' && <div className="space-y-4">
     <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6 xl:col-span-2">
         <div className="mb-5 flex items-start justify-between gap-4">
@@ -348,8 +374,9 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         </label>
       </div>
     </div>
+    </div>}
 
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+    {activeSection === 'drive' && <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><HardDrive className="h-4 w-4 text-indigo-600" />Drive cá nhân</h3>
@@ -363,9 +390,9 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           <span className="text-xs font-bold text-slate-400">MB</span>
         </div>
       </label>
-    </div>
+    </div>}
 
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+    {activeSection === 'agent' && <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><UploadCloud className="h-4 w-4 text-indigo-600" />Phần mềm Windows</h3>
@@ -406,9 +433,9 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       </div>
       {agentUploading && <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-indigo-600 transition-all" style={{ width: `${agentUploadProgress}%` }} /></div>}
       {settings.windowsAgent?.updatedAt && <p className="mt-3 text-xs text-slate-500">Cập nhật lần cuối: {new Date(settings.windowsAgent.updatedAt).toLocaleString('vi-VN')}</p>}
-    </div>
+    </div>}
 
-    {isAdmin && <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+    {isAdmin && activeSection === 'operations' && <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -451,7 +478,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       </div>
     </div>}
 
-    {isAdmin && <div className="rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm sm:p-6">
+    {isAdmin && activeSection === 'ai' && <div className="rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><Bot className="h-4 w-4 text-amber-600" />AI tán gẫu 9router</h3>
@@ -499,7 +526,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       </div>
     </div>}
 
-    {isAdmin && <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+    {isAdmin && activeSection === 'chat' && <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <h3 className="text-sm font-black uppercase tracking-widest text-slate-800">Khóa chat người dùng</h3>
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1.2fr_160px_1fr_auto] lg:items-end">
         <label className="block text-sm font-bold text-slate-900">Người dùng
