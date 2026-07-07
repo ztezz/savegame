@@ -563,7 +563,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       </div>
     </div>}
 
-    {isAdmin && <div className="sticky bottom-4 z-10 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/95 p-3 shadow-2xl shadow-slate-300/40 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+    {isAdmin && <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
       <div className="text-sm">
         <p className="font-black text-slate-900">Sẵn sàng lưu thay đổi</p>
         <p className="text-xs text-slate-500">Các thay đổi chỉ áp dụng sau khi bấm lưu.</p>
