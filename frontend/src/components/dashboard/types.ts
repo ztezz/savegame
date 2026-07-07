@@ -31,6 +31,9 @@ export interface UserAccount {
   role: 'Admin' | 'User';
   status: 'Active' | 'Locked';
   drive_quota_mb?: number | null;
+  drive_used_bytes?: number | string;
+  drive_file_count?: number;
+  save_count?: number;
   createdAt: string;
 }
 

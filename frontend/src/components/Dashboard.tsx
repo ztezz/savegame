@@ -290,13 +290,11 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   };
 
   const handleDeleteUser = async (id: number) => {
-    if (confirm('Xác nhận xoá tài khoản này?')) {
-      try {
-        await api.delete(`/users/${id}`);
-        fetchUsers();
-      } catch (err) {
-        showToast('Xoá thất bại', 'error');
-      }
+    try {
+      await api.delete(`/users/${id}`);
+      fetchUsers();
+    } catch (err) {
+      showToast('Xoá thất bại', 'error');
     }
   };
 

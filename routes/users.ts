@@ -67,7 +67,34 @@ usersRouter.put("/api/users/me", authenticateToken, async (req: any, res) => {
 usersRouter.get("/api/users", authenticateToken, isAdmin, async (req, res) => {
   if (isUsingDatabase()) {
     try {
-      const { rows } = await pool.query('SELECT id, username, display_name, email, role, status, drive_quota_mb, created_at FROM users ORDER BY id ASC');
+      const { rows } = await pool.query(`
+        SELECT
+          u.id,
+          u.username,
+          u.display_name,
+          u.email,
+          u.role,
+          u.status,
+          u.drive_quota_mb,
+          u.created_at,
+          COALESCE(df.drive_used_bytes, 0)::bigint AS drive_used_bytes,
+          COALESCE(df.drive_file_count, 0)::int AS drive_file_count,
+          COALESCE(sv.save_count, 0)::int AS save_count
+        FROM users u
+        LEFT JOIN (
+          SELECT user_id, SUM(file_size) AS drive_used_bytes, COUNT(*) AS drive_file_count
+          FROM drive_files
+          WHERE deleted_at IS NULL
+          GROUP BY user_id
+        ) df ON df.user_id = u.id
+        LEFT JOIN (
+          SELECT g.user_id, COUNT(s.id) AS save_count
+          FROM games g
+          LEFT JOIN saves s ON s.game_id = g.id
+          GROUP BY g.user_id
+        ) sv ON sv.user_id = u.id
+        ORDER BY u.id ASC
+      `);
       res.json(rows.map(r => ({ ...r, name: r.display_name, createdAt: r.created_at })));
     } catch (err: any) {
       res.status(500).json({ error: err.message });
