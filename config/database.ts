@@ -109,10 +109,13 @@ const isRecoverableDbError = (err: any) => {
 };
 
 class RecoveringPool {
-  private currentPool = this.createPool();
+  private currentPool: InstanceType<typeof Pool>;
   private recreatingPool: Promise<void> | null = null;
+  private lastPoolRecreateAt = 0;
 
-  constructor(private readonly config: Record<string, any>) {}
+  constructor(private readonly config: Record<string, any>) {
+    this.currentPool = this.createPool();
+  }
 
   private createPool() {
     const nextPool = new Pool(this.config);
@@ -123,7 +126,14 @@ class RecoveringPool {
   }
 
   private async recreatePool(reason: any) {
+    const now = Date.now();
+    if (now - this.lastPoolRecreateAt < 30000) {
+      console.warn('PostgreSQL pool reconnect skipped during cooldown:', reason?.message || reason);
+      return;
+    }
+
     if (!this.recreatingPool) {
+      this.lastPoolRecreateAt = now;
       console.warn('Recreating PostgreSQL pool after connection error:', reason?.message || reason);
       const oldPool = this.currentPool;
       this.currentPool = this.createPool();
