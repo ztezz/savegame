@@ -46,7 +46,10 @@ export const authenticateToken = async (req: any, res: any, next: any) => {
   }
 
   // --- JWT Bearer auth (web UI) ---
-  const queryDownloadToken = req.method === 'GET' && req.query?.token ? String(req.query.token) : '';
+  const rawUrl = req.originalUrl || req.url || '';
+  const queryDownloadToken = req.method === 'GET'
+    ? String(req.query?.token || new URLSearchParams(rawUrl.split('?')[1] || '').get('token') || '')
+    : '';
   const token = (authHeader && authHeader.split(' ')[1]) || queryDownloadToken;
 
   if (!token) {
