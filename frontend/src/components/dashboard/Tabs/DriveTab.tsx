@@ -107,7 +107,6 @@ const DriveTab: React.FC = () => {
   const [renameSaving, setRenameSaving] = useState(false);
   const cancelUploadRef = useRef(false);
   const activeUploadXhrRef = useRef<XMLHttpRequest | null>(null);
-  const activeUploadSessionsRef = useRef<string[]>([]);
 
   const allItems = [
     ...folders.map((folder) => ({ type: 'folder' as const, id: folder.id, name: folder.name })),
@@ -204,7 +203,6 @@ const DriveTab: React.FC = () => {
     if (uploadFilesInput.length === 0 || trashMode) return;
     setUploading(true);
     cancelUploadRef.current = false;
-    activeUploadSessionsRef.current = [];
     setUploadStatus('Đang chuẩn bị upload...');
     setProgress(0);
     try {
@@ -223,12 +221,21 @@ const DriveTab: React.FC = () => {
         xhr.open('POST', `${API_BASE_URL}/drive/upload`);
         if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
         xhr.upload.onprogress = (event) => {
-          if (event.lengthComputable) setProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));
+          if (event.lengthComputable) {
+            const nextProgress = Math.min(99, Math.round((event.loaded / event.total) * 100));
+            setProgress(nextProgress);
+            if (nextProgress >= 99) setUploadStatus('Đã gửi xong file, đang lưu vào server...');
+          }
+        };
+        xhr.upload.onload = () => {
+          setProgress(99);
+          setUploadStatus('Đã gửi xong file, đang lưu vào server...');
         };
         xhr.onload = () => {
           activeUploadXhrRef.current = null;
           if (xhr.status >= 200 && xhr.status < 300) {
             setProgress(100);
+            setUploadStatus('Hoàn tất, đang làm mới danh sách...');
             resolve();
           } else {
             try {
@@ -261,7 +268,6 @@ const DriveTab: React.FC = () => {
     } catch (err: any) {
       showToast(err.response?.data?.error || err.message || 'Upload Drive thất bại', 'error');
     } finally {
-      activeUploadSessionsRef.current = [];
       setUploading(false);
       setUploadStatus('');
       setDragging(false);
