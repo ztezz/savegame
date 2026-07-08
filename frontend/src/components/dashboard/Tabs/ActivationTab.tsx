@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Upload, Download, Trash2, KeyRound, Plus, X, FileCheck, Pencil, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import api, { uploadWithProgress, downloadWithProgress } from '../../../utils/api';
+import api, { API_BASE_URL, uploadWithProgress } from '../../../utils/api';
 import EditActivationModal from '../Modals/EditActivationModal';
 import DeleteConfirmModal from '../Modals/DeleteConfirmModal';
 import { useToast } from '../../../context/ToastContext';
@@ -35,8 +35,6 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [selectedActivationForEdit, setSelectedActivationForEdit] = useState<ActivationFile | null>(null);
-  const [downloadingFileId, setDownloadingFileId] = useState<number | null>(null);
-  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<number | null>(null);
 
@@ -74,20 +72,19 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
     }
   };
 
-  const handleDownload = async (file: ActivationFile) => {
-    try {
-      setDownloadingFileId(file.id);
-      setDownloadProgress(0);
-      await downloadWithProgress(`/activation/download/${file.id}`, file.originalName, (progress) => {
-        setDownloadProgress(progress);
-      });
-      setDownloadProgress(null);
-      setDownloadingFileId(null);
-    } catch (err) {
-      showToast(`Tải file thất bại: ${err instanceof Error ? err.message : String(err)}`, 'error', 3500);
-      setDownloadProgress(null);
-      setDownloadingFileId(null);
+  const handleDownload = (file: ActivationFile) => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      showToast('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại', 'error', 3500);
+      return;
     }
+
+    const link = document.createElement('a');
+    link.href = `${API_BASE_URL}/activation/download/${file.id}?token=${encodeURIComponent(token)}`;
+    link.download = file.originalName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const handleDelete = async (id: number) => {
@@ -195,48 +192,11 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
                       <div className="relative">
                         <button
                           onClick={() => handleDownload(f)}
-                          disabled={downloadingFileId === f.id}
-                          className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors disabled:opacity-50"
+                          className="p-2 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors"
                           title="Tải xuống"
                         >
                           <Download className="w-4 h-4" />
                         </button>
-                        {downloadingFileId === f.id && downloadProgress !== null && (
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.8 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="absolute inset-0 flex items-center justify-center"
-                          >
-                            <div className="absolute inset-0 bg-indigo-50 rounded-lg"></div>
-                            <div className="relative flex flex-col items-center justify-center">
-                              <svg className="w-4 h-4 text-indigo-500" viewBox="0 0 36 36">
-                                <circle
-                                  cx="18"
-                                  cy="18"
-                                  r="16"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  opacity="0.2"
-                                />
-                                <circle
-                                  cx="18"
-                                  cy="18"
-                                  r="16"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeDasharray={`${downloadProgress * 1.005} 100.5`}
-                                  strokeLinecap="round"
-                                  style={{ transition: 'stroke-dasharray 0.3s ease' }}
-                                />
-                              </svg>
-                              <span className="text-[9px] font-bold text-indigo-600 mt-0.5">
-                                {downloadProgress}%
-                              </span>
-                            </div>
-                          </motion.div>
-                        )}
                       </div>
                       {isAdmin && (
                       <button
