@@ -55,13 +55,15 @@ const logDatabaseTarget = (config: Record<string, any>) => {
 
 const basePoolConfig = {
   ssl: { rejectUnauthorized: false },
-  max: Math.max(1, Number(process.env.DB_POOL_MAX || 3)),
+  max: Math.max(1, Number(process.env.DB_POOL_MAX || 1)),
   keepAlive: true,
   keepAliveInitialDelayMillis: 30000,
   connectionTimeoutMillis: 10000,
   acquireTimeoutMillis: 15000,
   idleTimeoutMillis: 30000,
 };
+
+const hasDatabaseConfig = Boolean(process.env.DATABASE_URL || process.env.DB_HOST || TEST_DB_URL);
 
 // Database configuration
 const dbConfig = process.env.DATABASE_URL 
@@ -75,7 +77,9 @@ const dbConfig = process.env.DATABASE_URL
         password: process.env.DB_PASSWORD ? process.env.DB_PASSWORD.trim() : '',
         database: process.env.DB_NAME ? process.env.DB_NAME.trim() : 'postgres',
       }
-    : { ...basePoolConfig, connectionString: normalizeConnectionString(TEST_DB_URL) };
+    : TEST_DB_URL
+      ? { ...basePoolConfig, connectionString: normalizeConnectionString(TEST_DB_URL) }
+      : { ...basePoolConfig, connectionString: '' };
 
 logDatabaseTarget(dbConfig);
 
@@ -198,7 +202,7 @@ export const startDatabaseKeepAlive = () => {
 };
 
 export const isUsingDatabase = () => {
-  return process.env.DATABASE_URL || process.env.DB_HOST || TEST_DB_URL;
+  return hasDatabaseConfig;
 };
 
 export default pool;
