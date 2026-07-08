@@ -47,7 +47,11 @@ function getClientIp(req: any): string | null {
 }
 
 function shouldSkipPath(path: string): boolean {
-  return path === "/api/health" || path === "/api/system/audit-logs";
+  return path === "/api/health"
+    || path === "/api/system/audit-logs"
+    || path === "/api/sync/restore-status"
+    || path === "/api/sync/agent-online"
+    || path === "/api/task";
 }
 
 export async function writeAudit(
@@ -64,7 +68,7 @@ export async function writeAudit(
 }
 
 export function auditApiRequestMiddleware(req: any, res: any, next: any) {
-  if (!req.path?.startsWith("/api/") || req.method === "OPTIONS" || shouldSkipPath(req.path)) {
+  if (!req.path?.startsWith("/api/") || req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS" || shouldSkipPath(req.path)) {
     return next();
   }
 

@@ -55,9 +55,11 @@ const logDatabaseTarget = (config: Record<string, any>) => {
 
 const basePoolConfig = {
   ssl: { rejectUnauthorized: false },
+  max: Math.max(1, Number(process.env.DB_POOL_MAX || 3)),
   keepAlive: true,
   keepAliveInitialDelayMillis: 30000,
   connectionTimeoutMillis: 10000,
+  acquireTimeoutMillis: 15000,
   idleTimeoutMillis: 30000,
 };
 
@@ -90,6 +92,8 @@ const RECOVERABLE_DB_ERROR_CODES = new Set([
   'EPIPE',
   'ENOTFOUND',
   'EAI_AGAIN',
+  'ECHECKOUTTIMEOUT',
+  'EDBHANDLEREXITED',
 ]);
 
 const isRecoverableDbError = (err: any) => {
@@ -103,6 +107,8 @@ const isRecoverableDbError = (err: any) => {
     'server closed the connection unexpectedly',
     'client has encountered a connection error',
     'timeout expired',
+    'timeout exceeded',
+    'unable to check out connection',
     'read econnreset',
     'socket hang up',
   ].some((text) => message.includes(text));
