@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as path from "path";
 
-const STREAM_HIGH_WATER_MARK = 1024 * 1024; // 1MB chunk size for high-speed I/O
+const STREAM_HIGH_WATER_MARK = 4 * 1024 * 1024; // 4MB chunk size for high-throughput downloads
 
 const fallbackFileName = (fileName: string) => {
   const baseName = path.basename(fileName || "download");
@@ -16,6 +16,9 @@ export function streamFileDownload(res: any, filePath: string, fileName: string)
   res.setHeader("Content-Type", "application/octet-stream");
   res.setHeader("Content-Disposition", `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`);
   res.setHeader("Accept-Ranges", "bytes");
+  res.setHeader("Cache-Control", "private, max-age=3600");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Accel-Buffering", "no");
 
   const req = res.req;
   const rangeHeader = req?.headers?.range;
