@@ -206,6 +206,23 @@ const getOrCreateFolderPath = async (userId: number, baseFolderId: number | null
   return parentId;
 };
 
+const insertDriveFiles = async (records: Array<{ userId: number; folderId: number | null; originalName: string; storedName: string; mimeType: string | null; fileSize: number; note: string | null }>) => {
+  if (records.length === 0) return [];
+  const values: any[] = [];
+  const placeholders = records.map((record, index) => {
+    const offset = index * 7;
+    values.push(record.userId, record.folderId, record.originalName, record.storedName, record.mimeType, record.fileSize, record.note);
+    return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`;
+  }).join(", ");
+  const { rows } = await pool.query(
+    `INSERT INTO drive_files (user_id, folder_id, original_name, stored_name, mime_type, file_size, note)
+     VALUES ${placeholders}
+     RETURNING id, original_name, mime_type, file_size, note, created_at, deleted_at`,
+    values
+  );
+  return rows;
+};
+
 driveRouter.get("/api/drive/usage", authenticateToken, async (req: any, res) => {
   if (!isUsingDatabase()) return res.json({ activeBytes: 0, trashBytes: 0, totalBytes: 0, activeFiles: 0, trashFiles: 0, quotaBytes: DRIVE_QUOTA_BYTES });
 
@@ -481,22 +498,25 @@ driveRouter.post("/api/drive/upload", authenticateToken, handleDriveUpload, asyn
       });
     }
 
-    const inserted = [];
     const relativePaths = Array.isArray(req.body?.relativePaths) ? req.body.relativePaths : req.body?.relativePaths ? [req.body.relativePaths] : [];
+    const records = [];
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const relativePath = String(relativePaths[i] || "").replace(/\\/g, "/");
       const parts = relativePath.split("/").filter(Boolean);
       const folderPath = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
       const targetFolderId = folderPath ? await getOrCreateFolderPath(req.user.id, folderId, folderPath) : folderId;
-      const { rows } = await pool.query(
-        `INSERT INTO drive_files (user_id, folder_id, original_name, stored_name, mime_type, file_size, note)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id, original_name, mime_type, file_size, note, created_at, deleted_at`,
-        [req.user.id, targetFolderId, parts[parts.length - 1] || file.originalname, file.filename, file.mimetype || null, file.size, note]
-      );
-      inserted.push(rows[0]);
+      records.push({
+        userId: req.user.id,
+        folderId: targetFolderId,
+        originalName: parts[parts.length - 1] || file.originalname,
+        storedName: file.filename,
+        mimeType: file.mimetype || null,
+        fileSize: file.size,
+        note,
+      });
     }
+    const inserted = await insertDriveFiles(records);
     res.status(201).json(files.length === 1 ? inserted[0] : inserted);
   } catch (err: any) {
     for (const file of files) if (fs.existsSync(file.path)) fs.unlinkSync(file.path);

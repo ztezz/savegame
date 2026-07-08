@@ -264,6 +264,8 @@ const DriveTab: React.FC = () => {
       setSelectedUploadFiles([]);
       setNote('');
       setUploadModalOpen(false);
+      setUploading(false);
+      setUploadStatus('');
       await fetchFiles();
     } catch (err: any) {
       showToast(err.response?.data?.error || err.message || 'Upload Drive thất bại', 'error');
