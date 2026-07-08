@@ -46,7 +46,7 @@ export const authenticateToken = async (req: any, res: any, next: any) => {
   }
 
   // --- JWT Bearer auth (web UI) ---
-  const queryDownloadToken = req.method === 'GET' && req.path.startsWith('/api/drive/download/') ? String(req.query?.token || '') : '';
+  const queryDownloadToken = req.method === 'GET' && req.query?.token ? String(req.query.token) : '';
   const token = (authHeader && authHeader.split(' ')[1]) || queryDownloadToken;
 
   if (!token) {
