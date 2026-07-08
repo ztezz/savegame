@@ -106,6 +106,7 @@ const DriveTab: React.FC = () => {
   const [renameState, setRenameState] = useState<RenameState>(null);
   const [renameSaving, setRenameSaving] = useState(false);
   const cancelUploadRef = useRef(false);
+  const activeUploadXhrRef = useRef<XMLHttpRequest | null>(null);
   const activeUploadSessionsRef = useRef<string[]>([]);
 
   const allItems = [
@@ -207,14 +208,37 @@ const DriveTab: React.FC = () => {
     setUploadStatus('Đang chuẩn bị upload...');
     setProgress(0);
     try {
-      const uploadChunkWithRetry = async (sessionId: string, chunkIndex: number, totalChunks: number, chunk: Blob) => {
+      const uploadChunk = (sessionId: string, chunkIndex: number, totalChunks: number, chunk: Blob, onProgress: (loaded: number) => void) => new Promise<void>((resolve, reject) => {
+        const token = localStorage.getItem('token');
+        const xhr = new XMLHttpRequest();
+        activeUploadXhrRef.current = xhr;
+        xhr.open('POST', `${API_BASE_URL}/drive/upload/chunk?sessionId=${encodeURIComponent(sessionId)}&chunkIndex=${chunkIndex}&totalChunks=${totalChunks}`);
+        xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+        if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) onProgress(event.loaded);
+        };
+        xhr.onload = () => {
+          activeUploadXhrRef.current = null;
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error(xhr.responseText || `Upload chunk failed with status ${xhr.status}`));
+        };
+        xhr.onerror = () => {
+          activeUploadXhrRef.current = null;
+          reject(new Error('Upload chunk failed - Network error'));
+        };
+        xhr.onabort = () => {
+          activeUploadXhrRef.current = null;
+          reject(new Error('Upload đã hủy'));
+        };
+        xhr.send(chunk);
+      });
+
+      const uploadChunkWithRetry = async (sessionId: string, chunkIndex: number, totalChunks: number, chunk: Blob, onProgress: (loaded: number) => void) => {
         let lastError: any;
         for (let attempt = 1; attempt <= 3; attempt++) {
           try {
-            await api.post('/drive/upload/chunk', chunk, {
-              params: { sessionId, chunkIndex, totalChunks },
-              headers: { 'Content-Type': 'application/octet-stream' },
-            });
+            await uploadChunk(sessionId, chunkIndex, totalChunks, chunk, onProgress);
             return;
           } catch (err) {
             lastError = err;
@@ -245,7 +269,11 @@ const DriveTab: React.FC = () => {
           const start = chunkIndex * chunkSize;
           const end = Math.min(start + chunkSize, item.file.size);
           const chunk = item.file.slice(start, end);
-          await uploadChunkWithRetry(sessionId, chunkIndex, totalChunks, chunk);
+          await uploadChunkWithRetry(sessionId, chunkIndex, totalChunks, chunk, (loaded) => {
+            const bytesUploadedForFile = start + loaded;
+            const fileProgress = item.file.size > 0 ? Math.min(bytesUploadedForFile / item.file.size, 1) : 1;
+            setProgress(Math.round(((uploadedFiles + fileProgress) / uploadFilesInput.length) * 100));
+          });
           const fileProgress = totalChunks > 0 ? (chunkIndex + 1) / totalChunks : 1;
           setProgress(Math.round(((uploadedFiles + fileProgress) / uploadFilesInput.length) * 100));
         }
@@ -276,6 +304,7 @@ const DriveTab: React.FC = () => {
 
   const cancelUpload = () => {
     cancelUploadRef.current = true;
+    activeUploadXhrRef.current?.abort();
     setUploadStatus('Đang hủy upload...');
   };
 
