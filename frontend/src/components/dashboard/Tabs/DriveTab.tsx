@@ -208,81 +208,50 @@ const DriveTab: React.FC = () => {
     setUploadStatus('Đang chuẩn bị upload...');
     setProgress(0);
     try {
-      const uploadChunk = (sessionId: string, chunkIndex: number, totalChunks: number, chunk: Blob, onProgress: (loaded: number) => void) => new Promise<void>((resolve, reject) => {
+      const uploadDirect = (items: UploadItem[]) => new Promise<void>((resolve, reject) => {
         const token = localStorage.getItem('token');
         const xhr = new XMLHttpRequest();
         activeUploadXhrRef.current = xhr;
-        xhr.open('POST', `${API_BASE_URL}/drive/upload/chunk?sessionId=${encodeURIComponent(sessionId)}&chunkIndex=${chunkIndex}&totalChunks=${totalChunks}`);
-        xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+        const formData = new FormData();
+        for (const item of items) {
+          formData.append('files', item.file);
+          formData.append('relativePaths', item.relativePath || item.file.webkitRelativePath || item.file.name);
+        }
+        if (note.trim()) formData.append('note', note.trim());
+        if (currentFolderId) formData.append('folderId', String(currentFolderId));
+
+        xhr.open('POST', `${API_BASE_URL}/drive/upload`);
         if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
         xhr.upload.onprogress = (event) => {
-          if (event.lengthComputable) onProgress(event.loaded);
+          if (event.lengthComputable) setProgress(Math.min(99, Math.round((event.loaded / event.total) * 100)));
         };
         xhr.onload = () => {
           activeUploadXhrRef.current = null;
-          if (xhr.status >= 200 && xhr.status < 300) resolve();
-          else reject(new Error(xhr.responseText || `Upload chunk failed with status ${xhr.status}`));
+          if (xhr.status >= 200 && xhr.status < 300) {
+            setProgress(100);
+            resolve();
+          } else {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              reject(new Error(data.error || xhr.responseText || `Upload failed with status ${xhr.status}`));
+            } catch {
+              reject(new Error(xhr.responseText || `Upload failed with status ${xhr.status}`));
+            }
+          }
         };
         xhr.onerror = () => {
           activeUploadXhrRef.current = null;
-          reject(new Error('Upload chunk failed - Network error'));
+          reject(new Error('Upload failed - Network error'));
         };
         xhr.onabort = () => {
           activeUploadXhrRef.current = null;
           reject(new Error('Upload đã hủy'));
         };
-        xhr.send(chunk);
+        xhr.send(formData);
       });
 
-      const uploadChunkWithRetry = async (sessionId: string, chunkIndex: number, totalChunks: number, chunk: Blob, onProgress: (loaded: number) => void) => {
-        let lastError: any;
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          try {
-            await uploadChunk(sessionId, chunkIndex, totalChunks, chunk, onProgress);
-            return;
-          } catch (err) {
-            lastError = err;
-            if (attempt < 3) await new Promise((resolve) => window.setTimeout(resolve, attempt * 800));
-          }
-        }
-        throw lastError;
-      };
-
-      let uploadedFiles = 0;
-      for (const item of uploadFilesInput) {
-        if (cancelUploadRef.current) throw new Error('Upload đã hủy');
-        setUploadStatus(`Đang upload ${item.file.name}`);
-        const init = await api.post('/drive/upload/init', {
-          fileName: item.file.name,
-          fileSize: item.file.size,
-          mimeType: item.file.type,
-          note: note.trim(),
-          relativePath: item.relativePath || item.file.webkitRelativePath || item.file.name,
-          folderId: currentFolderId,
-        });
-        const { sessionId, chunkSize } = init.data;
-        activeUploadSessionsRef.current.push(sessionId);
-        const totalChunks = Math.ceil(item.file.size / chunkSize);
-
-        for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-          if (cancelUploadRef.current) throw new Error('Upload đã hủy');
-          const start = chunkIndex * chunkSize;
-          const end = Math.min(start + chunkSize, item.file.size);
-          const chunk = item.file.slice(start, end);
-          await uploadChunkWithRetry(sessionId, chunkIndex, totalChunks, chunk, (loaded) => {
-            const bytesUploadedForFile = start + loaded;
-            const fileProgress = item.file.size > 0 ? Math.min(bytesUploadedForFile / item.file.size, 1) : 1;
-            setProgress(Math.round(((uploadedFiles + fileProgress) / uploadFilesInput.length) * 100));
-          });
-          const fileProgress = totalChunks > 0 ? (chunkIndex + 1) / totalChunks : 1;
-          setProgress(Math.round(((uploadedFiles + fileProgress) / uploadFilesInput.length) * 100));
-        }
-
-        await api.post('/drive/upload/finalize', { sessionId });
-        activeUploadSessionsRef.current = activeUploadSessionsRef.current.filter((id) => id !== sessionId);
-        uploadedFiles++;
-        setProgress(Math.round((uploadedFiles / uploadFilesInput.length) * 100));
-      }
+      setUploadStatus(uploadFilesInput.length === 1 ? `Đang upload ${uploadFilesInput[0].file.name}` : `Đang upload ${uploadFilesInput.length} file`);
+      await uploadDirect(uploadFilesInput);
       const folderCount = new Set(uploadFilesInput.map((item) => (item.relativePath || item.file.webkitRelativePath || '').split('/').slice(0, -1).join('/')).filter(Boolean)).size;
       showToast(folderCount ? `Đã tải ${uploadFilesInput.length} file trong ${folderCount} thư mục` : `Đã tải ${uploadFilesInput.length} file lên Drive`, 'success');
       setSelectedUploadFiles([]);
@@ -292,9 +261,6 @@ const DriveTab: React.FC = () => {
     } catch (err: any) {
       showToast(err.response?.data?.error || err.message || 'Upload Drive thất bại', 'error');
     } finally {
-      if (cancelUploadRef.current && activeUploadSessionsRef.current.length > 0) {
-        await Promise.all(activeUploadSessionsRef.current.map((sessionId) => api.delete(`/drive/upload/${sessionId}`).catch(() => undefined)));
-      }
       activeUploadSessionsRef.current = [];
       setUploading(false);
       setUploadStatus('');
