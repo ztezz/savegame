@@ -5,6 +5,7 @@ import { pool, isUsingDatabase } from "../config/database.js";
 import { upload, UPLOADS_DIR_PATH } from "../config/multer.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { Game, Save } from "../database/types.js";
+import { streamFileDownload } from "../utils/download.js";
 
 // Mock data (for demo mode)
 let games: Game[] = [];
@@ -227,7 +228,7 @@ savesRouter.get("/api/save/download/:id", authenticateToken, async (req: any, re
       
       const fileName = `${save.game_name}_v${save.version}${path.extname(save.file_path)}`;
       console.log(`✅ Downloading: ${fileName}`);
-      return res.download(filePath, fileName);
+      return streamFileDownload(res, filePath, fileName);
     } catch (err) {
       console.error('❌ Download database error:', err);
       return res.status(500).json({ error: "Database error" });
@@ -246,7 +247,7 @@ savesRouter.get("/api/save/download/:id", authenticateToken, async (req: any, re
     }
 
     const filePath = path.join(UPLOADS_DIR_PATH, save.filePath);
-    return res.download(filePath, `${game.gameName}_v${save.version}${path.extname(save.filePath)}`);
+    return streamFileDownload(res, filePath, `${game.gameName}_v${save.version}${path.extname(save.filePath)}`);
   }
 });
 

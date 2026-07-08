@@ -4,6 +4,7 @@ import * as fs from "fs";
 import { AGENT_VERSION, AGENT_EXE_PATH } from "../config/environment.js";
 import { pool, isUsingDatabase } from "../config/database.js";
 import { UPLOADS_DIR_PATH } from "../config/multer.js";
+import { streamFileDownload } from "../utils/download.js";
 
 export const agentDownloadRouter = Router();
 
@@ -58,17 +59,5 @@ agentDownloadRouter.get("/api/agent/download", (req, res) => {
     });
   }
 
-  const stat = fs.statSync(exePath);
-  res.setHeader("Content-Disposition", `attachment; filename="${EXE_NAME}"`);
-  res.setHeader("Content-Type", "application/octet-stream");
-  res.setHeader("Content-Length", stat.size);
-
-  const stream = fs.createReadStream(exePath);
-  stream.on("error", (err) => {
-    console.error("❌ Agent download stream error:", err);
-    if (!res.headersSent) {
-      res.status(500).json({ error: "Download failed" });
-    }
-  });
-  stream.pipe(res);
+  return streamFileDownload(res, exePath, EXE_NAME);
 });

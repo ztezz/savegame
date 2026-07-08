@@ -10,6 +10,7 @@ import { DRIVE_QUOTA_BYTES, MAX_FILE_SIZE } from "../config/environment.js";
 import { UPLOADS_DIR_PATH } from "../config/multer.js";
 import { getTempUploadDir, uploadSessions } from "../utils/uploads.js";
 import { UploadSession } from "../database/types.js";
+import { streamFileDownload } from "../utils/download.js";
 
 export const driveRouter = Router();
 
@@ -611,7 +612,7 @@ driveRouter.get("/api/drive/download/:id", authenticateToken, async (req: any, r
     const filePath = path.join(DRIVE_DIR, file.stored_name);
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Physical file not found" });
 
-    return res.download(filePath, file.original_name);
+    return streamFileDownload(res, filePath, file.original_name);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Drive download failed" });
   }
@@ -771,7 +772,7 @@ driveRouter.get("/api/drive/share/:token/download", async (req, res) => {
 
     const filePath = path.join(DRIVE_DIR, file.stored_name);
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Physical file not found" });
-    return res.download(filePath, file.original_name);
+    return streamFileDownload(res, filePath, file.original_name);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Drive share download failed" });
   }

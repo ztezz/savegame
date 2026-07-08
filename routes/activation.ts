@@ -7,6 +7,7 @@ import { upload, UPLOADS_DIR_PATH } from "../config/multer.js";
 import { authenticateToken, isAdmin } from "../middleware/auth.js";
 import { uploadSessions, getTempUploadDir } from "../utils/uploads.js";
 import { UploadSession } from "../database/types.js";
+import { streamFileDownload } from "../utils/download.js";
 
 const TEMP_UPLOADS_DIR = getTempUploadDir();
 
@@ -187,7 +188,7 @@ activationRouter.get("/api/activation/download/:id", authenticateToken, async (r
       const record = rows[0];
       if (!record) return res.status(404).json({ error: "File not found" });
       const filePath = path.join(UPLOADS_DIR_PATH, record.file_path);
-      return res.download(filePath, record.original_name);
+      return streamFileDownload(res, filePath, record.original_name);
     } catch (err) {
       res.status(500).json({ error: "Database error" });
     }
