@@ -211,8 +211,31 @@ export async function initializeSchema() {
       CREATE INDEX IF NOT EXISTS idx_drive_shares_token ON drive_shares(token);
       CREATE INDEX IF NOT EXISTS idx_drive_shares_file ON drive_shares(file_id);
 
+      CREATE TABLE IF NOT EXISTS community_rooms (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(80) NOT NULL UNIQUE,
+        description TEXT,
+        created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        is_locked BOOLEAN NOT NULL DEFAULT FALSE,
+        ai_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        deleted_at TIMESTAMP,
+        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      INSERT INTO community_rooms (id, name, description)
+      VALUES (1, 'Cộng đồng', 'Phòng chat chung cho mọi thành viên CloudSave')
+      ON CONFLICT (id) DO NOTHING;
+      SELECT setval(pg_get_serial_sequence('community_rooms', 'id'), GREATEST((SELECT MAX(id) FROM community_rooms), 1));
+      ALTER TABLE community_rooms ADD COLUMN IF NOT EXISTS description TEXT;
+      ALTER TABLE community_rooms ADD COLUMN IF NOT EXISTS is_locked BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE community_rooms ADD COLUMN IF NOT EXISTS ai_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+      ALTER TABLE community_rooms ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE community_rooms ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+      CREATE INDEX IF NOT EXISTS idx_community_rooms_deleted_sort ON community_rooms(deleted_at, sort_order, id);
+
       CREATE TABLE IF NOT EXISTS community_messages (
         id SERIAL PRIMARY KEY,
+        room_id INTEGER NOT NULL DEFAULT 1 REFERENCES community_rooms(id) ON DELETE CASCADE,
         user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
         message TEXT NOT NULL,
         sender_type VARCHAR(20) NOT NULL DEFAULT 'user',
@@ -223,6 +246,9 @@ export async function initializeSchema() {
         pinned_at TIMESTAMP,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
+      ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS room_id INTEGER DEFAULT 1 REFERENCES community_rooms(id) ON DELETE CASCADE;
+      UPDATE community_messages SET room_id = 1 WHERE room_id IS NULL;
+      ALTER TABLE community_messages ALTER COLUMN room_id SET NOT NULL;
       ALTER TABLE community_messages ALTER COLUMN user_id DROP NOT NULL;
       ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS sender_type VARCHAR(20) NOT NULL DEFAULT 'user';
       ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS display_name VARCHAR(100);
@@ -230,6 +256,7 @@ export async function initializeSchema() {
       ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS reactions_json JSONB NOT NULL DEFAULT '{}'::jsonb;
       ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMP;
       ALTER TABLE community_messages ADD COLUMN IF NOT EXISTS pinned_at TIMESTAMP;
+      CREATE INDEX IF NOT EXISTS idx_community_messages_room_id ON community_messages(room_id, id DESC);
       CREATE INDEX IF NOT EXISTS idx_community_messages_created ON community_messages(created_at DESC);
 
       CREATE TABLE IF NOT EXISTS community_bans (

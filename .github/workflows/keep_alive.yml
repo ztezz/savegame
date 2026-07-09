@@ -17,7 +17,7 @@ jobs:
         # Danh sách các tên miền cần ping
         DOMAINS=(
           "https://thzi-luugame.hf.space/api/health"
-          "https://thzi-chinraoto.hf.space/"
+          "https://thzi-chinraoto.hf.space/v1"
         )
         
         FAILED=0
