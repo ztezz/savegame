@@ -14,14 +14,27 @@ jobs:
     steps:
     - name: Send Ping Request
       run: |
-        echo "Dang ping vao backend..."
-        STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://thzi-luugame.hf.space/api/health)
-        echo "Backend tra ve HTTP Status Code: $STATUS_CODE"
+        # Danh sách các tên miền cần ping (cách nhau bởi khoảng trắng)
+        DOMAINS=(
+          "https://thzi-luugame.hf.space/api/health"
+          "https://thzi-chinraoto.hf.space"
+        )
         
-        # Kiểm tra nếu không phải HTTP 200 thì bắt workflow phải Fail
-        if [ "$STATUS_CODE" -ne 200 ]; then
-          echo "❌ Backend dang co van de (Status: $STATUS_CODE)!"
+        FAILED=0
+        for DOMAIN in "${DOMAINS[@]}"; do
+          echo "Dang ping vao $DOMAIN..."
+          STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$DOMAIN")
+          echo "Backend tra ve HTTP Status Code: $STATUS_CODE"
+          
+          if [ "$STATUS_CODE" -ne 200 ]; then
+            echo "❌ $DOMAIN dang co van de (Status: $STATUS_CODE)!"
+            FAILED=1
+          else
+            echo "✅ $DOMAIN hoat dong hoan hao."
+          fi
+          echo "-----------------------------------"
+        done
+        
+        if [ $FAILED -ne 0 ]; then
           exit 1
-        else
-          echo "✅ Backend hoat dong hoan hao."
         fi
