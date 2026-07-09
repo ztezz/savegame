@@ -14,7 +14,7 @@ jobs:
     steps:
     - name: Send Ping Request
       run: |
-        # Danh sách các tên miền cần ping (cách nhau bởi khoảng trắng)
+        # Danh sách các tên miền cần ping
         DOMAINS=(
           "https://thzi-luugame.hf.space/api/health"
           "https://thzi-chinraoto.hf.space/"
@@ -23,14 +23,17 @@ jobs:
         FAILED=0
         for DOMAIN in "${DOMAINS[@]}"; do
           echo "Dang ping vao $DOMAIN..."
-          STATUS_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$DOMAIN")
+          
+          # Thêm -L để tự động đi theo redirect (sửa lỗi 307)
+          STATUS_CODE=$(curl -sL -o /dev/null -w "%{http_code}" "$DOMAIN")
           echo "Backend tra ve HTTP Status Code: $STATUS_CODE"
           
-          if [ "$STATUS_CODE" -ne 200 ]; then
+          # Chấp nhận cả 200 (OK) và 401 (Unauthorized - tức là API hoạt động nhưng chặn vì thiếu key)
+          if [ "$STATUS_CODE" -eq 200 ] || [ "$STATUS_CODE" -eq 401 ]; then
+            echo "✅ $DOMAIN hoat dong hoan hao."
+          else
             echo "❌ $DOMAIN dang co van de (Status: $STATUS_CODE)!"
             FAILED=1
-          else
-            echo "✅ $DOMAIN hoat dong hoan hao."
           fi
           echo "-----------------------------------"
         done
