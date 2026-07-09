@@ -221,7 +221,7 @@ export async function initializeSchema() {
         ai_bot_name VARCHAR(80),
         ai_tone VARCHAR(30) NOT NULL DEFAULT 'default',
         ai_prompt TEXT,
-        ai_auto_reply BOOLEAN NOT NULL DEFAULT FALSE,
+        ai_auto_reply BOOLEAN NOT NULL DEFAULT TRUE,
         sort_order INTEGER NOT NULL DEFAULT 0,
         deleted_at TIMESTAMP,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -236,7 +236,9 @@ export async function initializeSchema() {
       ALTER TABLE community_rooms ADD COLUMN IF NOT EXISTS ai_bot_name VARCHAR(80);
       ALTER TABLE community_rooms ADD COLUMN IF NOT EXISTS ai_tone VARCHAR(30) NOT NULL DEFAULT 'default';
       ALTER TABLE community_rooms ADD COLUMN IF NOT EXISTS ai_prompt TEXT;
-      ALTER TABLE community_rooms ADD COLUMN IF NOT EXISTS ai_auto_reply BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE community_rooms ADD COLUMN IF NOT EXISTS ai_auto_reply BOOLEAN NOT NULL DEFAULT TRUE;
+      ALTER TABLE community_rooms ALTER COLUMN ai_auto_reply SET DEFAULT TRUE;
+      UPDATE community_rooms SET ai_auto_reply = TRUE WHERE ai_enabled = TRUE AND ai_auto_reply = FALSE;
       ALTER TABLE community_rooms ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE community_rooms ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
       CREATE INDEX IF NOT EXISTS idx_community_rooms_deleted_sort ON community_rooms(deleted_at, sort_order, id);

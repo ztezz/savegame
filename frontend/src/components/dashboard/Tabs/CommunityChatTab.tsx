@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Bot, Copy, Lock, MessageCircle, Pencil, Pin, Plus, Search, Send, Shield, Smile, Trash2, Users, X } from 'lucide-react';
-import api from '../../../utils/api';
+import api, { API_BASE_URL } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
 
 const telegramPattern = {
@@ -56,8 +56,9 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomDescription, setNewRoomDescription] = useState('');
   const [editingRoomId, setEditingRoomId] = useState<number | null>(null);
-  const [roomDraft, setRoomDraft] = useState({ name: '', description: '', isLocked: false, aiEnabled: true, aiBotName: '', aiTone: 'default', aiPrompt: '', aiAutoReply: false });
+  const [roomDraft, setRoomDraft] = useState({ name: '', description: '', isLocked: false, aiEnabled: true, aiBotName: '', aiTone: 'default', aiPrompt: '', aiAutoReply: true });
   const [unreadByRoom, setUnreadByRoom] = useState<Record<number, number>>({});
+  const [typingUsers, setTypingUsers] = useState<Record<number, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [creatingRoom, setCreatingRoom] = useState(false);
@@ -73,6 +74,8 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
   const activeRoomIdRef = useRef(activeRoomId);
   const roomCountsRef = useRef<Record<number, number>>({});
   const roomsInitializedRef = useRef(false);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const typingActiveRef = useRef(false);
   const isAdmin = currentUser?.role === 'Admin' || currentUser?.username === 'admin';
   const activeRoom = rooms.find((room) => room.id === activeRoomId);
   const roomLockedForUser = !!activeRoom?.is_locked && !isAdmin;
@@ -157,11 +160,54 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
     }
   };
 
+  const mergeIncomingMessage = (incoming: ChatMessage) => {
+    setMessages((current) => {
+      if (incoming.room_id && incoming.room_id !== activeRoomIdRef.current) return current;
+      if (current.some((item) => item.id === incoming.id)) return current;
+      const merged = [...current, incoming].slice(-200);
+      lastMessageIdRef.current = merged.length > 0 ? merged[merged.length - 1].id : 0;
+      return merged;
+    });
+    scrollToBottom();
+  };
+
   useEffect(() => {
     fetchRooms();
-    const timer = window.setInterval(fetchRooms, 8000);
+    const timer = window.setInterval(fetchRooms, 30000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    const events = new EventSource(`${API_BASE_URL}/community/events?token=${encodeURIComponent(token)}`);
+    events.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.type === 'message_created') {
+          if (payload.roomId === activeRoomIdRef.current) mergeIncomingMessage(payload.message);
+          fetchRooms();
+        }
+        if (payload.type === 'room_changed') fetchRooms();
+        if (payload.type === 'typing' && payload.userId !== currentUser?.id) {
+          setTypingUsers((current) => {
+            const names = new Set(current[payload.roomId] || []);
+            if (payload.typing) names.add(payload.displayName);
+            else names.delete(payload.displayName);
+            return { ...current, [payload.roomId]: Array.from(names) };
+          });
+          if (payload.typing) {
+            window.setTimeout(() => {
+              setTypingUsers((current) => ({ ...current, [payload.roomId]: (current[payload.roomId] || []).filter((name) => name !== payload.displayName) }));
+            }, 5000);
+          }
+        }
+      } catch {
+        // Ignore malformed event payloads.
+      }
+    };
+    return () => events.close();
+  }, [currentUser?.id]);
 
   useEffect(() => {
     activeRoomIdRef.current = activeRoomId;
@@ -171,6 +217,9 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
     setEditingText('');
     lastMessageIdRef.current = 0;
     setLoading(true);
+    setTypingUsers((current) => ({ ...current, [activeRoomId]: [] }));
+    typingActiveRef.current = false;
+    if (typingTimeoutRef.current) window.clearTimeout(typingTimeoutRef.current);
     setUnreadByRoom((current) => ({ ...current, [activeRoomId]: 0 }));
     fetchMessages(true);
     const timer = window.setInterval(() => fetchMessages(false), 4000);
@@ -195,6 +244,8 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
       });
       setMessage('');
       setReplyTo(null);
+      void api.post('/community/typing', { roomId: activeRoomId, typing: false }).catch(() => undefined);
+      typingActiveRef.current = false;
       scrollToBottom();
       fetchRooms();
     } catch (err: any) {
@@ -210,6 +261,20 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
     event.preventDefault();
     if (!message.trim() || sending) return;
     event.currentTarget.form?.requestSubmit();
+  };
+
+  const handleMessageChange = (value: string) => {
+    setMessage(value);
+    if (roomLockedForUser) return;
+    if (!typingActiveRef.current) {
+      typingActiveRef.current = true;
+      void api.post('/community/typing', { roomId: activeRoomId, typing: true }).catch(() => undefined);
+    }
+    if (typingTimeoutRef.current) window.clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = window.setTimeout(() => {
+      typingActiveRef.current = false;
+      void api.post('/community/typing', { roomId: activeRoomId, typing: false }).catch(() => undefined);
+    }, 2500);
   };
 
   const addEmoji = (emoji: string) => {
@@ -248,7 +313,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
       aiBotName: room.ai_bot_name || '',
       aiTone: room.ai_tone || 'default',
       aiPrompt: room.ai_prompt || '',
-      aiAutoReply: !!room.ai_auto_reply,
+      aiAutoReply: room.ai_auto_reply !== false,
     });
   };
 
@@ -418,6 +483,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
           </React.Fragment>;
         })}
         {sending && <div className="flex justify-end"><div className="rounded-full bg-white/80 px-4 py-2 text-xs font-bold text-sky-700 shadow-sm backdrop-blur">Đang gửi...</div></div>}
+        {(typingUsers[activeRoomId] || []).length > 0 && <div className="flex justify-start"><div className="rounded-full bg-white/85 px-4 py-2 text-xs font-bold text-slate-600 shadow-sm backdrop-blur">{typingUsers[activeRoomId].slice(0, 2).join(', ')} đang gõ...</div></div>}
         {aiTyping && <div className="flex justify-start"><div className="rounded-full bg-amber-50 px-4 py-2 text-xs font-bold text-amber-700 shadow-sm backdrop-blur">AI đang gõ...</div></div>}
         {showScrollButton && <button type="button" onClick={scrollToBottom} className="sticky bottom-3 left-full ml-auto flex h-10 w-10 items-center justify-center rounded-full bg-white text-sky-600 shadow-lg transition hover:bg-sky-50">↓</button>}
       </div>
@@ -438,7 +504,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
           </div>}
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
-          <textarea value={message} onChange={(e)=>setMessage(e.target.value)} onKeyDown={handleMessageKeyDown} maxLength={1000} rows={2} disabled={roomLockedForUser} placeholder={roomLockedForUser ? 'Phòng đang bị khóa' : 'Nhập tin nhắn... Enter để gửi, Shift+Enter để xuống dòng'} className="flex-1 resize-none rounded-[1.5rem] border border-sky-100 bg-white px-4 py-3 text-sm shadow-sm outline-none focus:border-sky-300 focus:ring-4 focus:ring-sky-100 disabled:bg-slate-100 disabled:text-slate-400" />
+          <textarea value={message} onChange={(e)=>handleMessageChange(e.target.value)} onKeyDown={handleMessageKeyDown} maxLength={1000} rows={2} disabled={roomLockedForUser} placeholder={roomLockedForUser ? 'Phòng đang bị khóa' : 'Nhập tin nhắn... Enter để gửi, Shift+Enter để xuống dòng'} className="flex-1 resize-none rounded-[1.5rem] border border-sky-100 bg-white px-4 py-3 text-sm shadow-sm outline-none focus:border-sky-300 focus:ring-4 focus:ring-sky-100 disabled:bg-slate-100 disabled:text-slate-400" />
           <button type="submit" disabled={!message.trim() || sending || roomLockedForUser} className="inline-flex items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-blue-600 px-5 py-3 text-white font-black shadow-lg shadow-sky-200 disabled:opacity-50 disabled:cursor-not-allowed gap-2 hover:from-sky-600 hover:to-blue-700"><Send className="w-4 h-4" />Gửi</button>
         </div>
       </form>

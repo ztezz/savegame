@@ -15,6 +15,20 @@ const DEFAULT_AI_SETTINGS = {
   humorLevel: "funny",
 };
 
+type CommunityEvent =
+  | { type: 'message_created'; roomId: number; message: any }
+  | { type: 'room_changed' }
+  | { type: 'typing'; roomId: number; userId: number; displayName: string; typing: boolean };
+
+const eventClients = new Set<any>();
+
+function broadcastCommunityEvent(event: CommunityEvent) {
+  const payload = `data: ${JSON.stringify(event)}\n\n`;
+  for (const client of eventClients) {
+    client.write(payload);
+  }
+}
+
 async function getActiveBan(userId: number) {
   const { rows } = await pool.query(
     `SELECT cb.user_id, cb.reason, cb.banned_until, cb.created_at, u.username, u.display_name
@@ -144,10 +158,10 @@ async function insertAiErrorMessage(roomId: number, error: string) {
   const { rows } = await pool.query(
     `INSERT INTO community_messages (room_id, user_id, message, sender_type, display_name)
      VALUES ($1, NULL, $2, 'ai', $3)
-     RETURNING id`,
+     RETURNING id, room_id, user_id, message, sender_type, display_name, created_at`,
     [roomId, message, 'AI System']
   );
-  return rows[0];
+  return { ...rows[0], username: 'ai-bot', role: 'AI' };
 }
 
 communityRouter.get("/api/community/bans", authenticateToken, isAdmin, async (_req: any, res) => {
@@ -217,6 +231,24 @@ communityRouter.delete("/api/community/bans/:userId", authenticateToken, isAdmin
   }
 });
 
+communityRouter.get("/api/community/events", authenticateToken, async (_req: any, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders?.();
+  res.write('event: ready\ndata: {"ok":true}\n\n');
+  eventClients.add(res);
+
+  const keepAlive = setInterval(() => {
+    res.write(': keep-alive\n\n');
+  }, 25000);
+
+  res.on('close', () => {
+    clearInterval(keepAlive);
+    eventClients.delete(res);
+  });
+});
+
 communityRouter.get("/api/community/rooms", authenticateToken, async (_req: any, res) => {
   if (!isUsingDatabase()) return res.json([]);
 
@@ -245,7 +277,7 @@ communityRouter.post("/api/community/rooms", authenticateToken, isAdmin, async (
   const aiBotName = String(req.body?.aiBotName || '').trim() || null;
   const aiTone = String(req.body?.aiTone || 'default').trim() || 'default';
   const aiPrompt = String(req.body?.aiPrompt || '').trim() || null;
-  const aiAutoReply = req.body?.aiAutoReply === true;
+  const aiAutoReply = req.body?.aiAutoReply !== false;
   if (!name) return res.status(400).json({ error: "Room name is required" });
   if (name.length > 80) return res.status(400).json({ error: "Room name is too long" });
   if (description && description.length > 240) return res.status(400).json({ error: "Room description is too long" });
@@ -260,6 +292,7 @@ communityRouter.post("/api/community/rooms", authenticateToken, isAdmin, async (
       [name, description, req.user.id, aiEnabled, aiBotName, aiTone, aiPrompt, aiAutoReply]
     );
     res.status(201).json({ ...rows[0], message_count: 0, latest_at: null });
+    broadcastCommunityEvent({ type: 'room_changed' });
   } catch (err: any) {
     const duplicate = err?.code === '23505';
     res.status(duplicate ? 409 : 500).json({ error: duplicate ? "Room name already exists" : err.message || "Failed to create chat room" });
@@ -276,7 +309,7 @@ communityRouter.patch("/api/community/rooms/:id", authenticateToken, isAdmin, as
   const aiBotName = String(req.body?.aiBotName || '').trim() || null;
   const aiTone = String(req.body?.aiTone || 'default').trim() || 'default';
   const aiPrompt = String(req.body?.aiPrompt || '').trim() || null;
-  const aiAutoReply = req.body?.aiAutoReply === true;
+  const aiAutoReply = req.body?.aiAutoReply !== false;
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid room id" });
   if (!name) return res.status(400).json({ error: "Room name is required" });
   if (name.length > 80) return res.status(400).json({ error: "Room name is too long" });
@@ -294,6 +327,7 @@ communityRouter.patch("/api/community/rooms/:id", authenticateToken, isAdmin, as
     );
     if (!rows[0]) return res.status(404).json({ error: "Room not found" });
     res.json(rows[0]);
+    broadcastCommunityEvent({ type: 'room_changed' });
   } catch (err: any) {
     const duplicate = err?.code === '23505';
     res.status(duplicate ? 409 : 500).json({ error: duplicate ? "Room name already exists" : err.message || "Failed to update chat room" });
@@ -315,8 +349,30 @@ communityRouter.delete("/api/community/rooms/:id", authenticateToken, isAdmin, a
     );
     if (!rows[0]) return res.status(404).json({ error: "Room not found" });
     res.json({ success: true });
+    broadcastCommunityEvent({ type: 'room_changed' });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to delete chat room" });
+  }
+});
+
+communityRouter.post("/api/community/typing", authenticateToken, async (req: any, res) => {
+  if (!isUsingDatabase()) return res.json({ success: true });
+  const roomId = Math.max(1, Number(req.body?.roomId || 1));
+  const typing = req.body?.typing !== false;
+
+  try {
+    const room = await ensureRoom(roomId);
+    if (!room) return res.status(404).json({ error: "Room not found" });
+    broadcastCommunityEvent({
+      type: 'typing',
+      roomId,
+      userId: req.user.id,
+      displayName: req.user.display_name || req.user.username,
+      typing,
+    });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to update typing state" });
   }
 });
 
@@ -410,17 +466,27 @@ communityRouter.post("/api/community/messages", authenticateToken, async (req: a
 
     const userMessage = { ...rows[0], username: req.user.username, display_name: req.user.display_name || req.user.username, role: req.user.role };
     res.status(201).json({ message: userMessage, aiMessage: null });
+    broadcastCommunityEvent({ type: 'message_created', roomId, message: userMessage });
+    broadcastCommunityEvent({ type: 'room_changed' });
 
     void (async () => {
       try {
         const mentionsAi = /@ai|@mây mặn|mây mặn/i.test(message);
         if (!room.ai_enabled || (!room.ai_auto_reply && !mentionsAi)) return;
         const aiReply = await generateAiReply(room);
-        if (aiReply) await insertAiMessage(room, aiReply);
+        if (aiReply) {
+          const aiMessage = await insertAiMessage(room, aiReply);
+          broadcastCommunityEvent({ type: 'message_created', roomId, message: aiMessage });
+          broadcastCommunityEvent({ type: 'room_changed' });
+        }
       } catch (aiErr: any) {
         const message = aiErr?.message || String(aiErr);
         console.warn('AI chat reply failed:', message);
-        await insertAiErrorMessage(roomId, message.slice(0, 220)).catch(() => undefined);
+        const aiErrorMessage = await insertAiErrorMessage(roomId, message.slice(0, 220)).catch(() => null);
+        if (aiErrorMessage) {
+          broadcastCommunityEvent({ type: 'message_created', roomId, message: aiErrorMessage });
+          broadcastCommunityEvent({ type: 'room_changed' });
+        }
       }
     })();
   } catch (err: any) {
