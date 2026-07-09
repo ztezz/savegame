@@ -32,8 +32,28 @@ async function getAiSettings() {
 }
 
 async function ensureRoom(roomId: number) {
-  const { rows } = await pool.query('SELECT id, name, is_locked, ai_enabled FROM community_rooms WHERE id = $1 AND deleted_at IS NULL', [roomId]);
+  const { rows } = await pool.query(
+    `SELECT id, name, is_locked, ai_enabled, ai_bot_name, ai_tone, ai_prompt, ai_auto_reply
+     FROM community_rooms
+     WHERE id = $1 AND deleted_at IS NULL`,
+    [roomId]
+  );
   return rows[0] || null;
+}
+
+function buildRoomAiPrompt(settings: any, room: any) {
+  const botName = room.ai_bot_name || settings.botName || DEFAULT_AI_SETTINGS.botName;
+  const toneMap: Record<string, string> = {
+    default: 'thân thiện, hài hước duyên dáng, hơi cà khịa nhẹ nhưng không xúc phạm',
+    support: 'rõ ràng, kiên nhẫn, ưu tiên hướng dẫn từng bước và giải quyết vấn đề',
+    fun: 'vui vẻ, năng lượng cao, dí dỏm nhưng vẫn hữu ích',
+    serious: 'ngắn gọn, chính xác, đi thẳng vào vấn đề',
+    gaming: 'thoải mái kiểu game thủ, vui nhưng không toxic',
+  };
+  const tone = toneMap[String(room.ai_tone || 'default')] || toneMap.default;
+  const customPrompt = String(room.ai_prompt || '').trim();
+
+  return customPrompt || `Bạn là ${botName}, AI trong phòng chat ${room.name} của CloudSave. Trả lời bằng tiếng Việt, ${tone}. Không quá 3 câu. Nếu người dùng hỏi kỹ thuật thì trả lời hữu ích trước rồi mới pha trò.`;
 }
 
 async function fetchRecentChatContext(roomId: number, limit = 12) {
@@ -53,13 +73,14 @@ async function fetchRecentChatContext(roomId: number, limit = 12) {
   }));
 }
 
-async function generateAiReply(roomId: number, roomName: string) {
+async function generateAiReply(room: any) {
   const settings = await getAiSettings();
   if (!settings.enabled || !settings.apiKey) return null;
   if (settings.apiKey === '********') return null;
 
   const baseUrl = String(settings.baseUrl || DEFAULT_AI_SETTINGS.baseUrl).replace(/\/+$/, '');
-  const context = await fetchRecentChatContext(roomId);
+  const context = await fetchRecentChatContext(room.id);
+  const systemPrompt = buildRoomAiPrompt(settings, room);
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -74,7 +95,7 @@ async function generateAiReply(roomId: number, roomName: string) {
       messages: [
         {
           role: 'system',
-          content: `Bạn là ${settings.botName || DEFAULT_AI_SETTINGS.botName}, AI trong phòng chat ${roomName} của CloudSave. Trả lời bằng tiếng Việt, thân thiện, hài hước duyên dáng, hơi cà khịa nhẹ nhưng không xúc phạm. Không quá 3 câu. Nếu người dùng hỏi kỹ thuật thì trả lời hữu ích trước rồi mới pha trò.`,
+          content: systemPrompt,
         },
         ...context,
       ],
@@ -106,13 +127,14 @@ async function generateAiReply(roomId: number, roomName: string) {
   return reply;
 }
 
-async function insertAiMessage(roomId: number, message: string) {
+async function insertAiMessage(room: any, message: string) {
   const settings = await getAiSettings();
+  const botName = room.ai_bot_name || settings.botName || DEFAULT_AI_SETTINGS.botName;
   const { rows } = await pool.query(
     `INSERT INTO community_messages (room_id, user_id, message, sender_type, display_name)
      VALUES ($1, NULL, $2, 'ai', $3)
      RETURNING id, room_id, user_id, message, sender_type, display_name, created_at`,
-    [roomId, message, settings.botName || DEFAULT_AI_SETTINGS.botName]
+    [room.id, message, botName]
   );
   return { ...rows[0], username: 'ai-bot', role: 'AI' };
 }
@@ -200,7 +222,7 @@ communityRouter.get("/api/community/rooms", authenticateToken, async (_req: any,
 
   try {
     const { rows } = await pool.query(
-      `SELECT cr.id, cr.name, cr.description, cr.is_locked, cr.ai_enabled, cr.sort_order, cr.created_at,
+      `SELECT cr.id, cr.name, cr.description, cr.is_locked, cr.ai_enabled, cr.ai_bot_name, cr.ai_tone, cr.ai_prompt, cr.ai_auto_reply, cr.sort_order, cr.created_at,
               COUNT(cm.id)::int AS message_count,
               MAX(cm.created_at) AS latest_at
        FROM community_rooms cr
@@ -220,16 +242,22 @@ communityRouter.post("/api/community/rooms", authenticateToken, isAdmin, async (
   const name = String(req.body?.name || '').trim();
   const description = String(req.body?.description || '').trim() || null;
   const aiEnabled = req.body?.aiEnabled !== false;
+  const aiBotName = String(req.body?.aiBotName || '').trim() || null;
+  const aiTone = String(req.body?.aiTone || 'default').trim() || 'default';
+  const aiPrompt = String(req.body?.aiPrompt || '').trim() || null;
+  const aiAutoReply = req.body?.aiAutoReply === true;
   if (!name) return res.status(400).json({ error: "Room name is required" });
   if (name.length > 80) return res.status(400).json({ error: "Room name is too long" });
   if (description && description.length > 240) return res.status(400).json({ error: "Room description is too long" });
+  if (aiBotName && aiBotName.length > 80) return res.status(400).json({ error: "AI bot name is too long" });
+  if (aiPrompt && aiPrompt.length > 1500) return res.status(400).json({ error: "AI prompt is too long" });
 
   try {
     const { rows } = await pool.query(
-      `INSERT INTO community_rooms (name, description, created_by, ai_enabled, sort_order)
-       VALUES ($1, $2, $3, $4, COALESCE((SELECT MAX(sort_order) + 1 FROM community_rooms), 0))
-       RETURNING id, name, description, is_locked, ai_enabled, sort_order, created_at`,
-      [name, description, req.user.id, aiEnabled]
+      `INSERT INTO community_rooms (name, description, created_by, ai_enabled, ai_bot_name, ai_tone, ai_prompt, ai_auto_reply, sort_order)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE((SELECT MAX(sort_order) + 1 FROM community_rooms), 0))
+       RETURNING id, name, description, is_locked, ai_enabled, ai_bot_name, ai_tone, ai_prompt, ai_auto_reply, sort_order, created_at`,
+      [name, description, req.user.id, aiEnabled, aiBotName, aiTone, aiPrompt, aiAutoReply]
     );
     res.status(201).json({ ...rows[0], message_count: 0, latest_at: null });
   } catch (err: any) {
@@ -245,18 +273,24 @@ communityRouter.patch("/api/community/rooms/:id", authenticateToken, isAdmin, as
   const description = String(req.body?.description || '').trim() || null;
   const isLocked = req.body?.isLocked === true;
   const aiEnabled = req.body?.aiEnabled !== false;
+  const aiBotName = String(req.body?.aiBotName || '').trim() || null;
+  const aiTone = String(req.body?.aiTone || 'default').trim() || 'default';
+  const aiPrompt = String(req.body?.aiPrompt || '').trim() || null;
+  const aiAutoReply = req.body?.aiAutoReply === true;
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid room id" });
   if (!name) return res.status(400).json({ error: "Room name is required" });
   if (name.length > 80) return res.status(400).json({ error: "Room name is too long" });
   if (description && description.length > 240) return res.status(400).json({ error: "Room description is too long" });
+  if (aiBotName && aiBotName.length > 80) return res.status(400).json({ error: "AI bot name is too long" });
+  if (aiPrompt && aiPrompt.length > 1500) return res.status(400).json({ error: "AI prompt is too long" });
 
   try {
     const { rows } = await pool.query(
       `UPDATE community_rooms
-       SET name = $1, description = $2, is_locked = $3, ai_enabled = $4
-       WHERE id = $5 AND deleted_at IS NULL
-       RETURNING id, name, description, is_locked, ai_enabled, sort_order, created_at`,
-      [name, description, isLocked, aiEnabled, id]
+       SET name = $1, description = $2, is_locked = $3, ai_enabled = $4, ai_bot_name = $5, ai_tone = $6, ai_prompt = $7, ai_auto_reply = $8
+       WHERE id = $9 AND deleted_at IS NULL
+       RETURNING id, name, description, is_locked, ai_enabled, ai_bot_name, ai_tone, ai_prompt, ai_auto_reply, sort_order, created_at`,
+      [name, description, isLocked, aiEnabled, aiBotName, aiTone, aiPrompt, aiAutoReply, id]
     );
     if (!rows[0]) return res.status(404).json({ error: "Room not found" });
     res.json(rows[0]);
@@ -379,9 +413,10 @@ communityRouter.post("/api/community/messages", authenticateToken, async (req: a
 
     void (async () => {
       try {
-        if (!room.ai_enabled) return;
-        const aiReply = await generateAiReply(roomId, room.name);
-        if (aiReply) await insertAiMessage(roomId, aiReply);
+        const mentionsAi = /@ai|@mây mặn|mây mặn/i.test(message);
+        if (!room.ai_enabled || (!room.ai_auto_reply && !mentionsAi)) return;
+        const aiReply = await generateAiReply(room);
+        if (aiReply) await insertAiMessage(room, aiReply);
       } catch (aiErr: any) {
         const message = aiErr?.message || String(aiErr);
         console.warn('AI chat reply failed:', message);

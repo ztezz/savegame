@@ -34,6 +34,10 @@ interface ChatRoom {
   description?: string | null;
   is_locked?: boolean;
   ai_enabled?: boolean;
+  ai_bot_name?: string | null;
+  ai_tone?: string | null;
+  ai_prompt?: string | null;
+  ai_auto_reply?: boolean;
   sort_order?: number;
   message_count?: number;
   latest_at?: string | null;
@@ -52,7 +56,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomDescription, setNewRoomDescription] = useState('');
   const [editingRoomId, setEditingRoomId] = useState<number | null>(null);
-  const [roomDraft, setRoomDraft] = useState({ name: '', description: '', isLocked: false, aiEnabled: true });
+  const [roomDraft, setRoomDraft] = useState({ name: '', description: '', isLocked: false, aiEnabled: true, aiBotName: '', aiTone: 'default', aiPrompt: '', aiAutoReply: false });
   const [unreadByRoom, setUnreadByRoom] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -178,7 +182,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
     const text = message.trim();
     if (!text || sending || roomLockedForUser) return;
     setSending(true);
-    const mentionsAi = /@ai|@mây mặn|mây mặn/i.test(text);
+    const mentionsAi = /@ai|@mây mặn|mây mặn/i.test(text) || !!activeRoom?.ai_auto_reply;
     if (mentionsAi) setAiTyping(true);
     try {
       const res = await api.post('/community/messages', { roomId: activeRoomId, message: text, replyToId: replyTo?.id || null });
@@ -236,7 +240,16 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
 
   const startEditRoom = (room: ChatRoom) => {
     setEditingRoomId(room.id);
-    setRoomDraft({ name: room.name, description: room.description || '', isLocked: !!room.is_locked, aiEnabled: room.ai_enabled !== false });
+    setRoomDraft({
+      name: room.name,
+      description: room.description || '',
+      isLocked: !!room.is_locked,
+      aiEnabled: room.ai_enabled !== false,
+      aiBotName: room.ai_bot_name || '',
+      aiTone: room.ai_tone || 'default',
+      aiPrompt: room.ai_prompt || '',
+      aiAutoReply: !!room.ai_auto_reply,
+    });
   };
 
   const saveRoom = async (roomId: number) => {
@@ -248,6 +261,10 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
         description: roomDraft.description.trim() || null,
         isLocked: roomDraft.isLocked,
         aiEnabled: roomDraft.aiEnabled,
+        aiBotName: roomDraft.aiBotName.trim() || null,
+        aiTone: roomDraft.aiTone,
+        aiPrompt: roomDraft.aiPrompt.trim() || null,
+        aiAutoReply: roomDraft.aiAutoReply,
       });
       setRooms((current) => current.map((room) => room.id === roomId ? { ...room, ...res.data } : room));
       setEditingRoomId(null);
@@ -330,6 +347,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
         </div>
         <div className="flex items-center gap-2 text-xs font-bold">
           {activeRoom?.ai_enabled === false && <span className="rounded-full bg-white/20 px-3 py-1.5 backdrop-blur">AI tắt</span>}
+          {activeRoom?.ai_auto_reply && <span className="rounded-full bg-white/20 px-3 py-1.5 backdrop-blur">AI auto</span>}
           {activeRoom?.is_locked && <span className="rounded-full bg-white/20 px-3 py-1.5 backdrop-blur">Đang khóa</span>}
           <span className="rounded-full bg-white/20 px-3 py-1.5 backdrop-blur">Live</span>
         </div>
@@ -441,6 +459,19 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
             <textarea value={roomDraft.description} onChange={(e) => setRoomDraft((current) => ({ ...current, description: e.target.value }))} maxLength={240} rows={2} placeholder="Mô tả phòng" className="mb-2 w-full resize-none rounded-xl border border-sky-100 px-3 py-2 text-xs font-semibold outline-none" />
             <label className="mb-2 flex items-center gap-2 text-xs font-bold text-slate-600"><input type="checkbox" checked={roomDraft.isLocked} onChange={(e) => setRoomDraft((current) => ({ ...current, isLocked: e.target.checked }))} />Khóa phòng</label>
             <label className="mb-3 flex items-center gap-2 text-xs font-bold text-slate-600"><input type="checkbox" checked={roomDraft.aiEnabled} onChange={(e) => setRoomDraft((current) => ({ ...current, aiEnabled: e.target.checked }))} />Bật AI</label>
+            <div className="mb-3 rounded-2xl bg-white p-3">
+              <div className="mb-2 flex items-center gap-2 text-xs font-black text-sky-700"><Bot className="h-3.5 w-3.5" />AI riêng của phòng</div>
+              <input value={roomDraft.aiBotName} onChange={(e) => setRoomDraft((current) => ({ ...current, aiBotName: e.target.value }))} maxLength={80} placeholder="Tên bot riêng" className="mb-2 w-full rounded-xl border border-sky-100 px-3 py-2 text-xs font-semibold outline-none" />
+              <select value={roomDraft.aiTone} onChange={(e) => setRoomDraft((current) => ({ ...current, aiTone: e.target.value }))} className="mb-2 w-full rounded-xl border border-sky-100 px-3 py-2 text-xs font-semibold outline-none">
+                <option value="default">Mặc định vui vẻ</option>
+                <option value="support">Hỗ trợ kỹ thuật</option>
+                <option value="fun">Vui nhộn</option>
+                <option value="serious">Nghiêm túc</option>
+                <option value="gaming">Game thủ</option>
+              </select>
+              <textarea value={roomDraft.aiPrompt} onChange={(e) => setRoomDraft((current) => ({ ...current, aiPrompt: e.target.value }))} maxLength={1500} rows={4} placeholder="Prompt riêng. Để trống sẽ dùng tone bên trên." className="mb-2 w-full resize-none rounded-xl border border-sky-100 px-3 py-2 text-xs font-semibold outline-none" />
+              <label className="flex items-center gap-2 text-xs font-bold text-slate-600"><input type="checkbox" checked={roomDraft.aiAutoReply} onChange={(e) => setRoomDraft((current) => ({ ...current, aiAutoReply: e.target.checked }))} />AI tự trả lời mọi tin nhắn</label>
+            </div>
             <div className="flex gap-2">
               <button type="button" onClick={() => saveRoom(room.id)} className="flex-1 rounded-xl bg-sky-500 px-3 py-2 text-xs font-black text-white">Lưu</button>
               <button type="button" onClick={() => setEditingRoomId(null)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-500">Hủy</button>
@@ -456,6 +487,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
               <div className={`mt-2 flex items-center gap-2 text-[10px] font-black ${room.id === activeRoomId ? 'text-white/75' : 'text-slate-400'}`}>
                 {room.is_locked && <span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" />Khóa</span>}
                 {room.ai_enabled === false && <span className="inline-flex items-center gap-1"><Bot className="h-3 w-3" />AI tắt</span>}
+                {room.ai_auto_reply && <span className="inline-flex items-center gap-1"><Bot className="h-3 w-3" />Auto</span>}
               </div>
             </button>
             {isAdmin && <div className="flex justify-end px-3 pb-3"><button type="button" onClick={() => startEditRoom(room)} className={`rounded-full p-1.5 ${room.id === activeRoomId ? 'bg-white/15 text-white' : 'bg-white text-slate-500'}`}><Pencil className="h-3.5 w-3.5" /></button></div>}
