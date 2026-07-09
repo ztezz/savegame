@@ -4,9 +4,12 @@ import api from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
 
 const telegramPattern = {
-  backgroundColor: '#dbeafe',
-  backgroundImage: 'radial-gradient(circle at 20px 20px, rgba(255,255,255,0.55) 0 2px, transparent 3px), radial-gradient(circle at 70px 70px, rgba(59,130,246,0.12) 0 3px, transparent 4px)',
-  backgroundSize: '96px 96px',
+  backgroundColor: '#9fcd94',
+  backgroundImage: "linear-gradient(135deg, rgba(218, 230, 123, 0.72) 0%, rgba(98, 174, 151, 0.78) 48%, rgba(238, 234, 169, 0.7) 100%), url('/pattern.svg')",
+  backgroundSize: 'cover, 520px auto',
+  backgroundPosition: 'center, top left',
+  backgroundRepeat: 'no-repeat, repeat',
+  backgroundBlendMode: 'normal, soft-light',
 };
 
 interface ChatMessage {
