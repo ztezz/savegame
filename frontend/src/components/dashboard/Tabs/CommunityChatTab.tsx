@@ -58,7 +58,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
   const [editingRoomId, setEditingRoomId] = useState<number | null>(null);
   const [roomDraft, setRoomDraft] = useState({ name: '', description: '', isLocked: false, aiEnabled: true, aiBotName: '', aiTone: 'default', aiPrompt: '', aiAutoReply: true });
   const [unreadByRoom, setUnreadByRoom] = useState<Record<number, number>>({});
-  const [typingUsers, setTypingUsers] = useState<Record<number, string[]>>({});
+  const [typingUsers, setTypingUsers] = useState<Record<number, Record<number, string>>>({});
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [creatingRoom, setCreatingRoom] = useState(false);
@@ -76,6 +76,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
   const roomsInitializedRef = useRef(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingActiveRef = useRef(false);
+  const remoteTypingTimeoutsRef = useRef<Map<string, number>>(new Map());
   const isAdmin = currentUser?.role === 'Admin' || currentUser?.username === 'admin';
   const activeRoom = rooms.find((room) => room.id === activeRoomId);
   const roomLockedForUser = !!activeRoom?.is_locked && !isAdmin;
@@ -178,35 +179,82 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    const events = new EventSource(`${API_BASE_URL}/community/events?token=${encodeURIComponent(token)}`);
-    events.onmessage = (event) => {
+    let events: EventSource | null = null;
+    let reconnectTimer: number | null = null;
+    let closed = false;
+
+    const removeTypingUser = (roomId: number, userId: number) => {
+      setTypingUsers((current) => {
+        const roomUsers = { ...(current[roomId] || {}) };
+        delete roomUsers[userId];
+        return { ...current, [roomId]: roomUsers };
+      });
+    };
+
+    const connect = async () => {
       try {
-        const payload = JSON.parse(event.data);
-        if (payload.type === 'message_created') {
-          if (payload.roomId === activeRoomIdRef.current) mergeIncomingMessage(payload.message);
-          fetchRooms();
-        }
-        if (payload.type === 'room_changed') fetchRooms();
-        if (payload.type === 'typing' && payload.userId !== currentUser?.id) {
-          setTypingUsers((current) => {
-            const names = new Set(current[payload.roomId] || []);
-            if (payload.typing) names.add(payload.displayName);
-            else names.delete(payload.displayName);
-            return { ...current, [payload.roomId]: Array.from(names) };
-          });
-          if (payload.typing) {
-            window.setTimeout(() => {
-              setTypingUsers((current) => ({ ...current, [payload.roomId]: (current[payload.roomId] || []).filter((name) => name !== payload.displayName) }));
-            }, 5000);
+        const response = await api.post('/community/events/ticket');
+        if (closed) return;
+        events = new EventSource(`${API_BASE_URL}/community/events?ticket=${encodeURIComponent(response.data.ticket)}`);
+        events.onmessage = (event) => {
+          try {
+            const payload = JSON.parse(event.data);
+            if (payload.type === 'message_created') {
+              if (payload.roomId === activeRoomIdRef.current) mergeIncomingMessage(payload.message);
+              fetchRooms();
+            }
+            if (payload.type === 'room_changed') fetchRooms();
+            if (payload.type === 'typing' && payload.userId !== currentUser?.id) {
+              const timeoutKey = `${payload.roomId}:${payload.userId}`;
+              const existingTimeout = remoteTypingTimeoutsRef.current.get(timeoutKey);
+              if (existingTimeout) window.clearTimeout(existingTimeout);
+              if (payload.typing) {
+                setTypingUsers((current) => ({
+                  ...current,
+                  [payload.roomId]: { ...(current[payload.roomId] || {}), [payload.userId]: payload.displayName },
+                }));
+                const timeout = window.setTimeout(() => {
+                  remoteTypingTimeoutsRef.current.delete(timeoutKey);
+                  removeTypingUser(payload.roomId, payload.userId);
+                }, 5000);
+                remoteTypingTimeoutsRef.current.set(timeoutKey, timeout);
+              } else {
+                remoteTypingTimeoutsRef.current.delete(timeoutKey);
+                removeTypingUser(payload.roomId, payload.userId);
+              }
+            }
+          } catch {
+            // Ignore malformed event payloads.
           }
-        }
+        };
+        events.onerror = () => {
+          events?.close();
+          events = null;
+          if (!closed && !reconnectTimer) {
+            reconnectTimer = window.setTimeout(() => {
+              reconnectTimer = null;
+              void connect();
+            }, 2000);
+          }
+        };
       } catch {
-        // Ignore malformed event payloads.
+        if (!closed && !reconnectTimer) {
+          reconnectTimer = window.setTimeout(() => {
+            reconnectTimer = null;
+            void connect();
+          }, 5000);
+        }
       }
     };
-    return () => events.close();
+
+    void connect();
+    return () => {
+      closed = true;
+      events?.close();
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      for (const timeout of remoteTypingTimeoutsRef.current.values()) window.clearTimeout(timeout);
+      remoteTypingTimeoutsRef.current.clear();
+    };
   }, [currentUser?.id]);
 
   useEffect(() => {
@@ -217,13 +265,20 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
     setEditingText('');
     lastMessageIdRef.current = 0;
     setLoading(true);
-    setTypingUsers((current) => ({ ...current, [activeRoomId]: [] }));
+    setTypingUsers((current) => ({ ...current, [activeRoomId]: {} }));
     typingActiveRef.current = false;
     if (typingTimeoutRef.current) window.clearTimeout(typingTimeoutRef.current);
     setUnreadByRoom((current) => ({ ...current, [activeRoomId]: 0 }));
     fetchMessages(true);
     const timer = window.setInterval(() => fetchMessages(false), 4000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      if (typingActiveRef.current) {
+        void api.post('/community/typing', { roomId: activeRoomId, typing: false }).catch(() => undefined);
+        typingActiveRef.current = false;
+      }
+      if (typingTimeoutRef.current) window.clearTimeout(typingTimeoutRef.current);
+    };
   }, [activeRoomId]);
 
   const sendMessage = async (event: React.FormEvent) => {
@@ -247,7 +302,6 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
       void api.post('/community/typing', { roomId: activeRoomId, typing: false }).catch(() => undefined);
       typingActiveRef.current = false;
       scrollToBottom();
-      fetchRooms();
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Gửi tin nhắn thất bại', 'error');
     } finally {
@@ -483,7 +537,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
           </React.Fragment>;
         })}
         {sending && <div className="flex justify-end"><div className="rounded-full bg-white/80 px-4 py-2 text-xs font-bold text-sky-700 shadow-sm backdrop-blur">Đang gửi...</div></div>}
-        {(typingUsers[activeRoomId] || []).length > 0 && <div className="flex justify-start"><div className="rounded-full bg-white/85 px-4 py-2 text-xs font-bold text-slate-600 shadow-sm backdrop-blur">{typingUsers[activeRoomId].slice(0, 2).join(', ')} đang gõ...</div></div>}
+        {Object.keys(typingUsers[activeRoomId] || {}).length > 0 && <div className="flex justify-start"><div className="rounded-full bg-white/85 px-4 py-2 text-xs font-bold text-slate-600 shadow-sm backdrop-blur">{Object.values(typingUsers[activeRoomId]).slice(0, 2).join(', ')} đang gõ...</div></div>}
         {aiTyping && <div className="flex justify-start"><div className="rounded-full bg-amber-50 px-4 py-2 text-xs font-bold text-amber-700 shadow-sm backdrop-blur">AI đang gõ...</div></div>}
         {showScrollButton && <button type="button" onClick={scrollToBottom} className="sticky bottom-3 left-full ml-auto flex h-10 w-10 items-center justify-center rounded-full bg-white text-sky-600 shadow-lg transition hover:bg-sky-50">↓</button>}
       </div>

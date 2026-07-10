@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { randomUUID } from "node:crypto";
 import { pool, isUsingDatabase } from "../config/database.js";
 import { authenticateToken, isAdmin } from "../middleware/auth.js";
 import { compactJsonPreview, extractAiText, parseSseAiText } from "../utils/aiResponse.js";
@@ -20,12 +21,21 @@ type CommunityEvent =
   | { type: 'room_changed' }
   | { type: 'typing'; roomId: number; userId: number; displayName: string; typing: boolean };
 
-const eventClients = new Set<any>();
+type EventClient = { res: any; userId: number; role: string };
+type EventTicket = { userId: number; role: string; expiresAt: number };
 
-function broadcastCommunityEvent(event: CommunityEvent) {
+const eventClients = new Set<EventClient>();
+const eventTickets = new Map<string, EventTicket>();
+
+function broadcastCommunityEvent(event: CommunityEvent, roomLocked = false) {
   const payload = `data: ${JSON.stringify(event)}\n\n`;
   for (const client of eventClients) {
-    client.write(payload);
+    if (roomLocked && client.role !== 'Admin') continue;
+    try {
+      client.res.write(payload);
+    } catch {
+      eventClients.delete(client);
+    }
   }
 }
 
@@ -231,13 +241,34 @@ communityRouter.delete("/api/community/bans/:userId", authenticateToken, isAdmin
   }
 });
 
-communityRouter.get("/api/community/events", authenticateToken, async (_req: any, res) => {
+communityRouter.post("/api/community/events/ticket", authenticateToken, async (req: any, res) => {
+  const now = Date.now();
+  for (const [token, ticket] of eventTickets) {
+    if (ticket.expiresAt <= now) eventTickets.delete(token);
+  }
+
+  const ticket = randomUUID();
+  eventTickets.set(ticket, {
+    userId: req.user.id,
+    role: req.user.role,
+    expiresAt: now + 60_000,
+  });
+  res.json({ ticket });
+});
+
+communityRouter.get("/api/community/events", async (req: any, res) => {
+  const token = String(req.query?.ticket || '');
+  const ticket = eventTickets.get(token);
+  eventTickets.delete(token);
+  if (!ticket || ticket.expiresAt <= Date.now()) return res.sendStatus(401);
+
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders?.();
   res.write('event: ready\ndata: {"ok":true}\n\n');
-  eventClients.add(res);
+  const client: EventClient = { res, userId: ticket.userId, role: ticket.role };
+  eventClients.add(client);
 
   const keepAlive = setInterval(() => {
     res.write(': keep-alive\n\n');
@@ -245,7 +276,7 @@ communityRouter.get("/api/community/events", authenticateToken, async (_req: any
 
   res.on('close', () => {
     clearInterval(keepAlive);
-    eventClients.delete(res);
+    eventClients.delete(client);
   });
 });
 
@@ -363,13 +394,14 @@ communityRouter.post("/api/community/typing", authenticateToken, async (req: any
   try {
     const room = await ensureRoom(roomId);
     if (!room) return res.status(404).json({ error: "Room not found" });
+    if (room.is_locked && req.user.role !== 'Admin') return res.status(403).json({ error: "Phòng chat đang bị khóa" });
     broadcastCommunityEvent({
       type: 'typing',
       roomId,
       userId: req.user.id,
       displayName: req.user.display_name || req.user.username,
       typing,
-    });
+    }, room.is_locked);
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to update typing state" });
@@ -446,6 +478,7 @@ communityRouter.post("/api/community/messages", authenticateToken, async (req: a
   try {
     const room = await ensureRoom(roomId);
     if (!room) return res.status(404).json({ error: "Room not found" });
+    if (room.is_locked && req.user.role !== 'Admin') return res.status(403).json({ error: "Phòng chat đang bị khóa" });
 
     const activeBan = await getActiveBan(req.user.id);
     if (activeBan) {
@@ -466,8 +499,7 @@ communityRouter.post("/api/community/messages", authenticateToken, async (req: a
 
     const userMessage = { ...rows[0], username: req.user.username, display_name: req.user.display_name || req.user.username, role: req.user.role };
     res.status(201).json({ message: userMessage, aiMessage: null });
-    broadcastCommunityEvent({ type: 'message_created', roomId, message: userMessage });
-    broadcastCommunityEvent({ type: 'room_changed' });
+    broadcastCommunityEvent({ type: 'message_created', roomId, message: userMessage }, room.is_locked);
 
     void (async () => {
       try {
@@ -476,16 +508,14 @@ communityRouter.post("/api/community/messages", authenticateToken, async (req: a
         const aiReply = await generateAiReply(room);
         if (aiReply) {
           const aiMessage = await insertAiMessage(room, aiReply);
-          broadcastCommunityEvent({ type: 'message_created', roomId, message: aiMessage });
-          broadcastCommunityEvent({ type: 'room_changed' });
+          broadcastCommunityEvent({ type: 'message_created', roomId, message: aiMessage }, room.is_locked);
         }
       } catch (aiErr: any) {
         const message = aiErr?.message || String(aiErr);
         console.warn('AI chat reply failed:', message);
         const aiErrorMessage = await insertAiErrorMessage(roomId, message.slice(0, 220)).catch(() => null);
         if (aiErrorMessage) {
-          broadcastCommunityEvent({ type: 'message_created', roomId, message: aiErrorMessage });
-          broadcastCommunityEvent({ type: 'room_changed' });
+          broadcastCommunityEvent({ type: 'message_created', roomId, message: aiErrorMessage }, room.is_locked);
         }
       }
     })();
