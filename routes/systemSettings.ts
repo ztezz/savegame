@@ -334,7 +334,9 @@ settingsRouter.post('/api/system/storage/cleanup', authenticateToken, isAdmin, a
         }
       }
 
-      await pool.query('DELETE FROM saves WHERE id = ANY($1::int[])', [rows.map((row: any) => row.id)]);
+      const ids = rows.map((row: any) => row.id);
+      const placeholders = ids.map((_: number, index: number) => `$${index + 1}`).join(', ');
+      await pool.query(`DELETE FROM saves WHERE id IN (${placeholders})`, ids);
       await writeAudit(req.user?.id || null, 'CLEANUP', 'storage', { keepLatest, deletedRows: rows.length, deletedFiles, deletedBytes });
     }
 

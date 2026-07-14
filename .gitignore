@@ -4,6 +4,10 @@ node_modules
 dist/ 
 uploads/
 downloads/
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 # wrangler files
 .wrangler
 .dev.vars*

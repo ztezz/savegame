@@ -213,7 +213,7 @@ communityRouter.post("/api/community/bans", authenticateToken, isAdmin, async (r
 
     const { rows } = await pool.query(
       `INSERT INTO community_bans (user_id, reason, banned_by, banned_until, created_at)
-       VALUES ($1, $2, $3, CASE WHEN $4::int IS NULL THEN NULL ELSE NOW() + ($4::int * INTERVAL '1 minute') END, NOW())
+       VALUES ($1, $2, $3, CASE WHEN $4 IS NULL THEN NULL ELSE datetime('now', '+' || $4 || ' minutes') END, CURRENT_TIMESTAMP)
        ON CONFLICT (user_id) DO UPDATE
        SET reason = EXCLUDED.reason,
            banned_by = EXCLUDED.banned_by,

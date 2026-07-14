@@ -4,9 +4,6 @@ if (NODE_ENV === "production" && !process.env.JWT_SECRET) {
   console.warn("⚠️ WARNING: JWT_SECRET is not set in production. Using default insecure key.");
 }
 
-export const TEST_DB_URL = NODE_ENV === "production"
-  ? ""
-  : "postgresql://postgres.kqfixtgeodjmhctguber:543457%40tHAI@aws-1-ap-northeast-1.pooler.supabase.com:6543/postgres";
 export const PORT = NODE_ENV === "production" ? (process.env.PORT || 3000) : (process.env.API_PORT || 3001);
 
 // CORS Configuration - supports multiple origins

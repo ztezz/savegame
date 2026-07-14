@@ -206,6 +206,24 @@ const getOrCreateFolderPath = async (userId: number, baseFolderId: number | null
   return parentId;
 };
 
+const getFolderTreeIds = async (folderId: number, userId: number, deletedOnly = false) => {
+  const { rows } = await pool.query(
+    `WITH RECURSIVE folder_tree AS (
+       SELECT id FROM drive_folders
+       WHERE id = $1 AND user_id = $2 ${deletedOnly ? "AND deleted_at IS NOT NULL" : ""}
+       UNION ALL
+       SELECT child.id FROM drive_folders child JOIN folder_tree ft ON child.parent_id = ft.id
+       WHERE child.user_id = $2
+     )
+     SELECT id FROM folder_tree`,
+    [folderId, userId]
+  );
+  return rows.map((row: any) => Number(row.id));
+};
+
+const folderIdList = (ids: number[], startIndex = 1) =>
+  ids.map((_, index) => `$${startIndex + index}`).join(", ");
+
 const insertDriveFiles = async (records: Array<{ userId: number; folderId: number | null; originalName: string; storedName: string; mimeType: string | null; fileSize: number; note: string | null }>) => {
   if (records.length === 0) return [];
   const values: any[] = [];
@@ -351,11 +369,11 @@ driveRouter.get("/api/drive/folders/tree", authenticateToken, async (req: any, r
   try {
     const { rows } = await pool.query(
       `WITH RECURSIVE folder_tree AS (
-         SELECT id, name, parent_id, 0 AS depth, name::text AS path
+          SELECT id, name, parent_id, 0 AS depth, name AS path
          FROM drive_folders
          WHERE user_id = $1 AND deleted_at IS NULL AND parent_id IS NULL
          UNION ALL
-         SELECT child.id, child.name, child.parent_id, ft.depth + 1, (ft.path || '/' || child.name)::text
+          SELECT child.id, child.name, child.parent_id, ft.depth + 1, (ft.path || '/' || child.name)
          FROM drive_folders child
          JOIN folder_tree ft ON child.parent_id = ft.id
          WHERE child.user_id = $1 AND child.deleted_at IS NULL
@@ -385,7 +403,7 @@ driveRouter.get("/api/drive/files", authenticateToken, async (req: any, res) => 
       const folders = await pool.query(
         `SELECT id, name, parent_id, created_at, deleted_at
          FROM drive_folders
-         WHERE user_id = $1 AND deleted_at IS NOT NULL AND ($2 = '' OR name ILIKE $3)
+         WHERE user_id = $1 AND deleted_at IS NOT NULL AND ($2 = '' OR name LIKE $3 COLLATE NOCASE)
          ORDER BY deleted_at DESC`,
         [req.user.id, search, likeSearch]
       );
@@ -393,7 +411,7 @@ driveRouter.get("/api/drive/files", authenticateToken, async (req: any, res) => 
         `SELECT df.id, df.original_name, df.mime_type, df.file_size, df.note, df.created_at, df.deleted_at, ds.token AS share_token, ds.expires_at AS share_expires_at
          FROM drive_files df
          LEFT JOIN drive_shares ds ON ds.file_id = df.id AND ds.user_id = df.user_id AND ds.disabled_at IS NULL
-         WHERE df.user_id = $1 AND df.deleted_at IS NOT NULL AND ($2 = '' OR df.original_name ILIKE $3 OR COALESCE(df.note, '') ILIKE $3)
+         WHERE df.user_id = $1 AND df.deleted_at IS NOT NULL AND ($2 = '' OR df.original_name LIKE $3 COLLATE NOCASE OR COALESCE(df.note, '') LIKE $3 COLLATE NOCASE)
          ORDER BY df.deleted_at DESC`,
         [req.user.id, search, likeSearch]
       );
@@ -406,7 +424,7 @@ driveRouter.get("/api/drive/files", authenticateToken, async (req: any, res) => 
       `SELECT id, name, parent_id, created_at, deleted_at
        FROM drive_folders
        WHERE user_id = $1 AND deleted_at IS NULL
-         AND ($2 = '' OR name ILIKE $3)
+          AND ($2 = '' OR name LIKE $3 COLLATE NOCASE)
          AND ($2 != '' OR ${folderId ? "parent_id = $4" : "parent_id IS NULL"})
        ORDER BY name ASC`,
       folderId ? [req.user.id, search, likeSearch, folderId] : [req.user.id, search, likeSearch]
@@ -417,7 +435,7 @@ driveRouter.get("/api/drive/files", authenticateToken, async (req: any, res) => 
        FROM drive_files df
        LEFT JOIN drive_shares ds ON ds.file_id = df.id AND ds.user_id = df.user_id AND ds.disabled_at IS NULL
        WHERE df.user_id = $1 AND df.deleted_at IS NULL
-         AND ($2 = '' OR df.original_name ILIKE $3 OR COALESCE(df.note, '') ILIKE $3)
+          AND ($2 = '' OR df.original_name LIKE $3 COLLATE NOCASE OR COALESCE(df.note, '') LIKE $3 COLLATE NOCASE)
          AND ($2 != '' OR ${folderId ? "df.folder_id = $4" : "df.folder_id IS NULL"})
        ORDER BY df.created_at DESC`,
       folderId ? [req.user.id, search, likeSearch, folderId] : [req.user.id, search, likeSearch]
@@ -708,6 +726,7 @@ driveRouter.post("/api/drive/files/:id/share", authenticateToken, async (req: an
     if (!file.rows[0]) return res.status(404).json({ error: "File not found" });
 
     const expiresInHours = parseShareExpiry(req.body?.expiresInHours);
+    const expiresAt = expiresInHours ? new Date(Date.now() + expiresInHours * 60 * 60 * 1000).toISOString() : null;
 
     const existing = await pool.query(
       "SELECT token, expires_at FROM drive_shares WHERE user_id = $1 AND file_id = $2 AND disabled_at IS NULL",
@@ -716,11 +735,11 @@ driveRouter.post("/api/drive/files/:id/share", authenticateToken, async (req: an
     if (existing.rows[0]) {
       const { rows } = await pool.query(
         `UPDATE drive_shares
-         SET expires_at = CASE WHEN $3::int IS NULL THEN NULL ELSE CURRENT_TIMESTAMP + ($3::int * INTERVAL '1 hour') END,
+         SET expires_at = $3,
              created_at = CURRENT_TIMESTAMP
          WHERE user_id = $1 AND file_id = $2 AND disabled_at IS NULL
          RETURNING token, expires_at`,
-        [req.user.id, id, expiresInHours]
+        [req.user.id, id, expiresAt]
       );
       return res.json({ token: rows[0].token, expiresAt: rows[0].expires_at });
     }
@@ -728,11 +747,11 @@ driveRouter.post("/api/drive/files/:id/share", authenticateToken, async (req: an
     const token = crypto.randomBytes(24).toString("hex");
     const { rows } = await pool.query(
       `INSERT INTO drive_shares (user_id, file_id, token, expires_at, disabled_at)
-       VALUES ($1, $2, $3, CASE WHEN $4::int IS NULL THEN NULL ELSE CURRENT_TIMESTAMP + ($4::int * INTERVAL '1 hour') END, NULL)
+       VALUES ($1, $2, $3, $4, NULL)
        ON CONFLICT (user_id, file_id)
        DO UPDATE SET token = EXCLUDED.token, expires_at = EXCLUDED.expires_at, disabled_at = NULL, created_at = CURRENT_TIMESTAMP
        RETURNING token, expires_at`,
-      [req.user.id, id, token, expiresInHours]
+      [req.user.id, id, token, expiresAt]
     );
     res.status(201).json({ token: rows[0].token, expiresAt: rows[0].expires_at });
   } catch (err: any) {
@@ -851,21 +870,24 @@ driveRouter.delete("/api/drive/folders/:id", authenticateToken, async (req: any,
     const folder = await pool.query("SELECT id FROM drive_folders WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL", [id, req.user.id]);
     if (!folder.rows[0]) return res.status(404).json({ error: "Folder not found" });
 
-    await pool.query(
-      `WITH RECURSIVE folder_tree AS (
-         SELECT id FROM drive_folders WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
-         UNION ALL
-         SELECT child.id FROM drive_folders child JOIN folder_tree ft ON child.parent_id = ft.id
-         WHERE child.user_id = $2 AND child.deleted_at IS NULL
-       ), updated_folders AS (
-         UPDATE drive_folders SET deleted_at = CURRENT_TIMESTAMP
-         WHERE id IN (SELECT id FROM folder_tree)
-         RETURNING id
-       )
-       UPDATE drive_files SET deleted_at = CURRENT_TIMESTAMP
-       WHERE user_id = $2 AND deleted_at IS NULL AND folder_id IN (SELECT id FROM folder_tree)`,
-      [id, req.user.id]
-    );
+    const ids = await getFolderTreeIds(id, req.user.id);
+    const placeholders = folderIdList(ids, 2);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`UPDATE drive_folders SET deleted_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`, [req.user.id, ...ids]);
+      await client.query(
+        `UPDATE drive_files SET deleted_at = CURRENT_TIMESTAMP
+         WHERE user_id = $1 AND deleted_at IS NULL AND folder_id IN (${placeholders})`,
+        [req.user.id, ...ids]
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
 
     res.json({ success: true });
   } catch (err: any) {
@@ -900,21 +922,23 @@ driveRouter.post("/api/drive/folders/:id/restore", authenticateToken, async (req
   try {
     const folder = await pool.query("SELECT id FROM drive_folders WHERE id = $1 AND user_id = $2 AND deleted_at IS NOT NULL", [id, req.user.id]);
     if (!folder.rows[0]) return res.status(404).json({ error: "Folder not found" });
-    await pool.query(
-      `WITH RECURSIVE folder_tree AS (
-         SELECT id FROM drive_folders WHERE id = $1 AND user_id = $2
-         UNION ALL
-         SELECT child.id FROM drive_folders child JOIN folder_tree ft ON child.parent_id = ft.id
-         WHERE child.user_id = $2
-       ), updated_folders AS (
-         UPDATE drive_folders SET deleted_at = NULL
-         WHERE id IN (SELECT id FROM folder_tree)
-         RETURNING id
-       )
-       UPDATE drive_files SET deleted_at = NULL
-       WHERE user_id = $2 AND folder_id IN (SELECT id FROM folder_tree)`,
-      [id, req.user.id]
-    );
+    const ids = await getFolderTreeIds(id, req.user.id);
+    const placeholders = folderIdList(ids, 2);
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`UPDATE drive_folders SET deleted_at = NULL WHERE id IN (${placeholders})`, [req.user.id, ...ids]);
+      await client.query(
+        `UPDATE drive_files SET deleted_at = NULL WHERE user_id = $1 AND folder_id IN (${placeholders})`,
+        [req.user.id, ...ids]
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Drive restore failed" });
@@ -947,21 +971,26 @@ driveRouter.delete("/api/drive/folders/:id/permanent", authenticateToken, async 
   if (!isUsingDatabase()) return res.status(404).json({ error: "Folder not found" });
 
   try {
-    const { rows } = await pool.query(
-      `WITH RECURSIVE folder_tree AS (
-         SELECT id FROM drive_folders WHERE id = $1 AND user_id = $2 AND deleted_at IS NOT NULL
-         UNION ALL
-         SELECT child.id FROM drive_folders child JOIN folder_tree ft ON child.parent_id = ft.id
-       ), deleted_files AS (
-         DELETE FROM drive_files
-         WHERE user_id = $2 AND folder_id IN (SELECT id FROM folder_tree)
-         RETURNING stored_name
-       ), deleted_folders AS (
-         DELETE FROM drive_folders WHERE id IN (SELECT id FROM folder_tree) RETURNING id
-       )
-       SELECT stored_name FROM deleted_files`,
-      [id, req.user.id]
-    );
+    const ids = await getFolderTreeIds(id, req.user.id, true);
+    if (ids.length === 0) return res.status(404).json({ error: "Folder not found" });
+    const placeholders = folderIdList(ids, 2);
+    const client = await pool.connect();
+    let rows: any[] = [];
+    try {
+      await client.query("BEGIN");
+      const files = await client.query(
+        `DELETE FROM drive_files WHERE user_id = $1 AND folder_id IN (${placeholders}) RETURNING stored_name`,
+        [req.user.id, ...ids]
+      );
+      rows = files.rows;
+      await client.query(`DELETE FROM drive_folders WHERE id IN (${folderIdList(ids)})`, ids);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
     unlinkStoredFiles(rows);
     res.json({ success: true, deletedFiles: rows.length });
   } catch (err: any) {

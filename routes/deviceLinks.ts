@@ -73,12 +73,12 @@ deviceLinksRouter.post("/api/device-links/start", async (req: any, res) => {
 
     await pool.query(
       `INSERT INTO device_link_sessions (token, device_name, api_key, status, expires_at)
-       VALUES ($1, $2, $3, 'pending', NOW() + INTERVAL '${LINK_TTL_MINUTES} minutes')
+       VALUES ($1, $2, $3, 'pending', datetime('now', '+${LINK_TTL_MINUTES} minutes'))
        ON CONFLICT (api_key) DO UPDATE
        SET token = EXCLUDED.token,
            device_name = EXCLUDED.device_name,
            status = 'pending',
-           expires_at = NOW() + INTERVAL '${LINK_TTL_MINUTES} minutes',
+           expires_at = datetime('now', '+${LINK_TTL_MINUTES} minutes'),
            claimed_by_user_id = NULL,
            approved_at = NULL,
            created_at = NOW()`,

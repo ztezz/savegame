@@ -1,208 +1,157 @@
-import pkg from "pg";
-import { TEST_DB_URL } from "./environment.js";
+import Database from "better-sqlite3";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
-const { Pool } = pkg;
+export interface DatabaseResult<T = any> {
+  rows: T[];
+  rowCount: number;
+}
 
-const cleanStr = (val: string | undefined): string => {
-  return val ? val.trim().replace(/\s+/g, '') : '';
-};
+const databasePath = path.resolve(process.env.DATABASE_PATH || path.join("data", "savegame.sqlite"));
+fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 
-const getSupabaseProjectRef = () => {
-  const dbUser = cleanStr(process.env.DB_USER);
-  if (dbUser.startsWith('postgres.')) {
-    return dbUser.slice('postgres.'.length);
-  }
+const database = new Database(databasePath);
+database.pragma("journal_mode = WAL");
+database.pragma("foreign_keys = ON");
+database.pragma("busy_timeout = 5000");
+database.pragma("synchronous = NORMAL");
 
-  const supabaseUrl = cleanStr(process.env.VITE_SUPABASE_URL);
-  const match = supabaseUrl.match(/^https:\/\/([^.]+)\.supabase\.co$/);
-  return match?.[1];
-};
+console.log(`Database target: SQLite ${databasePath}`);
 
-const normalizeConnectionString = (connectionString: string) => {
-  const normalized = cleanStr(connectionString);
+const JSON_COLUMNS = new Set(["value_json", "detail_json", "reactions_json"]);
+const BOOLEAN_COLUMNS = new Set(["is_locked", "ai_enabled", "ai_auto_reply", "is_online", "online", "known"]);
+let transactionOwner: SQLiteClient | null = null;
+let transactionFinished: Promise<void> | null = null;
+let finishTransaction: (() => void) | null = null;
 
-  try {
-    const url = new URL(normalized);
-    const isSupabasePooler = url.hostname.endsWith('.pooler.supabase.com');
-
-    if (isSupabasePooler && url.username === 'postgres') {
-      const projectRef = getSupabaseProjectRef();
-      if (projectRef) {
-        url.username = `postgres.${projectRef}`;
-        return url.toString();
-      }
-    }
-  } catch {
-    return normalized;
-  }
-
-  return normalized;
-};
-
-const logDatabaseTarget = (config: Record<string, any>) => {
-  try {
-    if (config.connectionString) {
-      const url = new URL(config.connectionString);
-      console.log(`Database target: ${url.username}@${url.hostname}:${url.port || '5432'}/${url.pathname.slice(1)}`);
-      return;
-    }
-
-    console.log(`Database target: ${config.user}@${config.host}:${config.port}/${config.database}`);
-  } catch {
-    console.log('Database target: configured');
-  }
-};
-
-const basePoolConfig = {
-  ssl: { rejectUnauthorized: false },
-  max: Math.max(1, Number(process.env.DB_POOL_MAX || 1)),
-  keepAlive: true,
-  keepAliveInitialDelayMillis: 30000,
-  connectionTimeoutMillis: 10000,
-  acquireTimeoutMillis: 15000,
-  idleTimeoutMillis: 30000,
-};
-
-const hasDatabaseConfig = Boolean(process.env.DATABASE_URL || process.env.DB_HOST || TEST_DB_URL);
-
-// Database configuration
-const dbConfig = process.env.DATABASE_URL 
-  ? { ...basePoolConfig, connectionString: normalizeConnectionString(process.env.DATABASE_URL) }
-  : process.env.DB_HOST 
-    ? {
-        ...basePoolConfig,
-        host: cleanStr(process.env.DB_HOST),
-        port: parseInt(cleanStr(process.env.DB_PORT) || '5432'),
-        user: process.env.DB_USER ? process.env.DB_USER.trim() : '',
-        password: process.env.DB_PASSWORD ? process.env.DB_PASSWORD.trim() : '',
-        database: process.env.DB_NAME ? process.env.DB_NAME.trim() : 'postgres',
-      }
-    : TEST_DB_URL
-      ? { ...basePoolConfig, connectionString: normalizeConnectionString(TEST_DB_URL) }
-      : { ...basePoolConfig, connectionString: '' };
-
-logDatabaseTarget(dbConfig);
-
-const RECOVERABLE_DB_ERROR_CODES = new Set([
-  '57P01', // admin_shutdown
-  '57P02', // crash_shutdown
-  '57P03', // cannot_connect_now
-  '08000',
-  '08003',
-  '08006',
-  'ECONNRESET',
-  'ECONNREFUSED',
-  'ETIMEDOUT',
-  'EPIPE',
-  'ENOTFOUND',
-  'EAI_AGAIN',
-  'ECHECKOUTTIMEOUT',
-  'EDBHANDLEREXITED',
-]);
-
-const isRecoverableDbError = (err: any) => {
-  const code = err?.code || err?.errno;
-  if (RECOVERABLE_DB_ERROR_CODES.has(code)) return true;
-
-  const message = String(err?.message || err || '').toLowerCase();
-  return [
-    'connection terminated',
-    'connection ended unexpectedly',
-    'server closed the connection unexpectedly',
-    'client has encountered a connection error',
-    'timeout expired',
-    'timeout exceeded',
-    'unable to check out connection',
-    'read econnreset',
-    'socket hang up',
-  ].some((text) => message.includes(text));
-};
-
-class RecoveringPool {
-  private currentPool: InstanceType<typeof Pool>;
-  private recreatingPool: Promise<void> | null = null;
-  private lastPoolRecreateAt = 0;
-
-  constructor(private readonly config: Record<string, any>) {
-    this.currentPool = this.createPool();
-  }
-
-  private createPool() {
-    const nextPool = new Pool(this.config);
-    nextPool.on('error', (err: any) => {
-      console.error('⚠️ PostgreSQL pool idle client error:', err?.message || err);
-    });
-    return nextPool;
-  }
-
-  private async recreatePool(reason: any) {
-    const now = Date.now();
-    if (now - this.lastPoolRecreateAt < 30000) {
-      console.warn('PostgreSQL pool reconnect skipped during cooldown:', reason?.message || reason);
-      return;
-    }
-
-    if (!this.recreatingPool) {
-      this.lastPoolRecreateAt = now;
-      console.warn('Recreating PostgreSQL pool after connection error:', reason?.message || reason);
-      const oldPool = this.currentPool;
-      this.currentPool = this.createPool();
-      this.recreatingPool = oldPool.end()
-        .catch((err: any) => console.warn('Failed to close stale PostgreSQL pool:', err?.message || err))
-        .then(() => undefined)
-        .finally(() => {
-          this.recreatingPool = null;
-        });
-    }
-
-    await this.recreatingPool;
-  }
-
-  async query(...args: any[]) {
-    try {
-      return await (this.currentPool.query as any)(...args);
-    } catch (err) {
-      if (!isRecoverableDbError(err)) throw err;
-      await this.recreatePool(err);
-      return (this.currentPool.query as any)(...args);
-    }
-  }
-
-  async connect() {
-    try {
-      return await this.currentPool.connect();
-    } catch (err) {
-      if (!isRecoverableDbError(err)) throw err;
-      await this.recreatePool(err);
-      return this.currentPool.connect();
-    }
-  }
-
-  async end() {
-    return this.currentPool.end();
+async function waitForTransaction(client?: SQLiteClient) {
+  while (transactionOwner && transactionOwner !== client && transactionFinished) {
+    await transactionFinished;
   }
 }
 
-export const pool = new RecoveringPool(dbConfig);
+async function beginTransaction(client: SQLiteClient) {
+  await waitForTransaction(client);
+  transactionOwner = client;
+  transactionFinished = new Promise<void>((resolve) => {
+    finishTransaction = resolve;
+  });
+  database.exec("BEGIN IMMEDIATE");
+}
 
-let databaseKeepAliveInterval: NodeJS.Timeout | null = null;
+function endTransaction(client: SQLiteClient, command: "COMMIT" | "ROLLBACK") {
+  if (transactionOwner !== client) return;
+  try {
+    if (database.inTransaction) database.exec(command);
+  } finally {
+    transactionOwner = null;
+    finishTransaction?.();
+    finishTransaction = null;
+    transactionFinished = null;
+  }
+}
 
-export const startDatabaseKeepAlive = () => {
-  if (databaseKeepAliveInterval) return;
+function normalizeValue(value: any) {
+  if (value === undefined) return null;
+  if (typeof value === "boolean") return value ? 1 : 0;
+  if (value instanceof Date) return value.toISOString();
+  if (value !== null && typeof value === "object" && !Buffer.isBuffer(value)) return JSON.stringify(value);
+  return value;
+}
 
-  databaseKeepAliveInterval = setInterval(async () => {
-    try {
-      await pool.query('SELECT 1');
-    } catch (err: any) {
-      console.error('Database keep-alive ping failed:', err?.message || err);
+function normalizeRow(row: any) {
+  if (!row || typeof row !== "object") return row;
+  for (const [key, value] of Object.entries(row)) {
+    if (JSON_COLUMNS.has(key) && typeof value === "string") {
+      try {
+        row[key] = JSON.parse(value);
+      } catch {
+        row[key] = {};
+      }
+    } else if (BOOLEAN_COLUMNS.has(key) && value !== null) {
+      row[key] = Boolean(value);
+    } else if (typeof value === "bigint") {
+      row[key] = Number(value);
     }
-  }, 5 * 60 * 1000);
+  }
+  return row;
+}
 
-  databaseKeepAliveInterval.unref?.();
-};
+function prepareQuery(sql: string, params: any[] = []) {
+  const orderedParams: any[] = [];
+  let normalizedSql = sql
+    .replace(/\bNOW\(\)/gi, "CURRENT_TIMESTAMP")
+    .replace(/::(?:jsonb|text|bigint|int)\b/gi, "");
 
-export const isUsingDatabase = () => {
-  return hasDatabaseConfig;
-};
+  normalizedSql = normalizedSql.replace(/\$(\d+)/g, (_match, index) => {
+    orderedParams.push(normalizeValue(params[Number(index) - 1]));
+    return "?";
+  });
+
+  return { sql: normalizedSql.trim(), params: orderedParams };
+}
+
+function normalizeError(error: any) {
+  if (String(error?.code || "").startsWith("SQLITE_CONSTRAINT_UNIQUE")) error.code = "23505";
+  return error;
+}
+
+class SQLiteClient {
+  async query<T = any>(sql: string, params: any[] = []): Promise<DatabaseResult<T>> {
+    const command = sql.trim().replace(/;$/, "").toUpperCase();
+    if (command === "BEGIN") {
+      await beginTransaction(this);
+      return { rows: [], rowCount: 0 };
+    }
+    if (command === "COMMIT" || command === "ROLLBACK") {
+      endTransaction(this, command);
+      return { rows: [], rowCount: 0 };
+    }
+
+    await waitForTransaction(this);
+
+    const prepared = prepareQuery(sql, params);
+    try {
+      const statement = database.prepare(prepared.sql);
+      const returnsRows = /^\s*(SELECT|WITH|PRAGMA|EXPLAIN)\b/i.test(prepared.sql) || /\bRETURNING\b/i.test(prepared.sql);
+      if (returnsRows) {
+        const rows = statement.all(...prepared.params).map(normalizeRow) as T[];
+        return { rows, rowCount: rows.length };
+      }
+
+      const result = statement.run(...prepared.params);
+      return { rows: [], rowCount: result.changes };
+    } catch (error) {
+      throw normalizeError(error);
+    }
+  }
+
+  release() {}
+}
+
+class SQLitePool extends SQLiteClient {
+  async query<T = any>(sql: string, params: any[] = []) {
+    await waitForTransaction();
+    return super.query<T>(sql, params);
+  }
+
+  async connect() {
+    return new SQLiteClient();
+  }
+
+  async end() {
+    database.close();
+  }
+
+  exec(sql: string) {
+    database.exec(sql);
+  }
+}
+
+export const pool = new SQLitePool();
+
+export const startDatabaseKeepAlive = () => {};
+
+export const isUsingDatabase = () => true;
 
 export default pool;

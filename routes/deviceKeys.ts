@@ -77,10 +77,10 @@ deviceKeysRouter.get("/api/device-keys", authenticateToken, async (req: any, res
   try {
     const { rows } = await pool.query(
       `SELECT dk.id, dk.device_name,
-              LEFT(dk.api_key, 8) || '...' AS key_preview,
+               substr(dk.api_key, 1, 8) || '...' AS key_preview,
               dk.note, dk.created_at, dk.last_used_at,
               ah.last_seen,
-              (ah.last_seen IS NOT NULL AND ah.last_seen > NOW() - INTERVAL '2 minutes') AS is_online
+               (ah.last_seen IS NOT NULL AND ah.last_seen > datetime('now', '-2 minutes')) AS is_online
        FROM device_api_keys dk
        LEFT JOIN agent_heartbeats ah
          ON ah.user_id = dk.user_id AND ah.device_name = dk.device_name
@@ -111,9 +111,10 @@ deviceKeysRouter.delete("/api/device-keys", authenticateToken, async (req: any, 
   }
 
   try {
+    const placeholders = uniqueIds.map((_, index) => `$${index + 2}`).join(', ');
     const { rowCount } = await pool.query(
-      "DELETE FROM device_api_keys WHERE user_id = $1 AND id = ANY($2::int[])",
-      [req.user.id, uniqueIds]
+      `DELETE FROM device_api_keys WHERE user_id = $1 AND id IN (${placeholders})`,
+      [req.user.id, ...uniqueIds]
     );
     return res.json({ success: true, deleted: rowCount ?? 0 });
   } catch (err) {

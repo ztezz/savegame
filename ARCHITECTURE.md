@@ -9,7 +9,7 @@ The backend has been refactored from a monolithic `server.ts` file into a modula
 backend/
 ├── server.ts              # Main entry point (imports and initializes all modules)
 ├── config/                # Configuration files
-│   ├── database.ts       # PostgreSQL pool configuration
+│   ├── database.ts       # SQLite connection and pg-compatible adapter
 │   ├── environment.ts    # Environment variables
 │   └── multer.ts         # File upload configuration
 ├── database/              # Database related
@@ -33,7 +33,7 @@ backend/
 ## Module Descriptions
 
 ### Config (`/config`)
-- **database.ts**: PostgreSQL connection pool setup with fallback to in-memory demo mode
+- **database.ts**: SQLite connection setup and query adapter
 - **environment.ts**: Centralized environment variables and constants
 - **multer.ts**: File upload middleware configuration
 
@@ -73,9 +73,9 @@ Each route file exports a Router and manages a specific feature:
 - Each module can be independently tested
 - Easy to add new features without touching existing code
 
-### 4. **Database Flexibility**
-- Graceful fallback to in-memory mock database for demo mode
-- Easy to switch between PostgreSQL and other databases
+### 4. **Local Persistence**
+- SQLite stores application data without requiring an external database service
+- WAL mode and foreign-key enforcement are enabled at startup
 
 ### 5. **File Organization**
 - Logical grouping of related files
@@ -111,15 +111,11 @@ app.use(newFeatureRouter);
 
 ## Database Modes
 
-### Production Mode (with Database)
-- Set `DATABASE_URL` or `DB_HOST` environment variables
-- Uses PostgreSQL for persistent storage
-- Admin account created on first run with default password `admin123`
-
-### Demo Mode (without Database)
-- Falls back to in-memory storage if no database configured
-- Useful for testing without database setup
-- Data is lost on server restart
+### SQLite
+- Data is stored at `data/savegame.sqlite` by default
+- Set `DATABASE_PATH` to override the location
+- Set `ADMIN_INITIAL_PASSWORD` on the first production run to create the admin account
+- Mount the database directory on persistent storage when running in a container
 
 ## Running the Server
 
@@ -137,7 +133,7 @@ npm start
 ## Error Handling
 
 - All routes include proper error handling
-- Database errors fall back to mock data if in demo mode
+- Database errors are logged and returned by the affected endpoint
 - File upload errors are logged and reported to client
 
 ## Security

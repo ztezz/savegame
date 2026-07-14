@@ -109,7 +109,10 @@ savesRouter.get("/api/save/list", authenticateToken, async (req: any, res) => {
                s.id as save_id, s.version, s.file_size, s.created_at, s.file_path, s.custom_file_path
         FROM games g
         LEFT JOIN (
-          SELECT DISTINCT ON (game_id) * FROM saves ORDER BY game_id, version DESC
+          SELECT * FROM (
+            SELECT saves.*, ROW_NUMBER() OVER (PARTITION BY game_id ORDER BY version DESC, id DESC) AS rn
+            FROM saves
+          ) ranked_saves WHERE rn = 1
         ) s ON g.id = s.game_id
         WHERE g.user_id = $1
         ORDER BY g.created_at DESC
@@ -309,13 +312,14 @@ savesRouter.delete("/api/saves", authenticateToken, async (req: any, res) => {
 
   if (isUsingDatabase()) {
     try {
+      const idPlaceholders = uniqueIds.map((_, index) => `$${index + 1}`).join(', ');
       const { rows } = await pool.query(
         `SELECT s.id, s.file_path
          FROM saves s
          JOIN games g ON s.game_id = g.id
-         WHERE s.id = ANY($1::int[])
-           AND (g.user_id = $2 OR $3 = 'Admin')`,
-        [uniqueIds, req.user.id, req.user.role]
+         WHERE s.id IN (${idPlaceholders})
+           AND (g.user_id = $${uniqueIds.length + 1} OR $${uniqueIds.length + 2} = 'Admin')`,
+        [...uniqueIds, req.user.id, req.user.role]
       );
 
       for (const save of rows) {
@@ -334,7 +338,8 @@ savesRouter.delete("/api/saves", authenticateToken, async (req: any, res) => {
         return res.json({ success: true, deleted: 0 });
       }
 
-      const deleteResult = await pool.query('DELETE FROM saves WHERE id = ANY($1::int[])', [rowIds]);
+      const deletePlaceholders = rowIds.map((_: number, index: number) => `$${index + 1}`).join(', ');
+      const deleteResult = await pool.query(`DELETE FROM saves WHERE id IN (${deletePlaceholders})`, rowIds);
       return res.json({ success: true, deleted: deleteResult.rowCount ?? 0 });
     } catch (err: any) {
       console.error('Bulk delete saves error:', err);

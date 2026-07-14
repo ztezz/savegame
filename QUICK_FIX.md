@@ -48,9 +48,9 @@ npm start
 
 ## Possible Quick Fixes
 
-1. **Database connection issue?**
-   - Make sure PostgreSQL is running
-   - Or ensure no DATABASE_URL is set (use demo mode)
+1. **Database issue?**
+   - Check that the directory containing `DATABASE_PATH` is writable
+   - Never delete the production SQLite file while troubleshooting
 
 2. **Wrong Node version?**
    - Check: `node --version` (need v18+)

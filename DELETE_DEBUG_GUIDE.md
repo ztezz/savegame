@@ -97,7 +97,7 @@ Then perform a delete operation and watch the console for logs like:
 **Cause**: Database error or unexpected error
 **Solution**:
 1. Check server logs for detailed error message
-2. Verify database connection (if using PostgreSQL)
+2. Verify the SQLite database path is writable
 3. Check file system permissions for uploads directory
 
 ## Database vs Demo Mode
@@ -109,8 +109,8 @@ Then perform a delete operation and watch the console for logs like:
 - No database setup needed
 
 ### Database Mode
-- Set `DATABASE_URL` or `DB_HOST` environment variables
-- Saves persistent in PostgreSQL
+- Set `DATABASE_PATH` if the default `data/savegame.sqlite` location is not suitable
+- Mount the SQLite database directory on persistent storage in production
 - Requires database to be running
 - More reliable for production
 

@@ -199,34 +199,24 @@ syncRouter.get("/api/task", authenticateToken, async (req: any, res) => {
         return res.status(400).json({ error: "Device not found or not registered" });
       }
 
-      await client.query('BEGIN');
-      const nextTaskRes = await client.query(
-        `SELECT id, game_id, save_id, game_name, device_name, save_path, status, created_at
-         FROM restore_commands
-         WHERE user_id = $1
-           AND status = 'Pending'
-           AND device_name = $2
-         ORDER BY created_at ASC
-         FOR UPDATE SKIP LOCKED
-         LIMIT 1`,
-        [req.user.id, deviceId]
-      );
+       await client.query('BEGIN');
+       const claimRes = await client.query(
+         `UPDATE restore_commands
+          SET status = 'Running', claimed_at = CURRENT_TIMESTAMP
+          WHERE id = (
+            SELECT id FROM restore_commands
+            WHERE user_id = $1 AND status = 'Pending' AND device_name = $2
+            ORDER BY created_at ASC, id ASC LIMIT 1
+          ) AND user_id = $1 AND status = 'Pending'
+          RETURNING id, game_id, save_id, game_name, device_name, save_path, status, created_at, claimed_at`,
+         [req.user.id, deviceId]
+       );
 
-      if (nextTaskRes.rows.length === 0) {
-        await client.query('COMMIT');
-        return res.json({ task: null });
-      }
-
-      const task = nextTaskRes.rows[0];
-      const claimRes = await client.query(
-        `UPDATE restore_commands
-         SET status = 'Running',
-             claimed_at = NOW()
-         WHERE id = $1 AND user_id = $2
-         RETURNING id, game_id, save_id, game_name, device_name, save_path, status, created_at, claimed_at`,
-        [task.id, req.user.id]
-      );
-      await client.query('COMMIT');
+       if (claimRes.rows.length === 0) {
+         await client.query('COMMIT');
+         return res.json({ task: null });
+       }
+       await client.query('COMMIT');
 
       const claimedTask = claimRes.rows[0];
       await writeSyncLog(req.user.id, deviceId, 'Info', `Task #${claimedTask.id} claimed by agent`);
@@ -377,7 +367,7 @@ syncRouter.post("/api/sync/restore/:gameId", authenticateToken, async (req: any,
         FROM games g
         LEFT JOIN saves s ON s.game_id = g.id
         WHERE g.id = $1 AND g.user_id = $2
-        ORDER BY s.version DESC NULLS LAST
+         ORDER BY (s.version IS NULL) ASC, s.version DESC
         LIMIT 1
       `, [gameId, req.user.id]);
 
@@ -545,27 +535,22 @@ syncRouter.get("/api/sync/restore-status", authenticateToken, async (req: any, r
              completed_at = NOW()
          WHERE user_id = $1
            AND status = 'Running'
-           AND claimed_at < NOW() - ($2 || ' minutes')::interval`,
+            AND claimed_at < datetime('now', '-' || $2 || ' minutes')`,
         [req.user.id, RUNNING_TIMEOUT_MINUTES]
       );
 
       const { rows } = await pool.query(
-        `SELECT DISTINCT ON (rc.game_id)
-            rc.id,
-            rc.game_id,
-            rc.save_id,
-            rc.game_name,
-            rc.status,
-            rc.device_name,
-            rc.error_message,
-            rc.retry_count,
-            rc.max_retries,
-            rc.created_at,
-            rc.claimed_at,
-            rc.completed_at
-         FROM restore_commands rc
-         WHERE rc.user_id = $1
-         ORDER BY rc.game_id, rc.created_at DESC
+        `SELECT id, game_id, save_id, game_name, status, device_name, error_message,
+                retry_count, max_retries, created_at, claimed_at, completed_at
+         FROM (
+           SELECT rc.*, ROW_NUMBER() OVER (
+             PARTITION BY rc.game_id ORDER BY rc.created_at DESC, rc.id DESC
+           ) AS rn
+           FROM restore_commands rc
+           WHERE rc.user_id = $1
+         ) ranked_commands
+         WHERE rn = 1
+         ORDER BY created_at DESC
          LIMIT 200`,
         [req.user.id]
       );
@@ -797,7 +782,7 @@ syncRouter.get("/api/sync/agent-online", authenticateToken, async (req: any, res
       const { rows } = await pool.query(
         `SELECT device_name,
                 last_seen,
-                (NOW() - last_seen) < ($1 * INTERVAL '1 minute') AS online
+                last_seen > datetime('now', '-' || $1 || ' minutes') AS online
          FROM agent_heartbeats
          WHERE user_id = $2
          ORDER BY device_name ASC`,
