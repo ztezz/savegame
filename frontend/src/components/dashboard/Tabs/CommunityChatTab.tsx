@@ -69,6 +69,8 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
   const [aiTyping, setAiTyping] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState('');
+  const [roomMemory, setRoomMemory] = useState<{ summary: string; last_message_id: number; updated_at: string | null } | null>(null);
+  const [memoryLoading, setMemoryLoading] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   const lastMessageIdRef = useRef(0);
   const activeRoomIdRef = useRef(activeRoomId);
@@ -369,6 +371,30 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
       aiPrompt: room.ai_prompt || '',
       aiAutoReply: room.ai_auto_reply !== false,
     });
+    setRoomMemory(null);
+  };
+
+  const loadRoomMemory = async (roomId: number) => {
+    setMemoryLoading(true);
+    try {
+      const res = await api.get(`/community/rooms/${roomId}/memory`);
+      setRoomMemory(res.data);
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Không tải được bộ nhớ AI', 'error');
+    } finally {
+      setMemoryLoading(false);
+    }
+  };
+
+  const clearRoomMemory = async (roomId: number) => {
+    if (!window.confirm('Xóa toàn bộ bộ nhớ dài hạn của AI trong phòng này?')) return;
+    try {
+      await api.delete(`/community/rooms/${roomId}/memory`);
+      setRoomMemory({ summary: '', last_message_id: 0, updated_at: null });
+      showToast('Đã xóa bộ nhớ AI', 'success');
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Không xóa được bộ nhớ AI', 'error');
+    }
   };
 
   const saveRoom = async (roomId: number) => {
@@ -590,7 +616,20 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
                 <option value="gaming">Game thủ</option>
               </select>
               <textarea value={roomDraft.aiPrompt} onChange={(e) => setRoomDraft((current) => ({ ...current, aiPrompt: e.target.value }))} maxLength={1500} rows={4} placeholder="Prompt riêng. Để trống sẽ dùng tone bên trên." className="mb-2 w-full resize-none rounded-xl border border-sky-100 px-3 py-2 text-xs font-semibold outline-none" />
-              <label className="flex items-center gap-2 text-xs font-bold text-slate-600"><input type="checkbox" checked={roomDraft.aiAutoReply} onChange={(e) => setRoomDraft((current) => ({ ...current, aiAutoReply: e.target.checked }))} />AI tự trả lời mọi tin nhắn</label>
+              <label className="mb-3 flex items-center gap-2 text-xs font-bold text-slate-600"><input type="checkbox" checked={roomDraft.aiAutoReply} onChange={(e) => setRoomDraft((current) => ({ ...current, aiAutoReply: e.target.checked }))} />AI tự trả lời mọi tin nhắn</label>
+              <div className="rounded-xl border border-violet-100 bg-violet-50 p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-black text-violet-700">Bộ nhớ dài hạn</span>
+                  <div className="flex gap-1.5">
+                    <button type="button" onClick={() => loadRoomMemory(room.id)} disabled={memoryLoading} className="rounded-lg bg-white px-2 py-1 text-[10px] font-black text-violet-600 disabled:opacity-50">{memoryLoading ? 'Đang tải' : roomMemory ? 'Làm mới' : 'Xem'}</button>
+                    {roomMemory?.summary && <button type="button" onClick={() => clearRoomMemory(room.id)} className="rounded-lg bg-red-50 px-2 py-1 text-[10px] font-black text-red-600">Xóa</button>}
+                  </div>
+                </div>
+                {roomMemory && <div className="mt-2">
+                  <p className="max-h-36 overflow-y-auto whitespace-pre-wrap rounded-lg bg-white p-2 text-[10px] leading-relaxed text-slate-600">{roomMemory.summary || 'AI chưa tạo bộ nhớ cho phòng này.'}</p>
+                  {roomMemory.updated_at && <p className="mt-1 text-[9px] font-bold text-violet-400">Cập nhật {new Date(roomMemory.updated_at).toLocaleString('vi-VN')}</p>}
+                </div>}
+              </div>
             </div>
             <div className="flex gap-2">
               <button type="button" onClick={() => saveRoom(room.id)} className="flex-1 rounded-xl bg-sky-500 px-3 py-2 text-xs font-black text-white">Lưu</button>

@@ -23,6 +23,7 @@ const TABLES = [
   "drive_shares",
   "community_rooms",
   "community_messages",
+  "community_ai_memories",
   "community_bans",
 ] as const;
 

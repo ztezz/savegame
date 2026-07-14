@@ -189,6 +189,12 @@ export const sqliteSchema = `
   );
   CREATE INDEX IF NOT EXISTS idx_community_messages_room_id ON community_messages(room_id, id DESC);
   CREATE INDEX IF NOT EXISTS idx_community_messages_created ON community_messages(created_at DESC);
+  CREATE TABLE IF NOT EXISTS community_ai_memories (
+    room_id INTEGER PRIMARY KEY REFERENCES community_rooms(id) ON DELETE CASCADE,
+    summary TEXT NOT NULL DEFAULT '',
+    last_message_id INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
   CREATE TABLE IF NOT EXISTS community_bans (
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
     reason TEXT,
