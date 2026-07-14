@@ -203,6 +203,11 @@ authRouter.post("/api/auth/login", authRateLimit, async (req, res) => {
 
       const dbUser = rows[0];
 
+      if (dbUser.status !== 'Active') {
+        logAuthAudit(dbUser.id || null, 'AUTH_LOGIN_FAILED', { username, reason: 'account_locked' });
+        return res.status(403).json({ error: "Tài khoản đã bị khóa" });
+      }
+
       if (!dbUser.password_hash || !dbUser.password_hash.startsWith('$2')) {
         logAuthAudit(dbUser.id || null, 'AUTH_LOGIN_FAILED', { username, reason: 'invalid_password_hash' });
         return res.status(401).json({ error: "Invalid credentials - password not properly configured" });

@@ -498,17 +498,26 @@ driveRouter.post("/api/drive/upload", authenticateToken, handleDriveUpload, asyn
   const files = [...(fieldFiles?.files || []), ...(fieldFiles?.file || [])];
   const note = String(req.body?.note || "").trim() || null;
   const folderId = req.body?.folderId ? parseId(req.body.folderId) : null;
+  const cleanupFiles = () => {
+    for (const file of files) if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+  };
 
   if (files.length === 0) return res.status(400).json({ error: "No file uploaded" });
-  if (req.body?.folderId && !folderId) return res.status(400).json({ error: "Invalid folder id" });
-  if (!isUsingDatabase()) return res.status(400).json({ error: "Drive requires database mode" });
+  if (req.body?.folderId && !folderId) {
+    cleanupFiles();
+    return res.status(400).json({ error: "Invalid folder id" });
+  }
+  if (!isUsingDatabase()) {
+    cleanupFiles();
+    return res.status(400).json({ error: "Drive requires database mode" });
+  }
 
   try {
     await assertFolder(folderId, req.user.id);
     const usage = await getDriveUsage(req.user.id);
     const uploadBytes = files.reduce((sum, file) => sum + file.size, 0);
     if (usage.totalBytes + uploadBytes > usage.quotaBytes) {
-      for (const file of files) if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+      cleanupFiles();
       return res.status(413).json({
         error: "Drive quota exceeded",
         usage,
@@ -537,7 +546,7 @@ driveRouter.post("/api/drive/upload", authenticateToken, handleDriveUpload, asyn
     const inserted = await insertDriveFiles(records);
     res.status(201).json(files.length === 1 ? inserted[0] : inserted);
   } catch (err: any) {
-    for (const file of files) if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+    cleanupFiles();
     const status = err.message === "Folder not found" ? 404 : 500;
     res.status(status).json({ error: err.message || "Drive upload failed" });
   }
@@ -674,8 +683,12 @@ driveRouter.get("/api/drive/files/:id/raw", authenticateToken, async (req: any, 
     const filePath = path.join(DRIVE_DIR, file.stored_name);
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Physical file not found" });
 
-    res.setHeader("Content-Type", file.mime_type || "application/octet-stream");
-    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(file.original_name)}"`);
+    const isActiveContent = file.mime_type === "text/html" || file.mime_type === "application/xhtml+xml" || file.mime_type === "image/svg+xml";
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'");
+    res.setHeader("Content-Type", isActiveContent ? "application/octet-stream" : (file.mime_type || "application/octet-stream"));
+    if (isActiveContent) res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(file.original_name)}"`);
+    else res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(file.original_name)}"`);
     return res.sendFile(filePath);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Drive preview failed" });
@@ -705,7 +718,8 @@ driveRouter.get("/api/drive/files/:id/preview", authenticateToken, async (req: a
     if (file.mime_type === "application/pdf") return res.json({ kind: "pdf", file: meta });
     if (file.mime_type?.startsWith("video/")) return res.json({ kind: "video", file: meta });
     if (file.mime_type?.startsWith("audio/")) return res.json({ kind: "audio", file: meta });
-    if (isOfficePreviewable(file.mime_type, file.original_name)) return res.json({ kind: "office", file: meta });
+    // Office Online requires a public URL; do not expose a private file just to preview it.
+    if (isOfficePreviewable(file.mime_type, file.original_name)) return res.json({ kind: "unsupported", file: meta });
     if (isPreviewableText(file.mime_type, file.original_name)) {
       const content = fs.readFileSync(filePath, "utf8").slice(0, 200000);
       return res.json({ kind: "text", file: meta, content, truncated: Number(file.file_size) > 200000 });
@@ -834,8 +848,12 @@ driveRouter.get("/api/drive/share/:token/raw", async (req, res) => {
 
     const filePath = path.join(DRIVE_DIR, file.stored_name);
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Physical file not found" });
-    res.setHeader("Content-Type", file.mime_type || "application/octet-stream");
-    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(file.original_name)}"`);
+    const isActiveContent = file.mime_type === "text/html" || file.mime_type === "application/xhtml+xml" || file.mime_type === "image/svg+xml";
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'");
+    res.setHeader("Content-Type", isActiveContent ? "application/octet-stream" : (file.mime_type || "application/octet-stream"));
+    if (isActiveContent) res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(file.original_name)}"`);
+    else res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(file.original_name)}"`);
     return res.sendFile(filePath);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Drive share preview failed" });

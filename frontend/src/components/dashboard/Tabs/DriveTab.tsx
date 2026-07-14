@@ -321,18 +321,19 @@ const DriveTab: React.FC = () => {
   };
 
   const downloadFile = async (file: DriveFile) => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      showToast('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại', 'error');
-      return;
+    try {
+      const response = await api.get(`/drive/download/${file.id}`, { responseType: 'blob' });
+      const blobUrl = URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = file.original_name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Tải file thất bại', 'error');
     }
-
-    const link = document.createElement('a');
-    link.href = `${API_BASE_URL}/drive/download/${file.id}?token=${encodeURIComponent(token)}`;
-    link.download = file.original_name;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   const moveSelected = async () => {
@@ -466,10 +467,6 @@ const DriveTab: React.FC = () => {
       if (['image', 'pdf', 'video', 'audio'].includes(res.data.kind)) {
         const raw = await api.get(`/drive/files/${file.id}/raw`, { responseType: 'blob' });
         setPreviewObjectUrl(URL.createObjectURL(raw.data));
-      } else if (res.data.kind === 'office') {
-        const token = file.share_token || (await api.post(`/drive/files/${file.id}/share`, { expiresInHours: 'never' })).data.token;
-        const publicRawUrl = `${API_BASE_URL}/drive/share/${encodeURIComponent(token)}/raw`;
-        setOfficePreviewUrl(`https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(publicRawUrl)}`);
       }
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Không xem trước được file', 'error');

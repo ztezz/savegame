@@ -1,8 +1,10 @@
 export const NODE_ENV = process.env.NODE_ENV || "development";
-export const JWT_SECRET = process.env.JWT_SECRET || "cloudsave-secret-key-2024";
-if (NODE_ENV === "production" && !process.env.JWT_SECRET) {
-  console.warn("⚠️ WARNING: JWT_SECRET is not set in production. Using default insecure key.");
+const configuredJwtSecret = process.env.JWT_SECRET;
+const insecureJwtSecret = "cloudsave-secret-key-2024";
+if (NODE_ENV === "production" && (!configuredJwtSecret || configuredJwtSecret === insecureJwtSecret || configuredJwtSecret.length < 32)) {
+  throw new Error("JWT_SECRET must be a unique secret of at least 32 characters in production");
 }
+export const JWT_SECRET = configuredJwtSecret || insecureJwtSecret;
 
 export const PORT = NODE_ENV === "production" ? (process.env.PORT || 3000) : (process.env.API_PORT || 3001);
 

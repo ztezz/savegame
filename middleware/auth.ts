@@ -29,7 +29,7 @@ export const authenticateToken = async (req: any, res: any, next: any) => {
           return res.sendStatus(401);
         }
         const { rows: userRows } = await pool.query(
-          'SELECT id, username, role FROM users WHERE id = $1',
+          "SELECT id, username, role, status FROM users WHERE id = $1 AND status = 'Active'",
           [rows[0].user_id]
         );
         if (userRows.length === 0) return res.sendStatus(401);
@@ -46,11 +46,7 @@ export const authenticateToken = async (req: any, res: any, next: any) => {
   }
 
   // --- JWT Bearer auth (web UI) ---
-  const rawUrl = req.originalUrl || req.url || '';
-  const queryDownloadToken = req.method === 'GET'
-    ? String(req.query?.token || new URLSearchParams(rawUrl.split('?')[1] || '').get('token') || '')
-    : '';
-  const token = (authHeader && authHeader.split(' ')[1]) || queryDownloadToken;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
 
   if (!token) {
     console.log('❌ No token found');
@@ -66,13 +62,16 @@ export const authenticateToken = async (req: any, res: any, next: any) => {
     
     if (isUsingDatabase()) {
       try {
-        const { rows } = await pool.query('SELECT id, username, role FROM users WHERE username = $1', [user.username]);
+        const { rows } = await pool.query(
+          "SELECT id, username, role, status FROM users WHERE username = $1 AND status = 'Active'",
+          [user.username]
+        );
         if (rows.length > 0) {
-          req.user = { ...user, id: rows[0].id };
+          req.user = { id: rows[0].id, username: rows[0].username, role: rows[0].role };
           if (!isNoisyPollPath) console.log('✅ User loaded from DB:', req.user);
         } else {
           console.log('⚠️  User not found in database');
-          return res.status(401).json({ error: 'User no longer exists. Please sign in again.' });
+          return res.status(401).json({ error: 'User is unavailable or locked. Please sign in again.' });
         }
       } catch (dbErr: any) {
         console.error('⚠️  DB error fetching user:', dbErr.message);
