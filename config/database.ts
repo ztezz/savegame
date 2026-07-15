@@ -7,7 +7,7 @@ export interface DatabaseResult<T = any> {
   rowCount: number;
 }
 
-const databasePath = path.resolve(process.env.DATABASE_PATH || path.join("data", "savegame.sqlite"));
+export const databasePath = path.resolve(process.env.DATABASE_PATH || path.join("data", "savegame.sqlite"));
 fs.mkdirSync(path.dirname(databasePath), { recursive: true });
 
 const database = new Database(databasePath);
@@ -149,6 +149,16 @@ class SQLitePool extends SQLiteClient {
 }
 
 export const pool = new SQLitePool();
+
+export const backupDatabase = async (destinationPath: string) => {
+  await waitForTransaction();
+  database.pragma("wal_checkpoint(PASSIVE)");
+  return database.backup(destinationPath);
+};
+
+export const checkpointDatabase = (mode: "PASSIVE" | "FULL" | "RESTART" | "TRUNCATE" = "PASSIVE") => {
+  return database.pragma(`wal_checkpoint(${mode})`);
+};
 
 export const startDatabaseKeepAlive = () => {};
 

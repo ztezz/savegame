@@ -19,6 +19,7 @@ const ActivationTab = lazy(() => import('./dashboard/Tabs/ActivationTab'));
 const CategoryTab = lazy(() => import('./dashboard/Tabs/CategoryTab'));
 const DriveTab = lazy(() => import('./dashboard/Tabs/DriveTab'));
 const CommunityChatTab = lazy(() => import('./dashboard/Tabs/CommunityChatTab'));
+const SqliteAdminTab = lazy(() => import('./dashboard/Tabs/SqliteAdminTab'));
 import { ActivationFile } from './dashboard/Tabs/ActivationTab';
 
 // Modals
@@ -32,8 +33,8 @@ const ChangePasswordModal = lazy(() => import('./dashboard/Modals/ChangePassword
 // Types and Constants
 import { GameSave, UserAccount, RestoreStatusItem } from './dashboard/types';
 
-type DashboardTab = 'dashboard' | 'library' | 'drive' | 'community' | 'devices' | 'settings' | 'logs' | 'users' | 'activation' | 'category' | 'account';
-const DASHBOARD_TABS: DashboardTab[] = ['dashboard', 'library', 'drive', 'community', 'devices', 'settings', 'logs', 'users', 'activation', 'category', 'account'];
+type DashboardTab = 'dashboard' | 'library' | 'drive' | 'community' | 'devices' | 'settings' | 'logs' | 'users' | 'activation' | 'category' | 'account' | 'sqlite';
+const DASHBOARD_TABS: DashboardTab[] = ['dashboard', 'library', 'drive', 'community', 'devices', 'settings', 'logs', 'users', 'activation', 'category', 'account', 'sqlite'];
 
 const getInitialDashboardTab = (): DashboardTab => {
   const saved = localStorage.getItem('dashboardActiveTab');
@@ -42,6 +43,7 @@ const getInitialDashboardTab = (): DashboardTab => {
 
 export default function Dashboard({ onLogout, currentUser }: { onLogout: () => void, currentUser: any }) {
   const { showToast } = useToast();
+  const isAdmin = currentUser?.role?.toLowerCase() === 'admin' || currentUser?.username === 'admin';
   const { categories, fetchCategories: refetchCategories } = useDynamicCategories();
   const [games, setGames] = useState<GameSave[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,6 +113,10 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   }, [activeTab]);
 
   useEffect(() => {
+    if (activeTab === 'sqlite' && !isAdmin) setActiveTab('dashboard');
+  }, [activeTab, isAdmin]);
+
+  useEffect(() => {
     localStorage.setItem('dashboardDarkMode', darkMode ? '1' : '0');
   }, [darkMode]);
 
@@ -154,6 +160,10 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
     category: {
       title: 'Quản lý thể loại',
       description: 'Sắp xếp thư viện game theo nhóm dễ tìm kiếm hơn.',
+    },
+    sqlite: {
+      title: 'Quản lý SQLite',
+      description: 'Duyệt dữ liệu, chạy SQL, bảo trì và sao lưu cơ sở dữ liệu server.',
     },
   };
 
@@ -946,6 +956,12 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
           {activeTab === 'logs' && (
             <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải nhật ký...</div>}>
               <SystemLogsTab currentUser={currentUser} />
+            </Suspense>
+          )}
+
+          {activeTab === 'sqlite' && isAdmin && (
+            <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải SQLite...</div>}>
+              <SqliteAdminTab />
             </Suspense>
           )}
 

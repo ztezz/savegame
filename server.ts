@@ -32,6 +32,7 @@ import { agentDownloadRouter } from "./routes/agentDownload.js";
 import { settingsRouter } from "./routes/systemSettings.js";
 import { driveRouter } from "./routes/drive.js";
 import { communityRouter } from "./routes/community.js";
+import { sqliteAdminRouter } from "./routes/sqliteAdmin.js";
 
 // Utils imports
 import { startUploadSessionCleanupInterval } from "./utils/uploads.js";
@@ -131,6 +132,7 @@ async function startServer() {
   app.use(settingsRouter);
   app.use(driveRouter);
   app.use(communityRouter);
+  app.use(sqliteAdminRouter);
 
   // Health check
   app.get("/api/health", async (req, res) => {

@@ -2,10 +2,10 @@
 import React from 'react';
 import { 
   LayoutDashboard, Library, Laptop, 
-  Settings, User, KeyRound, HardDrive, MessageCircle, FileText, Tags
+  Settings, User, KeyRound, HardDrive, MessageCircle, FileText, Tags, Database
 } from 'lucide-react';
 
-type TabType = 'dashboard' | 'library' | 'drive' | 'community' | 'devices' | 'settings' | 'logs' | 'users' | 'activation' | 'category' | 'account';
+type TabType = 'dashboard' | 'library' | 'drive' | 'community' | 'devices' | 'settings' | 'logs' | 'users' | 'activation' | 'category' | 'account' | 'sqlite';
 interface SidebarProps {
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
@@ -87,6 +87,15 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, currentUser,
           <Settings className="w-4 h-4" />
           Cài đặt hệ thống
         </button>
+        {(currentUser?.role?.toLowerCase() === 'admin' || currentUser?.username === 'admin') && (
+          <button
+            onClick={() => setActiveTab('sqlite')}
+            className={`w-full flex items-center gap-3 p-3 rounded-xl text-sm font-semibold transition-all ${activeTab === 'sqlite' ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/20' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}
+          >
+            <Database className="w-4 h-4" />
+            Quản lý SQLite
+          </button>
+        )}
         {(currentUser?.role?.toLowerCase() === 'admin' || currentUser?.username === 'admin') && (
           <button 
             onClick={() => setActiveTab('logs')}

@@ -23,7 +23,8 @@ backend/
 │   ├── saves.ts          # Game save management (upload, download, delete)
 │   ├── games.ts          # Game metadata management
 │   ├── sync.ts           # Sync operations (push, pull, logs)
-│   └── activation.ts     # Activation file chunked upload & management
+│   ├── activation.ts     # Activation file chunked upload & management
+│   └── sqliteAdmin.ts    # Admin-only SQLite browser, SQL console, backup, maintenance
 ├── utils/                 # Utility functions
 │   └── uploads.ts        # Upload session management
 └── package.json
@@ -55,6 +56,7 @@ Each route file exports a Router and manages a specific feature:
 - **games.ts**: Game metadata (rename, categorize)
 - **sync.ts**: Device sync operations (logs, push, pull)
 - **activation.ts**: Activation file uploads (chunked + single, list, download, delete)
+- **sqliteAdmin.ts**: Full SQLite management for administrators
 
 ### Utils (`/utils`)
 - **uploads.ts**: Manages chunked upload sessions, cleanup scheduler
@@ -114,8 +116,13 @@ app.use(newFeatureRouter);
 ### SQLite
 - Data is stored at `data/savegame.sqlite` by default
 - Set `DATABASE_PATH` to override the location
+- Set `SQLITE_SCAN_PATHS` to a comma-separated allowlist of directories that the admin manager may scan and create databases in; the main database directory is always included
 - Set `ADMIN_INITIAL_PASSWORD` on the first production run to create the admin account
 - Mount the database directory on persistent storage when running in a container
+- Admins can open **Quản lý SQLite** in the dashboard to browse tables, edit rows, run SQL, check integrity, optimize, checkpoint WAL, and download a consistent backup
+- The manager detects `.sqlite`, `.sqlite3`, and `.db` files by validating their SQLite header, supports switching between detected databases, and can create a new empty SQLite file in an allowed directory
+- SQLite management endpoints use the `/api/admin/sqlite` prefix and require an authenticated Admin account
+- File-access SQL such as `ATTACH`, `DETACH`, `VACUUM INTO`, and `load_extension()` is blocked; data-changing operations are written to the audit log
 
 ## Running the Server
 
