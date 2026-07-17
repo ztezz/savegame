@@ -81,6 +81,7 @@ const DriveTab: React.FC = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState<'uploading' | 'finalizing'>('uploading');
   const [dragging, setDragging] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [folderModalOpen, setFolderModalOpen] = useState(false);
@@ -202,12 +203,31 @@ const DriveTab: React.FC = () => {
   const uploadFiles = async (uploadFilesInput = selectedUploadFiles) => {
     if (uploadFilesInput.length === 0 || trashMode) return;
     setUploading(true);
+    setUploadPhase('uploading');
     cancelUploadRef.current = false;
     setUploadStatus('Đang chuẩn bị upload...');
     setProgress(0);
     try {
       const totalUploadBytes = uploadFilesInput.reduce((total, item) => total + item.file.size, 0);
       let completedBytes = 0;
+      const finalizeUpload = async (sessionId: string) => {
+        let lastError: unknown;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            await api.post('/drive/upload/finalize', { sessionId }, { timeout: 120000 });
+            return;
+          } catch (error: any) {
+            lastError = error;
+            const status = error.response?.status;
+            if (status && status < 500 && status !== 404) throw error;
+            if (attempt < 3) {
+              setUploadStatus(`Kết nối phản hồi bị gián đoạn, đang xác nhận lại (${attempt}/3)...`);
+              await new Promise((resolve) => window.setTimeout(resolve, attempt * 2000));
+            }
+          }
+        }
+        throw lastError;
+      };
       const uploadFileInChunks = async (item: UploadItem, fileNumber: number) => {
         const token = localStorage.getItem('token');
         if (!token) throw new Error('Phiên đăng nhập đã hết hạn');
@@ -234,6 +254,7 @@ const DriveTab: React.FC = () => {
               setProgress(Math.max(1, Math.min(98, Math.floor((uploadedBytes / totalUploadBytes) * 100))));
             };
             xhr.upload.onload = () => {
+              setUploadPhase('finalizing');
               setProgress(Math.min(99, Math.max(1, Math.floor(((completedBytes + item.file.size) / totalUploadBytes) * 100))));
               setUploadStatus(`Đã gửi xong ${item.file.name}, server đang ghi dữ liệu...`);
             };
@@ -265,6 +286,7 @@ const DriveTab: React.FC = () => {
           note: note.trim(),
         });
         const sessionId = String(initRes.data.sessionId);
+        setUploadPhase('uploading');
         const chunkSize = Number(initRes.data.chunkSize) || 32 * 1024 * 1024;
         const totalChunks = Math.ceil(item.file.size / chunkSize);
         const loadedByChunk = new Array<number>(totalChunks).fill(0);
@@ -331,9 +353,11 @@ const DriveTab: React.FC = () => {
           await Promise.all(Array.from({ length: Math.min(concurrency, totalChunks) }, () => worker()));
           if (cancelUploadRef.current) throw new Error('Upload đã hủy');
           setProgress(Math.min(99, Math.max(1, Math.floor(((completedBytes + item.file.size) / totalUploadBytes) * 100))));
+          setUploadPhase('finalizing');
           setUploadStatus(`Đã gửi xong ${item.file.name}, server đang xác nhận file...`);
-          await api.post('/drive/upload/finalize', { sessionId });
+          await finalizeUpload(sessionId);
           completedBytes += item.file.size;
+          setUploadPhase('uploading');
         } catch (error) {
           void api.delete(`/drive/upload/${encodeURIComponent(sessionId)}`).catch(() => undefined);
           throw error;
@@ -344,6 +368,7 @@ const DriveTab: React.FC = () => {
         await uploadFileInChunks(uploadFilesInput[index], index + 1);
       }
       setProgress(100);
+      setUploadPhase('uploading');
       setUploadStatus('Hoàn tất, đang làm mới danh sách...');
       const folderCount = new Set(uploadFilesInput.map((item) => (item.relativePath || item.file.webkitRelativePath || '').split('/').slice(0, -1).join('/')).filter(Boolean)).size;
       showToast(folderCount ? `Đã tải ${uploadFilesInput.length} file trong ${folderCount} thư mục` : `Đã tải ${uploadFilesInput.length} file lên Drive`, 'success');
@@ -359,6 +384,7 @@ const DriveTab: React.FC = () => {
       setUploading(false);
       setUploadStatus('');
       setDragging(false);
+      setUploadPhase('uploading');
     }
   };
 
@@ -683,7 +709,7 @@ const DriveTab: React.FC = () => {
 
     <DriveFolderModal open={folderModalOpen} folderName={newFolderName} breadcrumb={breadcrumb} onChangeFolderName={setNewFolderName} onClose={() => { setFolderModalOpen(false); setNewFolderName(''); }} onCreate={createFolder} />
 
-    <DriveUploadModal open={uploadModalOpen} uploading={uploading} dragging={dragging} progress={progress} uploadStatus={uploadStatus} selectedUploadFiles={selectedUploadFiles} note={note} onSetDragging={setDragging} onSetSelectedUploadFiles={setSelectedUploadFiles} onSetNote={setNote} onDrop={handleDrop} onClose={() => { if (!uploading) { setUploadModalOpen(false); setDragging(false); } }} onCancelUpload={cancelUpload} onUpload={() => uploadFiles()} />
+    <DriveUploadModal open={uploadModalOpen} uploading={uploading} dragging={dragging} progress={progress} uploadPhase={uploadPhase} uploadStatus={uploadStatus} selectedUploadFiles={selectedUploadFiles} note={note} onSetDragging={setDragging} onSetSelectedUploadFiles={setSelectedUploadFiles} onSetNote={setNote} onDrop={handleDrop} onClose={() => { if (!uploading) { setUploadModalOpen(false); setDragging(false); } }} onCancelUpload={cancelUpload} onUpload={() => uploadFiles()} />
 
     <DrivePreviewModal preview={preview} previewLoading={previewLoading} previewObjectUrl={previewObjectUrl} officePreviewUrl={officePreviewUrl} onClose={closePreview} onShareFile={openShareModal} onDownloadFile={downloadFile} />
 

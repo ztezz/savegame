@@ -1,5 +1,6 @@
 import React from 'react';
-import { File, Folder, UploadCloud, X } from 'lucide-react';
+import { File, Folder, Loader2, UploadCloud, X } from 'lucide-react';
+import { motion } from 'motion/react';
 import { UploadItem } from './driveTypes';
 
 type WebkitFile = File & { webkitRelativePath?: string };
@@ -9,6 +10,7 @@ type Props = {
   uploading: boolean;
   dragging: boolean;
   progress: number;
+  uploadPhase: 'uploading' | 'finalizing';
   selectedUploadFiles: UploadItem[];
   note: string;
   onSetDragging: (dragging: boolean) => void;
@@ -21,7 +23,7 @@ type Props = {
   uploadStatus?: string;
 };
 
-const DriveUploadModal: React.FC<Props> = ({ open, uploading, dragging, progress, selectedUploadFiles, note, onSetDragging, onSetSelectedUploadFiles, onSetNote, onDrop, onClose, onUpload, onCancelUpload, uploadStatus }) => {
+const DriveUploadModal: React.FC<Props> = ({ open, uploading, dragging, progress, uploadPhase, selectedUploadFiles, note, onSetDragging, onSetSelectedUploadFiles, onSetNote, onDrop, onClose, onUpload, onCancelUpload, uploadStatus }) => {
   if (!open) return null;
 
   return <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -62,14 +64,20 @@ const DriveUploadModal: React.FC<Props> = ({ open, uploading, dragging, progress
         <input className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50" value={note} disabled={uploading} onChange={(e)=>onSetNote(e.target.value)} placeholder="Ghi chú file (không bắt buộc)" />
 
         {uploading && <div className="space-y-2">
-          <div className="h-2 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-indigo-600 transition-all" style={{ width: `${progress}%` }} /></div>
-          <p className="text-center text-xs font-bold text-indigo-600">Đang tải lên {progress}%</p>
+          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+            {uploadPhase === 'finalizing'
+              ? <motion.div className="h-full w-1/3 rounded-full bg-gradient-to-r from-indigo-400 via-indigo-600 to-violet-500" animate={{ x: ['-100%', '300%'] }} transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }} />
+              : <div className="h-full bg-indigo-600 transition-all" style={{ width: `${progress}%` }} />}
+          </div>
+          <p className="flex items-center justify-center gap-2 text-center text-xs font-bold text-indigo-600">
+            {uploadPhase === 'finalizing' ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />Đang xử lý trên server</> : `Đang tải lên ${progress}%`}
+          </p>
           {uploadStatus && <p className="text-center text-xs font-semibold text-slate-500">{uploadStatus}</p>}
         </div>}
       </div>
       <div className="p-5 border-t border-slate-100 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2">
         <button type="button" onClick={uploading ? onCancelUpload : onClose} className="px-4 py-3 rounded-xl border border-slate-200 text-sm font-bold text-slate-600 disabled:opacity-50">{uploading ? 'Hủy upload' : 'Hủy'}</button>
-        <button type="button" onClick={onUpload} disabled={selectedUploadFiles.length === 0 || uploading} className="px-5 py-3 rounded-xl bg-indigo-600 text-white text-sm font-black disabled:opacity-50 inline-flex items-center justify-center gap-2"><UploadCloud className="w-4 h-4" />{uploading ? `${progress}%` : `Tải lên${selectedUploadFiles.length ? ` (${selectedUploadFiles.length})` : ''}`}</button>
+        <button type="button" onClick={onUpload} disabled={selectedUploadFiles.length === 0 || uploading} className="px-5 py-3 rounded-xl bg-indigo-600 text-white text-sm font-black disabled:opacity-50 inline-flex items-center justify-center gap-2"><UploadCloud className="w-4 h-4" />{uploading ? (uploadPhase === 'finalizing' ? 'Đang xử lý' : `${progress}%`) : `Tải lên${selectedUploadFiles.length ? ` (${selectedUploadFiles.length})` : ''}`}</button>
       </div>
     </div>
   </div>;

@@ -333,10 +333,20 @@ driveRouter.post("/api/drive/upload/chunk", authenticateToken, express.raw({ typ
 driveRouter.post("/api/drive/upload/finalize", authenticateToken, express.json({ limit: "1mb" }), async (req: any, res) => {
   const sessionId = String(req.body?.sessionId || "");
   const session = uploadSessions.get(sessionId);
-  if (!session || session.userId !== req.user.id) return res.status(404).json({ error: "Upload session not found" });
   if (!isUsingDatabase()) return res.status(400).json({ error: "Drive requires database mode" });
+  const storedName = `drive-session-${sessionId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
-  const storedName = `drive-${Date.now()}-${Math.round(Math.random() * 1e9)}${path.extname(session.fileName)}`;
+  if (!session) {
+    const existing = await pool.query(
+      `SELECT id, original_name, mime_type, file_size, note, created_at, deleted_at
+       FROM drive_files WHERE user_id = $1 AND stored_name = $2`,
+      [req.user.id, storedName]
+    );
+    if (existing.rows[0]) return res.status(200).json(existing.rows[0]);
+    return res.status(404).json({ error: "Upload session not found" });
+  }
+  if (session.userId !== req.user.id) return res.status(404).json({ error: "Upload session not found" });
+
   const finalPath = path.join(DRIVE_DIR, storedName);
 
   try {
