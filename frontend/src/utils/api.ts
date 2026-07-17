@@ -194,12 +194,9 @@ export const uploadWithChunks = async (
     throw new Error('No authentication token');
   }
 
-  const CHUNK_SIZE = 8 * 1024 * 1024; // Smaller chunks keep progress responsive on slow networks
   const MAX_CHUNK_RETRIES = 3;
-  const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+  const MAX_CONCURRENT_CHUNKS = 3;
   
-  console.log(`🚀 Chunked upload starting: ${file.name} (${(file.size / (1024 * 1024)).toFixed(1)}MB, ${totalChunks} chunks)`);
-
   try {
     // Step 1: Initialize upload session
     const initRes = await fetch(`${baseURL}/activation/upload/init`, {
@@ -220,26 +217,30 @@ export const uploadWithChunks = async (
       throw new Error(`Failed to initialize upload: ${initRes.statusText}`);
     }
 
-    const { sessionId } = await initRes.json();
-    console.log(`📝 Upload session created: ${sessionId}`);
+    const { sessionId, chunkSize: serverChunkSize } = await initRes.json();
+    const chunkSize = Math.max(1 * 1024 * 1024, Number(serverChunkSize) || 20 * 1024 * 1024);
+    const totalChunks = Math.ceil(file.size / chunkSize);
+    const uploadedByChunk = new Array<number>(totalChunks).fill(0);
+    console.log(`📝 Upload session created: ${sessionId} (${totalChunks} chunks, ${MAX_CONCURRENT_CHUNKS} concurrent)`);
 
     const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
     const uploadChunk = (chunk: Blob, chunkIndex: number, attempt: number) => new Promise<void>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       const chunkUrl = `${baseURL}/activation/upload/chunk?sessionId=${encodeURIComponent(sessionId)}&chunkIndex=${chunkIndex}&totalChunks=${totalChunks}`;
-      const uploadedBeforeChunk = chunkIndex * CHUNK_SIZE;
       const timeoutMs = Math.max(180000, (chunk.size / (1024 * 1024)) * 30000);
 
       xhr.upload.addEventListener('progress', (event) => {
         if (!event.lengthComputable) return;
-        const uploadedBytes = Math.min(uploadedBeforeChunk + event.loaded, file.size);
+        uploadedByChunk[chunkIndex] = Math.min(event.loaded, chunk.size);
+        const uploadedBytes = uploadedByChunk.reduce((total, loaded) => total + loaded, 0);
         const progress = Math.floor((uploadedBytes / file.size) * 95);
         onProgress(Math.max(1, Math.min(progress, 95)));
       });
 
       xhr.addEventListener('load', () => {
         if (xhr.status >= 200 && xhr.status < 300) {
+          uploadedByChunk[chunkIndex] = chunk.size;
           resolve();
           return;
         }
@@ -271,6 +272,7 @@ export const uploadWithChunks = async (
           return;
         } catch (err) {
           if (attempt === MAX_CHUNK_RETRIES) throw err;
+          uploadedByChunk[chunkIndex] = 0;
           const delayMs = attempt * 1500;
           console.warn(`⚠️ Chunk ${chunkIndex + 1}/${totalChunks} failed, retrying in ${delayMs}ms...`, err);
           await sleep(delayMs);
@@ -278,20 +280,25 @@ export const uploadWithChunks = async (
       }
     };
 
-    // Step 2: Upload chunks
-    for (let i = 0; i < totalChunks; i++) {
-      const start = i * CHUNK_SIZE;
-      const end = Math.min(start + CHUNK_SIZE, file.size);
-      const chunk = file.slice(start, end);
-      
-      console.log(`📤 Uploading chunk ${i + 1}/${totalChunks} (${(chunk.size / (1024 * 1024)).toFixed(1)}MB)...`);
+    // Step 2: Upload a small pool of chunks concurrently to avoid per-request latency.
+    let nextChunkIndex = 0;
+    const uploadWorker = async () => {
+      while (nextChunkIndex < totalChunks) {
+        const chunkIndex = nextChunkIndex++;
+        const start = chunkIndex * chunkSize;
+        const end = Math.min(start + chunkSize, file.size);
+        const chunk = file.slice(start, end);
 
-      await uploadChunkWithRetry(chunk, i);
+        console.log(`📤 Uploading chunk ${chunkIndex + 1}/${totalChunks} (${(chunk.size / (1024 * 1024)).toFixed(1)}MB)...`);
+        await uploadChunkWithRetry(chunk, chunkIndex);
+        const uploadedBytes = uploadedByChunk.reduce((total, loaded) => total + loaded, 0);
+        const progress = Math.floor((uploadedBytes / file.size) * 95);
+        onProgress(Math.max(1, Math.min(progress, 95)));
+        console.log(`✅ Chunk ${chunkIndex + 1}/${totalChunks} uploaded (${progress}%)`);
+      }
+    };
 
-      const progress = Math.floor((end / file.size) * 95);
-      onProgress(Math.max(1, Math.min(progress, 95)));
-      console.log(`✅ Chunk ${i + 1}/${totalChunks} uploaded (${progress}%)`);
-    }
+    await Promise.all(Array.from({ length: Math.min(MAX_CONCURRENT_CHUNKS, totalChunks) }, () => uploadWorker()));
 
     // Step 3: Finalize upload
     console.log(`🔗 Finalizing upload...`);
