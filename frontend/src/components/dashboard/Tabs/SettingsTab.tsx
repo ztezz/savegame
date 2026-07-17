@@ -1,5 +1,6 @@
-﻿import React, { useEffect, useState } from 'react';
-import { Shield, RefreshCw, Monitor, Server, UploadCloud, Download, CheckCircle2, AlertCircle, Save, FolderOpen, HardDrive, MessageCircle, SlidersHorizontal, Bot } from 'lucide-react';
+﻿import React, { useEffect, useRef, useState } from 'react';
+import { Shield, RefreshCw, Monitor, Server, UploadCloud, Download, CheckCircle2, AlertCircle, Save, FolderOpen, HardDrive, MessageCircle, SlidersHorizontal, Bot, File, Gauge, Loader2, Timer, X } from 'lucide-react';
+import { motion } from 'motion/react';
 import api from '../../../utils/api';
 import { API_ORIGIN, uploadLargeFile } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
@@ -32,6 +33,27 @@ const formatFileSize = (size: number) => {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+interface AgentUploadStats {
+  uploadedBytes: number;
+  totalBytes: number;
+  bytesPerSecond: number;
+  etaSeconds: number | null;
+  phase: 'uploading' | 'finalizing';
+}
+
+const formatUploadSpeed = (bytesPerSecond: number) => {
+  if (!bytesPerSecond) return 'Đang đo...';
+  return bytesPerSecond < 1024 * 1024
+    ? `${Math.round(bytesPerSecond / 1024)} KB/s`
+    : `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`;
+};
+
+const formatUploadEta = (seconds: number | null) => {
+  if (seconds === null || !Number.isFinite(seconds)) return 'Đang tính...';
+  if (seconds < 60) return `Khoảng ${seconds} giây`;
+  return `Khoảng ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+};
+
 const SettingsTab: React.FC<SettingsTabProps> = ({
   autoSyncEnabled, setAutoSyncEnabled, directoryHandle, handleSelectDirectory, syncInterval, setSyncInterval, currentUser
 }) => {
@@ -43,6 +65,9 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const [agentVersion, setAgentVersion] = useState('');
   const [agentUploading, setAgentUploading] = useState(false);
   const [agentUploadProgress, setAgentUploadProgress] = useState(0);
+  const [agentUploadStats, setAgentUploadStats] = useState<AgentUploadStats | null>(null);
+  const [agentDragging, setAgentDragging] = useState(false);
+  const agentUploadAbortRef = useRef<AbortController | null>(null);
   const [storageUsage, setStorageUsage] = useState<any>(null);
   const [cleanupPreview, setCleanupPreview] = useState<any>(null);
   const [cleanupLoading, setCleanupLoading] = useState(false);
@@ -124,23 +149,44 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
 
     setAgentUploading(true);
     setAgentUploadProgress(0);
+    setAgentUploadStats({ uploadedBytes: 0, totalBytes: agentFile.size, bytesPerSecond: 0, etaSeconds: null, phase: 'uploading' });
+    const controller = new AbortController();
+    agentUploadAbortRef.current = controller;
     try {
       const result = await uploadLargeFile(
         '/system/agent/windows/upload',
         agentFile,
         { version: agentVersion.trim() },
-        setAgentUploadProgress,
+        (progress, stats) => {
+          setAgentUploadProgress(progress);
+          if (stats) setAgentUploadStats(stats);
+        },
+        controller.signal,
       );
       setSettings((s: any) => ({ ...s, windowsAgent: result.windowsAgent || s.windowsAgent }));
       setAgentFile(null);
       setAgentUploadProgress(100);
       showToast('Đã cập nhật CloudSave Agent', 'success');
     } catch (err: any) {
-      showToast(err.response?.data?.error || err.message || 'Cập nhật CloudSave Agent thất bại', 'error', 5000);
+      const cancelled = controller.signal.aborted;
+      showToast(cancelled ? 'Đã hủy upload CloudSave Agent' : err.response?.data?.error || err.message || 'Cập nhật CloudSave Agent thất bại', cancelled ? 'warning' : 'error', 5000);
     } finally {
       setAgentUploading(false);
+      setAgentUploadStats(null);
+      agentUploadAbortRef.current = null;
     }
   };
+
+  const selectAgentFile = (file: File | null) => {
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith('.exe')) {
+      showToast('Chỉ hỗ trợ file .exe cho CloudSave Agent', 'error');
+      return;
+    }
+    setAgentFile(file);
+  };
+
+  const cancelAgentUpload = () => agentUploadAbortRef.current?.abort();
 
   const runStorageCleanup = async (dryRun: boolean) => {
     if (!isAdmin) return;
@@ -420,19 +466,54 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col gap-3 border-t border-slate-100 pt-4 lg:flex-row lg:items-end">
-        {isAdmin && <>
-          <label className="block flex-1 text-sm font-bold text-slate-900">File CloudSave Agent (.exe)
-            <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-slate-900 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-white" type="file" accept=".exe,application/x-msdownload" disabled={agentUploading} onChange={(e)=>setAgentFile(e.target.files?.[0] || null)} />
+      {isAdmin && <div className="mt-5 space-y-4 border-t border-slate-100 pt-5">
+        <div
+          onDragOver={(event) => { event.preventDefault(); if (!agentUploading) setAgentDragging(true); }}
+          onDragLeave={() => setAgentDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setAgentDragging(false);
+            if (!agentUploading) selectAgentFile(event.dataTransfer.files?.[0] || null);
+          }}
+          className={`relative rounded-2xl border-2 border-dashed p-6 text-center transition sm:p-8 ${agentDragging ? 'border-indigo-500 bg-indigo-50 text-indigo-700' : agentFile ? 'border-emerald-300 bg-emerald-50/60 text-emerald-700' : 'border-slate-200 bg-slate-50 text-slate-500'}`}
+        >
+          <input id="agent-file-upload" className="sr-only" type="file" accept=".exe,application/x-msdownload" disabled={agentUploading} onChange={(event) => { selectAgentFile(event.currentTarget.files?.[0] || null); event.currentTarget.value = ''; }} />
+          <div className={`mx-auto flex h-12 w-12 items-center justify-center rounded-2xl ${agentFile ? 'bg-emerald-100 text-emerald-600' : 'bg-white text-indigo-600 shadow-sm'}`}>
+            {agentFile ? <File className="h-6 w-6" /> : <UploadCloud className="h-6 w-6" />}
+          </div>
+          <p className="mt-3 text-sm font-black">{agentFile ? agentFile.name : 'Kéo thả file CloudSave Agent vào đây'}</p>
+          <p className="mt-1 text-xs">{agentFile ? `${formatFileSize(agentFile.size)} · Sẵn sàng tải lên` : 'Chỉ nhận một file Windows .exe'}</p>
+          {!agentUploading && <label htmlFor="agent-file-upload" className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-black text-indigo-600 shadow-sm ring-1 ring-slate-200 transition hover:bg-indigo-50"><FolderOpen className="h-4 w-4" />{agentFile ? 'Chọn file khác' : 'Chọn file'}</label>}
+          {agentFile && !agentUploading && <button type="button" onClick={() => setAgentFile(null)} className="absolute right-3 top-3 rounded-lg p-2 text-slate-400 hover:bg-white hover:text-rose-500" aria-label="Bỏ file đã chọn"><X className="h-4 w-4" /></button>}
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+          <label className="block text-sm font-bold text-slate-900">Phiên bản phát hành
+            <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50" placeholder="Ví dụ: 1.0.1" value={agentVersion} disabled={agentUploading} onChange={(event)=>setAgentVersion(event.target.value)} />
           </label>
-          <label className="block text-sm font-bold text-slate-900 lg:w-44">Version
-            <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50" placeholder="1.0.1" value={agentVersion} disabled={agentUploading} onChange={(e)=>setAgentVersion(e.target.value)} />
-          </label>
-          <button type="button" onClick={uploadWindowsAgent} disabled={!agentFile || agentUploading} className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">{agentUploading ? `Đang tải ${agentUploadProgress}%` : 'Cập nhật file'}</button>
-        </>}
-        {settings.windowsAgent?.available && <a href={AGENT_DOWNLOAD_URL} className="inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-100 px-4 py-3 text-sm font-black text-indigo-600 transition hover:bg-indigo-50"><Download className="h-4 w-4" />Tải thử</a>}
-      </div>
-      {agentUploading && <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full bg-indigo-600 transition-all" style={{ width: `${agentUploadProgress}%` }} /></div>}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            {agentUploading && <button type="button" onClick={cancelAgentUpload} className="rounded-xl border border-rose-200 px-4 py-3 text-sm font-black text-rose-600 transition hover:bg-rose-50">Hủy upload</button>}
+            <button type="button" onClick={uploadWindowsAgent} disabled={!agentFile || agentUploading} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-black text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"><UploadCloud className="h-4 w-4" />{agentUploading ? (agentUploadStats?.phase === 'finalizing' ? 'Đang xử lý' : `${agentUploadProgress}%`) : 'Cập nhật Agent'}</button>
+          </div>
+        </div>
+
+        {agentUploading && <div className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4">
+          <div className="h-2 overflow-hidden rounded-full bg-indigo-100">
+            {agentUploadStats?.phase === 'finalizing'
+              ? <motion.div className="h-full w-1/3 rounded-full bg-gradient-to-r from-indigo-400 via-indigo-600 to-violet-500" animate={{ x: ['-100%', '300%'] }} transition={{ duration: 1.1, repeat: Infinity, ease: 'easeInOut' }} />
+              : <motion.div className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500" initial={false} animate={{ width: `${agentUploadProgress}%` }} />}
+          </div>
+          <div className="mt-3 flex items-center justify-center gap-2 text-xs font-black text-indigo-700">
+            {agentUploadStats?.phase === 'finalizing' ? <><Loader2 className="h-4 w-4 animate-spin" />Đã gửi xong, server đang phát hành bản mới</> : <>Đang tải lên {agentUploadProgress}%</>}
+          </div>
+          {agentUploadStats && <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="rounded-xl bg-white p-3"><p className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-400"><Gauge className="h-3 w-3" />Tốc độ</p><p className="mt-1 text-sm font-black text-slate-800">{agentUploadStats.phase === 'finalizing' ? 'Đã tải xong' : formatUploadSpeed(agentUploadStats.bytesPerSecond)}</p></div>
+            <div className="rounded-xl bg-white p-3"><p className="flex items-center gap-1 text-[10px] font-black uppercase text-slate-400"><Timer className="h-3 w-3" />Còn lại</p><p className="mt-1 text-sm font-black text-slate-800">{agentUploadStats.phase === 'finalizing' ? 'Đang lưu...' : formatUploadEta(agentUploadStats.etaSeconds)}</p></div>
+            <div className="col-span-2 rounded-xl bg-white p-3 sm:col-span-1"><p className="text-[10px] font-black uppercase text-slate-400">Đã truyền</p><p className="mt-1 text-sm font-black text-slate-800">{formatFileSize(agentUploadStats.uploadedBytes)} / {formatFileSize(agentUploadStats.totalBytes)}</p></div>
+          </div>}
+        </div>}
+      </div>}
+      {settings.windowsAgent?.available && <a href={AGENT_DOWNLOAD_URL} className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-100 px-4 py-3 text-sm font-black text-indigo-600 transition hover:bg-indigo-50"><Download className="h-4 w-4" />Tải thử bản hiện tại</a>}
       {settings.windowsAgent?.updatedAt && <p className="mt-3 text-xs text-slate-500">Cập nhật lần cuối: {new Date(settings.windowsAgent.updatedAt).toLocaleString('vi-VN')}</p>}
     </div>}
 

@@ -70,7 +70,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, currentUser,
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-white lg:hidden" aria-label="Đóng menu"><X className="w-5 h-5" /></button>
         </div>
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto" aria-label="Điều hướng bảng điều khiển">
+        <nav className="sidebar-scrollbar flex-1 space-y-2 overflow-y-auto p-4 pr-2" aria-label="Điều hướng bảng điều khiển">
           <div className="text-[10px] text-slate-500 uppercase font-bold px-2 py-1">Quản lý</div>
           {renderItems(primaryItems)}
           <div className="text-[10px] text-slate-500 uppercase font-bold px-2 pt-5 pb-1">Tài khoản & kỹ thuật</div>
