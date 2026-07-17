@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Download, Eye, Link, Pencil, RotateCcw, Trash2, X } from 'lucide-react';
-import api, { API_BASE_URL } from '../../../utils/api';
+import api, { API_BASE_URL, UPLOAD_BASE_URL } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
 import { copyToClipboard } from '../../../utils/clipboard';
 import DrivePreviewModal from '../drive/DrivePreviewModal';
@@ -214,7 +214,7 @@ const DriveTab: React.FC = () => {
         let lastError: unknown;
         for (let attempt = 1; attempt <= 3; attempt++) {
           try {
-            await api.post('/drive/upload/finalize', { sessionId }, { timeout: 120000 });
+            await api.post(`${UPLOAD_BASE_URL}/drive/upload/finalize`, { sessionId }, { timeout: 120000 });
             return;
           } catch (error: any) {
             lastError = error;
@@ -245,7 +245,7 @@ const DriveTab: React.FC = () => {
             if (note.trim()) formData.append('note', note.trim());
             if (currentFolderId) formData.append('folderId', String(currentFolderId));
             activeUploadXhrsRef.current.add(xhr);
-            xhr.open('POST', `${API_BASE_URL}/drive/upload`);
+            xhr.open('POST', `${UPLOAD_BASE_URL}/drive/upload`);
             xhr.timeout = 10 * 60 * 1000;
             xhr.setRequestHeader('Authorization', `Bearer ${token}`);
             xhr.upload.onprogress = (event) => {
@@ -277,7 +277,7 @@ const DriveTab: React.FC = () => {
         }
 
         setUploadStatus(`Đang chuẩn bị ${item.file.name} (${fileNumber}/${uploadFilesInput.length})...`);
-        const initRes = await api.post('/drive/upload/init', {
+        const initRes = await api.post(`${UPLOAD_BASE_URL}/drive/upload/init`, {
           fileName: item.file.name,
           fileSize: item.file.size,
           folderId: currentFolderId,
@@ -305,7 +305,7 @@ const DriveTab: React.FC = () => {
           const chunk = item.file.slice(start, end);
           const xhr = new XMLHttpRequest();
           activeUploadXhrsRef.current.add(xhr);
-          xhr.open('POST', `${API_BASE_URL}/drive/upload/chunk?sessionId=${encodeURIComponent(sessionId)}&chunkIndex=${chunkIndex}&totalChunks=${totalChunks}`);
+          xhr.open('POST', `${UPLOAD_BASE_URL}/drive/upload/chunk?sessionId=${encodeURIComponent(sessionId)}&chunkIndex=${chunkIndex}&totalChunks=${totalChunks}`);
           xhr.timeout = Math.max(180000, (chunk.size / (1024 * 1024)) * 30000);
           xhr.setRequestHeader('Authorization', `Bearer ${token}`);
           xhr.setRequestHeader('Content-Type', 'application/octet-stream');
@@ -359,7 +359,7 @@ const DriveTab: React.FC = () => {
           completedBytes += item.file.size;
           setUploadPhase('uploading');
         } catch (error) {
-          void api.delete(`/drive/upload/${encodeURIComponent(sessionId)}`).catch(() => undefined);
+          void api.delete(`${UPLOAD_BASE_URL}/drive/upload/${encodeURIComponent(sessionId)}`).catch(() => undefined);
           throw error;
         }
       };

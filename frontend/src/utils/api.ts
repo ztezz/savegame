@@ -2,6 +2,8 @@ import axios from 'axios';
 
 export const API_ORIGIN = import.meta.env.VITE_API_URL || 'https://api.luugame.fun';
 export const API_BASE_URL = `${API_ORIGIN}/api`;
+export const UPLOAD_ORIGIN = import.meta.env.VITE_UPLOAD_URL || API_ORIGIN;
+export const UPLOAD_BASE_URL = `${UPLOAD_ORIGIN}/api`;
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -44,7 +46,7 @@ export const uploadWithProgress = async (
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const token = localStorage.getItem('token');
-    const baseURL = API_BASE_URL;
+    const baseURL = UPLOAD_BASE_URL;
     
     const fullUrl = `${baseURL}${url}`;
     let hasRealProgress = false;
@@ -187,7 +189,7 @@ export const uploadWithChunks = async (
   metadata: { gameName: string; note?: string },
   onProgress: (progress: number, stats?: { uploadedBytes: number; totalBytes: number; bytesPerSecond: number; etaSeconds: number | null; phase: 'uploading' | 'finalizing' }) => void
 ): Promise<any> => {
-  const baseURL = API_BASE_URL;
+  const baseURL = UPLOAD_BASE_URL;
   const token = localStorage.getItem('token');
   
   if (!token) {
@@ -367,7 +369,7 @@ export const downloadWithProgress = async (
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const token = localStorage.getItem('token');
-    const baseURL = API_BASE_URL;
+  const baseURL = UPLOAD_BASE_URL;
     
     const fullUrl = `${baseURL}${url}`;
     console.log(`📥 Download starting: ${fullUrl}`);
