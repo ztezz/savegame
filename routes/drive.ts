@@ -265,6 +265,9 @@ driveRouter.post("/api/drive/upload/init", authenticateToken, express.json({ lim
     await assertFolder(folderId, req.user.id);
     await assertDriveQuota(req.user.id, fileSize);
     const sessionId = `drive_${req.user.id}_${Date.now()}_${crypto.randomBytes(6).toString("hex")}`;
+    const chunkSize = 32 * 1024 * 1024;
+    const tempFilePath = path.join(TEMP_UPLOADS_DIR, `${sessionId}.upload`);
+    await fs.promises.writeFile(tempFilePath, Buffer.alloc(0));
     const session: UploadSession = {
       sessionId,
       userId: req.user.id,
@@ -275,10 +278,12 @@ driveRouter.post("/api/drive/upload/init", authenticateToken, express.json({ lim
       folderId,
       relativePath: String(req.body?.relativePath || fileName).replace(/\\/g, "/"),
       mimeType: String(req.body?.mimeType || ""),
+      chunkSize,
+      tempFilePath,
       createdAt: Date.now(),
     };
     uploadSessions.set(sessionId, session);
-    res.json({ sessionId, chunkSize: 20 * 1024 * 1024 });
+    res.json({ sessionId, chunkSize });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message || "Failed to initialize Drive upload", usage: err.usage, uploadBytes: err.uploadBytes });
   }
@@ -287,16 +292,38 @@ driveRouter.post("/api/drive/upload/init", authenticateToken, express.json({ lim
 driveRouter.post("/api/drive/upload/chunk", authenticateToken, express.raw({ type: "application/octet-stream", limit: "100mb" }), async (req: any, res) => {
   const sessionId = String(req.query.sessionId || "");
   const chunkIndex = Number(req.query.chunkIndex);
+  const totalChunks = Number(req.query.totalChunks);
   const session = uploadSessions.get(sessionId);
 
   if (!session || session.userId !== req.user.id) return res.status(404).json({ error: "Upload session not found" });
   if (!Number.isInteger(chunkIndex) || chunkIndex < 0) return res.status(400).json({ error: "Invalid chunk index" });
 
   try {
-    const chunkPath = path.join(TEMP_UPLOADS_DIR, `${sessionId}_chunk_${chunkIndex}`);
-    fs.writeFileSync(chunkPath, req.body as Buffer);
+    const expectedTotalChunks = Math.ceil(session.totalSize / Number(session.chunkSize));
+    if (!session.tempFilePath || totalChunks !== expectedTotalChunks || chunkIndex >= expectedTotalChunks) {
+      return res.status(400).json({ error: "Chunk metadata does not match upload session" });
+    }
+    const chunkBuffer = req.body as Buffer;
+    const expectedChunkSize = chunkIndex === expectedTotalChunks - 1
+      ? session.totalSize - chunkIndex * Number(session.chunkSize)
+      : Number(session.chunkSize);
+    if (chunkBuffer.length !== expectedChunkSize) {
+      return res.status(400).json({ error: `Invalid chunk size: received ${chunkBuffer.length}, expected ${expectedChunkSize}` });
+    }
+
+    const fileHandle = await fs.promises.open(session.tempFilePath, "r+");
+    try {
+      let written = 0;
+      const position = chunkIndex * Number(session.chunkSize);
+      while (written < chunkBuffer.length) {
+        const result = await fileHandle.write(chunkBuffer, written, chunkBuffer.length - written, position + written);
+        written += result.bytesWritten;
+      }
+    } finally {
+      await fileHandle.close();
+    }
     session.chunks = session.chunks.filter((chunk) => chunk.index !== chunkIndex);
-    session.chunks.push({ index: chunkIndex, path: chunkPath });
+    session.chunks.push({ index: chunkIndex, path: session.tempFilePath });
     res.json({ success: true, received: session.chunks.length, chunkIndex });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to save chunk" });
@@ -316,20 +343,15 @@ driveRouter.post("/api/drive/upload/finalize", authenticateToken, express.json({
     await assertFolder(session.folderId || null, req.user.id);
     await assertDriveQuota(req.user.id, session.totalSize);
     session.chunks.sort((a, b) => a.index - b.index);
-
-    const writeStream = fs.createWriteStream(finalPath);
-    for (const chunk of session.chunks) {
-      writeStream.write(fs.readFileSync(chunk.path));
-      fs.unlinkSync(chunk.path);
+    const expectedChunks = Math.ceil(session.totalSize / Number(session.chunkSize));
+    const hasContiguousChunks = session.chunks.every((chunk, index) => chunk.index === index);
+    const tempSize = session.tempFilePath && fs.existsSync(session.tempFilePath) ? fs.statSync(session.tempFilePath).size : 0;
+    if (!session.tempFilePath || session.chunks.length !== expectedChunks || !hasContiguousChunks || tempSize !== session.totalSize) {
+      throw new Error(`Upload incomplete: received ${tempSize} of ${session.totalSize} bytes`);
     }
-    writeStream.end();
-    await new Promise<void>((resolve, reject) => {
-      writeStream.on("finish", resolve);
-      writeStream.on("error", reject);
-    });
+    await fs.promises.rename(session.tempFilePath, finalPath);
 
     const stat = fs.statSync(finalPath);
-    if (stat.size !== session.totalSize) throw new Error("Uploaded file size mismatch");
 
     const relativePath = String(session.relativePath || session.fileName).replace(/\\/g, "/");
     const parts = relativePath.split("/").filter(Boolean);
@@ -346,7 +368,9 @@ driveRouter.post("/api/drive/upload/finalize", authenticateToken, express.json({
     res.status(201).json(rows[0]);
   } catch (err: any) {
     if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
-    for (const chunk of session.chunks) if (fs.existsSync(chunk.path)) fs.unlinkSync(chunk.path);
+    const tempPaths = new Set(session.chunks.map((chunk) => chunk.path));
+    if (session.tempFilePath) tempPaths.add(session.tempFilePath);
+    for (const tempPath of tempPaths) if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
     uploadSessions.delete(sessionId);
     res.status(err.status || 500).json({ error: err.message || "Drive upload finalize failed", usage: err.usage, uploadBytes: err.uploadBytes });
   }
@@ -356,9 +380,9 @@ driveRouter.delete("/api/drive/upload/:sessionId", authenticateToken, async (req
   const session = uploadSessions.get(req.params.sessionId);
   if (!session || session.userId !== req.user.id) return res.status(404).json({ error: "Upload session not found" });
 
-  for (const chunk of session.chunks) {
-    if (fs.existsSync(chunk.path)) fs.unlinkSync(chunk.path);
-  }
+  const tempPaths = new Set(session.chunks.map((chunk) => chunk.path));
+  if (session.tempFilePath) tempPaths.add(session.tempFilePath);
+  for (const tempPath of tempPaths) if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
   uploadSessions.delete(req.params.sessionId);
   res.json({ success: true });
 });
