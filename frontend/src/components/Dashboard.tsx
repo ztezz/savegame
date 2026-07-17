@@ -865,7 +865,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
           </div>
         </header>
 
-        <div className="flex-1 p-8 grid grid-cols-12 gap-8 overflow-y-auto">
+        <div className="flex-1 grid grid-cols-12 gap-4 overflow-y-auto p-4 sm:gap-6 sm:p-6 xl:gap-8 xl:p-8">
           {activeTab === 'dashboard' && (
             <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải...</div>}>
               <OverviewTab 
