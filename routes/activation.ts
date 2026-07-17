@@ -40,7 +40,7 @@ activationRouter.post("/api/activation/upload/init", authenticateToken, isAdmin,
   }
 
   const sessionId = `${req.user.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  const chunkSize = 20 * 1024 * 1024;
+  const chunkSize = 32 * 1024 * 1024;
   const tempFilePath = path.join(TEMP_UPLOADS_DIR, `${sessionId}.upload`);
   fs.closeSync(fs.openSync(tempFilePath, 'w'));
   const session: UploadSession = {
@@ -87,15 +87,16 @@ activationRouter.post("/api/activation/upload/chunk", authenticateToken, isAdmin
       return res.status(400).json({ error: `Invalid chunk size: received ${chunkBuffer.length}, expected ${expectedChunkSize}` });
     }
 
-    const fileHandle = fs.openSync(session.tempFilePath, 'r+');
+    const fileHandle = await fs.promises.open(session.tempFilePath, 'r+');
     try {
       let written = 0;
       const position = parsedChunkIndex * Number(session.chunkSize);
       while (written < chunkBuffer.length) {
-        written += fs.writeSync(fileHandle, chunkBuffer, written, chunkBuffer.length - written, position + written);
+        const result = await fileHandle.write(chunkBuffer, written, chunkBuffer.length - written, position + written);
+        written += result.bytesWritten;
       }
     } finally {
-      fs.closeSync(fileHandle);
+      await fileHandle.close();
     }
 
     const existingChunk = session.chunks.find((chunk) => chunk.index === parsedChunkIndex);

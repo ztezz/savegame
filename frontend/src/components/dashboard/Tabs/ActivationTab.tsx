@@ -327,7 +327,7 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
                      {uploadProgress < 100 ? (
                        <>
                          <span className="inline-block w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
-                         {uploadStats?.phase === 'finalizing' ? 'Đã gửi xong, đang hoàn tất...' : 'Đang gửi đồng thời 3 phần lên server...'}
+                         {uploadStats?.phase === 'finalizing' ? 'Đã gửi xong, đang hoàn tất...' : 'Đang truyền file tốc độ cao lên server...'}
                       </>
                     ) : (
                       <>

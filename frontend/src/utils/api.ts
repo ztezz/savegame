@@ -195,7 +195,14 @@ export const uploadWithChunks = async (
   }
 
   const MAX_CHUNK_RETRIES = 3;
-  const MAX_CONCURRENT_CHUNKS = 3;
+  const connection = (navigator as Navigator & { connection?: { effectiveType?: string; saveData?: boolean } }).connection;
+  const maxConcurrentChunks = connection?.saveData
+    ? 1
+    : connection?.effectiveType === '2g' || connection?.effectiveType === 'slow-2g'
+      ? 1
+      : connection?.effectiveType === '3g'
+        ? 2
+        : 4;
   
   try {
     // Step 1: Initialize upload session
@@ -218,14 +225,14 @@ export const uploadWithChunks = async (
     }
 
     const { sessionId, chunkSize: serverChunkSize } = await initRes.json();
-    const chunkSize = Math.max(1 * 1024 * 1024, Number(serverChunkSize) || 20 * 1024 * 1024);
+    const chunkSize = Math.max(1 * 1024 * 1024, Number(serverChunkSize) || 32 * 1024 * 1024);
     const totalChunks = Math.ceil(file.size / chunkSize);
     const uploadedByChunk = new Array<number>(totalChunks).fill(0);
     const uploadStartedAt = performance.now();
     let smoothedBytesPerSecond = 0;
     let lastSampleAt = uploadStartedAt;
     let lastSampleBytes = 0;
-    console.log(`📝 Upload session created: ${sessionId} (${totalChunks} chunks, ${MAX_CONCURRENT_CHUNKS} concurrent)`);
+    console.log(`📝 Upload session created: ${sessionId} (${totalChunks} chunks, ${maxConcurrentChunks} concurrent)`);
 
     const reportProgress = (phase: 'uploading' | 'finalizing') => {
       const uploadedBytes = uploadedByChunk.reduce((total, loaded) => total + loaded, 0);
@@ -324,7 +331,7 @@ export const uploadWithChunks = async (
       }
     };
 
-    await Promise.all(Array.from({ length: Math.min(MAX_CONCURRENT_CHUNKS, totalChunks) }, () => uploadWorker()));
+    await Promise.all(Array.from({ length: Math.min(maxConcurrentChunks, totalChunks) }, () => uploadWorker()));
 
     // Step 3: Finalize upload
     console.log(`🔗 Finalizing upload...`);
