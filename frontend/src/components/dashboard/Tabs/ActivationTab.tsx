@@ -279,6 +279,7 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
                       <FileCheck className="w-6 h-6 text-amber-500 mx-auto mb-1" />
                       <p className="text-xs font-bold text-slate-700">{selectedFile.name}</p>
                       <p className="text-xs text-slate-400">{formatSize(selectedFile.size)}</p>
+                      {selectedFile.size > 100 * 1024 * 1024 && <p className="mt-1 text-[10px] font-bold text-amber-600">File trên 100 MB cần API DNS-only nếu không dùng upload chia nhỏ.</p>}
                     </div>
                   ) : (
                     <div className="text-center">

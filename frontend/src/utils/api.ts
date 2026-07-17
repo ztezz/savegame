@@ -167,7 +167,10 @@ export const uploadWithProgress = async (
       if (simulateProgressTimer) clearTimeout(simulateProgressTimer);
       clearTimeout(stallTimeout);
       console.error('❌ Upload error:', err);
-      reject(new Error('Upload failed - Network error'));
+      const likelyProxyLimit = totalFileSize > 100 * 1024 * 1024 && xhr.status === 0;
+      reject(new Error(likelyProxyLimit
+        ? 'File lớn bị Cloudflare chặn trước khi tới server. Hãy dùng endpoint upload DNS-only hoặc bật lại upload chia nhỏ.'
+        : 'Upload thất bại do lỗi mạng hoặc máy chủ không phản hồi'));
     });
 
     xhr.addEventListener('abort', () => {
