@@ -2,12 +2,12 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import api, { uploadWithProgress } from '../utils/api';
 import { savesApi } from '../utils/apiClient';
-import { Search, Plus, User, LogOut, Lock, Moon, Sun } from 'lucide-react';
+import { Search, Plus, User, LogOut, Lock, Menu, Moon, Sun } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { useDynamicCategories } from '../hooks/useDynamicCategories';
 
 // Sub-components
-import Sidebar from './dashboard/Sidebar';
+import Sidebar, { TabType as DashboardTab } from './dashboard/Sidebar';
 const OverviewTab = lazy(() => import('./dashboard/Tabs/OverviewTab'));
 const LibraryTab = lazy(() => import('./dashboard/Tabs/LibraryTab'));
 const DevicesTab = lazy(() => import('./dashboard/Tabs/DevicesTab'));
@@ -33,23 +33,24 @@ const ChangePasswordModal = lazy(() => import('./dashboard/Modals/ChangePassword
 // Types and Constants
 import { GameSave, UserAccount, RestoreStatusItem } from './dashboard/types';
 
-type DashboardTab = 'dashboard' | 'library' | 'drive' | 'community' | 'devices' | 'settings' | 'logs' | 'users' | 'activation' | 'category' | 'account' | 'sqlite';
 const DASHBOARD_TABS: DashboardTab[] = ['dashboard', 'library', 'drive', 'community', 'devices', 'settings', 'logs', 'users', 'activation', 'category', 'account', 'sqlite'];
+const ADMIN_TABS: DashboardTab[] = ['logs', 'users', 'sqlite'];
 
 const getInitialDashboardTab = (): DashboardTab => {
   const saved = localStorage.getItem('dashboardActiveTab');
   return DASHBOARD_TABS.includes(saved as DashboardTab) ? saved as DashboardTab : 'dashboard';
 };
 
-export default function Dashboard({ onLogout, currentUser }: { onLogout: () => void, currentUser: any }) {
+export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onLogout: () => void, currentUser: any, onUserUpdate: (user: any) => void }) {
   const { showToast } = useToast();
-  const isAdmin = currentUser?.role?.toLowerCase() === 'admin' || currentUser?.username === 'admin';
+  const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
   const { categories, fetchCategories: refetchCategories } = useDynamicCategories();
   const [games, setGames] = useState<GameSave[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [newGameName, setNewGameName] = useState('');
   const [newGameCategory, setNewGameCategory] = useState('Other');
   const [newGameFilePath, setNewGameFilePath] = useState('');
@@ -113,7 +114,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
   }, [activeTab]);
 
   useEffect(() => {
-    if (activeTab === 'sqlite' && !isAdmin) setActiveTab('dashboard');
+    if (ADMIN_TABS.includes(activeTab) && !isAdmin) setActiveTab('dashboard');
   }, [activeTab, isAdmin]);
 
   useEffect(() => {
@@ -160,6 +161,10 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
     category: {
       title: 'Quản lý thể loại',
       description: 'Sắp xếp thư viện game theo nhóm dễ tìm kiếm hơn.',
+    },
+    account: {
+      title: 'Hồ sơ của tôi',
+      description: 'Cập nhật thông tin cá nhân và bảo mật tài khoản.',
     },
     sqlite: {
       title: 'Quản lý SQLite',
@@ -250,16 +255,16 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
       const res = await api.put('/users/me', payload);
       const nextUser = { ...(currentUser || {}), ...res.data.user };
       localStorage.setItem('user', JSON.stringify(nextUser));
-      showToast('Cap nhat tai khoan thanh cong', 'success', 2500);
-      window.location.reload();
+      onUserUpdate(nextUser);
+      showToast('Cập nhật tài khoản thành công', 'success', 2500);
     } catch (err: any) {
-      showToast(err.response?.data?.error || 'Khong the cap nhat tai khoan', 'error', 3000);
+      showToast(err.response?.data?.error || 'Không thể cập nhật tài khoản', 'error', 3000);
       throw err;
     }
   };
 
   const fetchUsers = async () => {
-    if (currentUser?.role !== 'Admin') return;
+    if (!isAdmin) return;
     try {
       const res = await api.get('/users');
       setUsers(res.data);
@@ -558,9 +563,6 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
       // Set to 100% to trigger success notification
       setUploadProgress(100);
       
-      // Wait for success notification to show
-      await new Promise(resolve => setTimeout(resolve, 2100));
-      
       setShowUploadModal(false);
       setSelectedFile(null);
       setSelectedFiles([]);
@@ -743,15 +745,20 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
       if (sortBy === 'name') return a.gameName.localeCompare(b.gameName);
       return a.category.localeCompare(b.category);
     });
+  const recentGames = games
+    .filter((game) => game.latestSave)
+    .sort((a, b) => new Date(b.latestSave!.createdAt).getTime() - new Date(a.latestSave!.createdAt).getTime());
 
   return (
     <div className={`flex h-screen font-sans overflow-hidden ${darkMode ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-50'}`}>
-      <Sidebar activeTab={activeTab} setActiveTab={(tab) => setActiveTab(tab as any)} currentUser={currentUser} onLogout={onLogout} onOpenChangePassword={() => setShowChangePasswordModal(true)} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} currentUser={currentUser} mobileOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <header className="min-h-20 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-5 lg:px-8 py-4 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 shrink-0">
-          <div className="flex flex-col lg:flex-row lg:items-center gap-4 min-w-0">
+          <div className="flex items-center gap-3 min-w-0">
+            <button onClick={() => setMobileMenuOpen(true)} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-600 lg:hidden" aria-label="Mở menu"><Menu className="w-5 h-5" /></button>
+            <div className="flex flex-col lg:flex-row lg:items-center gap-4 min-w-0">
             <div className="min-w-0">
               <h2 className="text-lg font-black text-slate-900 dark:text-white truncate">{pageTitles[activeTab].title}</h2>
               <p className="text-xs text-slate-500 mt-1 hidden sm:block">{pageTitles[activeTab].description}</p>
@@ -762,7 +769,8 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
                    <Search className="w-3.5 h-3.5 text-slate-400" />
                    <input 
                      type="text" 
-                     placeholder="Tìm bản lưu" 
+                      placeholder="Tìm bản lưu"
+                      aria-label="Tìm bản lưu"
                      className="bg-transparent border-none focus:ring-0 text-xs px-2 w-40 sm:w-56 text-slate-700 font-medium outline-none" 
                      value={searchTerm}
                      onChange={(e) => setSearchTerm(e.target.value)}
@@ -786,6 +794,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
                 </select>
               </div>
             )}
+            </div>
           </div>
           <div className="flex items-center justify-between xl:justify-end gap-4 lg:gap-6">
             {(activeTab === 'library' || activeTab === 'dashboard') && (
@@ -803,6 +812,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
               onClick={() => setDarkMode((value) => !value)}
               className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
               title={darkMode ? 'Tắt dark mode' : 'Bật dark mode'}
+              aria-label={darkMode ? 'Tắt chế độ tối' : 'Bật chế độ tối'}
             >
               {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
@@ -821,6 +831,8 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
+                aria-expanded={showUserMenu}
+                aria-haspopup="menu"
                 className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors group"
               >
                 <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
@@ -839,6 +851,16 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
                     <p className="text-sm font-bold text-slate-900">{currentUser?.username || 'User'}</p>
                     <p className="text-xs text-slate-500 mt-0.5">{currentUser?.role || 'User'}</p>
                   </div>
+                  <button
+                    onClick={() => {
+                      setShowUserMenu(false);
+                      setActiveTab('account');
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                  >
+                    <User className="w-4 h-4" />
+                    Hồ sơ của tôi
+                  </button>
                   <button
                     onClick={() => {
                       setShowUserMenu(false);
@@ -869,7 +891,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
           {activeTab === 'dashboard' && (
             <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải...</div>}>
               <OverviewTab 
-                games={filteredGames}
+                games={recentGames}
                 setActiveTab={(tab) => setActiveTab(tab as any)} 
                 handleOpenHistory={handleOpenHistory} 
                 handleDownload={handleDownload} 
@@ -953,7 +975,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
             </Suspense>
           )}
 
-          {activeTab === 'logs' && (
+          {activeTab === 'logs' && isAdmin && (
             <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải nhật ký...</div>}>
               <SystemLogsTab currentUser={currentUser} />
             </Suspense>
@@ -965,7 +987,7 @@ export default function Dashboard({ onLogout, currentUser }: { onLogout: () => v
             </Suspense>
           )}
 
-          {activeTab === 'users' && (
+          {activeTab === 'users' && isAdmin && (
             <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải người dùng...</div>}>
               <UsersTab 
                 users={users}

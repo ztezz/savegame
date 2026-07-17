@@ -5,7 +5,7 @@ import { randomBytes } from "crypto";
 import { pool, isUsingDatabase } from "../config/database.js";
 import { JWT_SECRET } from "../config/environment.js";
 import { User } from "../database/types.js";
-import { authenticateToken } from "../middleware/auth.js";
+import { authenticateToken, isAdmin } from "../middleware/auth.js";
 import { writeAudit } from "../utils/audit.js";
 
 // Mock users for demo mode
@@ -324,7 +324,7 @@ authRouter.post("/api/auth/change-password", authenticateToken, async (req: any,
 });
 
 // Diagnostic endpoint for debugging login and save issues
-authRouter.get("/api/auth/diagnose", async (req: any, res) => {
+authRouter.get("/api/auth/diagnose", authenticateToken, isAdmin, async (req: any, res) => {
   const results: any = {
     timestamp: new Date().toISOString(),
     adminAccount: null,
@@ -344,16 +344,14 @@ authRouter.get("/api/auth/diagnose", async (req: any, res) => {
           id: admin.id,
           username: admin.username,
           role: admin.role,
-          hasValidHash: admin.password_hash && admin.password_hash.startsWith('$2'),
-          hashPreview: admin.password_hash ? `${admin.password_hash.substring(0, 20)}...` : null
+          hasValidHash: Boolean(admin.password_hash && admin.password_hash.startsWith('$2'))
         };
       } else {
         results.adminAccount = { exists: false, message: "Admin account not found" };
       }
 
-      // List all users
-      const usersRes = await pool.query("SELECT id, username, role, created_at FROM users");
-      results.allUsers = usersRes.rows;
+      const usersRes = await pool.query("SELECT COUNT(*) AS count FROM users");
+      results.allUsers = { count: Number(usersRes.rows[0].count) };
 
       // Find saves with IDs 10 and 11 specifically
       const missingRes = await pool.query("SELECT id, game_id, file_path, version FROM saves WHERE id IN (10, 11)");

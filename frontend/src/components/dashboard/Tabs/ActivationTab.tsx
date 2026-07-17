@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Upload, Download, Trash2, KeyRound, Plus, X, FileCheck, Pencil, CheckCircle, Gauge, Timer } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import api, { API_BASE_URL, LARGE_UPLOAD_THRESHOLD, uploadLargeFile, uploadWithProgress } from '../../../utils/api';
+import api, { LARGE_UPLOAD_THRESHOLD, uploadLargeFile, uploadWithProgress } from '../../../utils/api';
 import EditActivationModal from '../Modals/EditActivationModal';
 import DeleteConfirmModal from '../Modals/DeleteConfirmModal';
 import { useToast } from '../../../context/ToastContext';
@@ -93,19 +93,20 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
     }
   };
 
-  const handleDownload = (file: ActivationFile) => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      showToast('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại', 'error', 3500);
-      return;
+  const handleDownload = async (file: ActivationFile) => {
+    try {
+      const response = await api.get(`/activation/download/${file.id}`, { responseType: 'blob' });
+      const url = URL.createObjectURL(response.data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = file.originalName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Không thể tải file kích hoạt', 'error', 3500);
     }
-
-    const link = document.createElement('a');
-    link.href = `${API_BASE_URL}/activation/download/${file.id}?token=${encodeURIComponent(token)}`;
-    link.download = file.originalName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   const formatSpeed = (bytesPerSecond: number) => {

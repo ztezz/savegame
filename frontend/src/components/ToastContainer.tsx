@@ -46,7 +46,7 @@ const ToastContainer: React.FC = () => {
   };
 
   return (
-    <div className="fixed top-4 right-4 z-50 pointer-events-none">
+    <div className="fixed top-4 right-4 z-50 pointer-events-none" aria-live="polite" aria-atomic="false">
       <AnimatePresence>
         {toasts.map((toast) => (
           <motion.div
@@ -57,13 +57,14 @@ const ToastContainer: React.FC = () => {
             transition={{ type: 'spring', stiffness: 300, damping: 25 }}
             className="mb-3 pointer-events-auto"
           >
-            <div className={`flex items-center gap-3 px-4 py-3 rounded-lg border shadow-lg ${getColors(toast.type)}`}>
+            <div role={toast.type === 'error' ? 'alert' : 'status'} className={`flex items-center gap-3 px-4 py-3 rounded-lg border shadow-lg ${getColors(toast.type)}`}>
               <div className={getIconColor(toast.type)}>
                 {getIcon(toast.type)}
               </div>
               <span className="text-sm font-medium">{toast.message}</span>
               <button
                 onClick={() => removeToast(toast.id)}
+                aria-label="Đóng thông báo"
                 className="ml-2 opacity-70 hover:opacity-100 transition-opacity"
               >
                 <X className="w-4 h-4" />

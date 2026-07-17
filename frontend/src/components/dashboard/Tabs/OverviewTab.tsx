@@ -56,7 +56,8 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
                          <button 
                            onClick={() => handleOpenHistory(game)}
                            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-md transition-all"
-                           title="Xem lịch sử"
+                            title="Xem lịch sử"
+                            aria-label={`Xem lịch sử ${game.gameName}`}
                          >
                            <Clock className="w-3 h-3" />
                          </button>
@@ -64,7 +65,8 @@ const OverviewTab: React.FC<OverviewTabProps> = ({
                            <button 
                              onClick={() => game.latestSave && handleDownload(game.latestSave.id)}
                              className="p-1.5 text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-md transition-all shadow-sm"
-                             title="Tải xuống nhanh"
+                              title="Tải xuống nhanh"
+                              aria-label={`Tải xuống ${game.gameName}`}
                            >
                              <Download className="w-3 h-3" />
                            </button>

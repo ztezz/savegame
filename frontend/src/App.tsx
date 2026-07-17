@@ -5,10 +5,20 @@ import DeviceLinkPage from './components/DeviceLinkPage';
 import DriveSharePage from './components/DriveSharePage';
 import ToastContainer from './components/ToastContainer';
 import { ToastProvider } from './context/ToastContext';
+import api from './utils/api';
+
+const getStoredUser = () => {
+  try {
+    return JSON.parse(localStorage.getItem('user') || 'null');
+  } catch {
+    localStorage.removeItem('user');
+    return null;
+  }
+};
 
 export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
-  const [user, setUser] = useState<any>(JSON.parse(localStorage.getItem('user') || 'null'));
+  const [user, setUser] = useState<any>(getStoredUser);
   const [deviceLinkToken, setDeviceLinkToken] = useState<string | null>(
     new URLSearchParams(window.location.search).get('device_link')
   );
@@ -31,6 +41,14 @@ export default function App() {
     window.addEventListener('auth:logout', handleLogout);
     return () => window.removeEventListener('auth:logout', handleLogout);
   }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    api.get('/users/me').then(({ data }) => {
+      localStorage.setItem('user', JSON.stringify(data));
+      setUser(data);
+    }).catch(() => undefined);
+  }, [token]);
 
   const handleLeaveDeviceLink = () => {
     const url = new URL(window.location.href);
@@ -61,7 +79,7 @@ export default function App() {
             </footer>
           </div>
         ) : token ? (
-          <Dashboard onLogout={handleLogout} currentUser={user} />
+          <Dashboard onLogout={handleLogout} currentUser={user} onUserUpdate={setUser} />
         ) : (
           <div className="min-h-screen flex flex-col">
             <div className="flex-1">

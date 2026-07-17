@@ -28,7 +28,7 @@ api.interceptors.response.use(
       url: error.config?.url,
       method: error.config?.method?.toUpperCase()
     });
-    if (error.response?.status === 401 || error.response?.status === 403) {
+    if (error.response?.status === 401) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.dispatchEvent(new Event('auth:logout'));

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Gamepad2, Clock, Upload, Download, Trash2, Pencil, Copy, RotateCcw } from 'lucide-react';
 import { GameSave, RestoreStatusItem } from '../types';
 import { copyToClipboard } from '../../../utils/clipboard';
@@ -52,8 +52,16 @@ const LibraryTab: React.FC<LibraryTabProps> = ({
   const selectableSaveIds = filteredGames
     .map((game) => game.latestSave?.id)
     .filter((id): id is number => typeof id === 'number');
-  const allSelected = selectableSaveIds.length > 0 && selectedSaveIds.length === selectableSaveIds.length;
-  const partiallySelected = selectedSaveIds.length > 0 && !allSelected;
+  const selectedVisibleIds = selectedSaveIds.filter((id) => selectableSaveIds.includes(id));
+  const allSelected = selectableSaveIds.length > 0 && selectedVisibleIds.length === selectableSaveIds.length;
+  const partiallySelected = selectedVisibleIds.length > 0 && !allSelected;
+
+  useEffect(() => {
+    setSelectedSaveIds((current) => {
+      const next = current.filter((id) => selectableSaveIds.includes(id));
+      return next.length === current.length ? current : next;
+    });
+  }, [selectableSaveIds.join(',')]);
 
   const getStatusClasses = (status: RestoreStatusItem['status']) => {
     if (status === 'Pending') return 'bg-amber-50 text-amber-700 border-amber-200';
@@ -82,7 +90,7 @@ const LibraryTab: React.FC<LibraryTabProps> = ({
   };
 
   const toggleSelectAll = () => {
-    setSelectedSaveIds((current) => (current.length === selectableSaveIds.length ? [] : selectableSaveIds));
+    setSelectedSaveIds(allSelected ? [] : selectableSaveIds);
   };
 
   const requestBulkDelete = () => {
@@ -143,8 +151,10 @@ const LibraryTab: React.FC<LibraryTabProps> = ({
             <div className="p-12 flex justify-center text-slate-300">
               <div className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : games.length === 0 ? (
-            <div className="p-20 text-center text-slate-400 font-medium italic">Không tìm thấy bản lưu nào.</div>
+          ) : filteredGames.length === 0 ? (
+            <div className="p-20 text-center text-slate-400 font-medium italic">
+              {games.length === 0 ? 'Chưa có bản lưu nào.' : 'Không có bản lưu phù hợp với bộ lọc.'}
+            </div>
           ) : (
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-50/50 text-slate-400 text-[10px] uppercase tracking-widest">
