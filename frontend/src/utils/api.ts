@@ -185,7 +185,7 @@ export const uploadWithProgress = async (
 export const uploadWithChunks = async (
   file: File,
   metadata: { gameName: string; note?: string },
-  onProgress: (progress: number) => void
+  onProgress: (progress: number, stats?: { uploadedBytes: number; totalBytes: number; bytesPerSecond: number; etaSeconds: number | null; phase: 'uploading' | 'finalizing' }) => void
 ): Promise<any> => {
   const baseURL = API_BASE_URL;
   const token = localStorage.getItem('token');
@@ -221,7 +221,36 @@ export const uploadWithChunks = async (
     const chunkSize = Math.max(1 * 1024 * 1024, Number(serverChunkSize) || 20 * 1024 * 1024);
     const totalChunks = Math.ceil(file.size / chunkSize);
     const uploadedByChunk = new Array<number>(totalChunks).fill(0);
+    const uploadStartedAt = performance.now();
+    let smoothedBytesPerSecond = 0;
+    let lastSampleAt = uploadStartedAt;
+    let lastSampleBytes = 0;
     console.log(`📝 Upload session created: ${sessionId} (${totalChunks} chunks, ${MAX_CONCURRENT_CHUNKS} concurrent)`);
+
+    const reportProgress = (phase: 'uploading' | 'finalizing') => {
+      const uploadedBytes = uploadedByChunk.reduce((total, loaded) => total + loaded, 0);
+      const now = performance.now();
+      const elapsedSinceSample = (now - lastSampleAt) / 1000;
+      if (elapsedSinceSample >= 0.4) {
+        const currentSpeed = Math.max(0, uploadedBytes - lastSampleBytes) / elapsedSinceSample;
+        smoothedBytesPerSecond = smoothedBytesPerSecond
+          ? smoothedBytesPerSecond * 0.7 + currentSpeed * 0.3
+          : currentSpeed;
+        lastSampleAt = now;
+        lastSampleBytes = uploadedBytes;
+      } else if (!smoothedBytesPerSecond && uploadedBytes > 0) {
+        smoothedBytesPerSecond = uploadedBytes / Math.max((now - uploadStartedAt) / 1000, 0.1);
+      }
+      const progress = phase === 'finalizing' ? 96 : Math.max(1, Math.min(Math.floor((uploadedBytes / file.size) * 95), 95));
+      const remainingBytes = Math.max(0, file.size - uploadedBytes);
+      onProgress(progress, {
+        uploadedBytes,
+        totalBytes: file.size,
+        bytesPerSecond: phase === 'uploading' ? smoothedBytesPerSecond : 0,
+        etaSeconds: phase === 'uploading' && smoothedBytesPerSecond > 0 ? Math.ceil(remainingBytes / smoothedBytesPerSecond) : null,
+        phase,
+      });
+    };
 
     const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -233,9 +262,7 @@ export const uploadWithChunks = async (
       xhr.upload.addEventListener('progress', (event) => {
         if (!event.lengthComputable) return;
         uploadedByChunk[chunkIndex] = Math.min(event.loaded, chunk.size);
-        const uploadedBytes = uploadedByChunk.reduce((total, loaded) => total + loaded, 0);
-        const progress = Math.floor((uploadedBytes / file.size) * 95);
-        onProgress(Math.max(1, Math.min(progress, 95)));
+        reportProgress('uploading');
       });
 
       xhr.addEventListener('load', () => {
@@ -291,9 +318,8 @@ export const uploadWithChunks = async (
 
         console.log(`📤 Uploading chunk ${chunkIndex + 1}/${totalChunks} (${(chunk.size / (1024 * 1024)).toFixed(1)}MB)...`);
         await uploadChunkWithRetry(chunk, chunkIndex);
-        const uploadedBytes = uploadedByChunk.reduce((total, loaded) => total + loaded, 0);
-        const progress = Math.floor((uploadedBytes / file.size) * 95);
-        onProgress(Math.max(1, Math.min(progress, 95)));
+        reportProgress('uploading');
+        const progress = Math.floor((uploadedByChunk.reduce((total, loaded) => total + loaded, 0) / file.size) * 95);
         console.log(`✅ Chunk ${chunkIndex + 1}/${totalChunks} uploaded (${progress}%)`);
       }
     };
@@ -302,7 +328,7 @@ export const uploadWithChunks = async (
 
     // Step 3: Finalize upload
     console.log(`🔗 Finalizing upload...`);
-    onProgress(96);
+    reportProgress('finalizing');
     const finalizeRes = await fetch(`${baseURL}/activation/upload/finalize`, {
       method: 'POST',
       headers: {
@@ -317,7 +343,7 @@ export const uploadWithChunks = async (
     }
 
     const result = await finalizeRes.json();
-    onProgress(100);
+    onProgress(100, { uploadedBytes: file.size, totalBytes: file.size, bytesPerSecond: 0, etaSeconds: 0, phase: 'finalizing' });
     console.log(`✅ Upload completed successfully!`, result);
     return result;
   } catch (err) {

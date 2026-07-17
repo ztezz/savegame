@@ -40,6 +40,9 @@ activationRouter.post("/api/activation/upload/init", authenticateToken, isAdmin,
   }
 
   const sessionId = `${req.user.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const chunkSize = 20 * 1024 * 1024;
+  const tempFilePath = path.join(TEMP_UPLOADS_DIR, `${sessionId}.upload`);
+  fs.closeSync(fs.openSync(tempFilePath, 'w'));
   const session: UploadSession = {
     sessionId,
     userId: req.user.id,
@@ -48,11 +51,13 @@ activationRouter.post("/api/activation/upload/init", authenticateToken, isAdmin,
     chunks: [],
     gameName,
     note: note || '',
+    chunkSize,
+    tempFilePath,
     createdAt: Date.now()
   };
   uploadSessions.set(sessionId, session);
   console.log(`📝 Upload session created: ${sessionId} (${(fileSize / (1024 * 1024)).toFixed(1)}MB)`);
-  res.json({ sessionId, chunkSize: 20 * 1024 * 1024 }); // 20MB chunks
+  res.json({ sessionId, chunkSize });
 });
 
 activationRouter.post("/api/activation/upload/chunk", authenticateToken, isAdmin, express.raw({ type: 'application/octet-stream', limit: '100mb' }), async (req: any, res) => {
@@ -69,13 +74,33 @@ activationRouter.post("/api/activation/upload/chunk", authenticateToken, isAdmin
     if (!Number.isInteger(parsedChunkIndex) || parsedChunkIndex < 0 || !Number.isInteger(parsedTotalChunks) || parsedTotalChunks < 1) {
       return res.status(400).json({ error: "Invalid chunk metadata" });
     }
+    const expectedTotalChunks = Math.ceil(session.totalSize / Number(session.chunkSize));
+    if (parsedTotalChunks !== expectedTotalChunks || parsedChunkIndex >= expectedTotalChunks || !session.tempFilePath) {
+      return res.status(400).json({ error: "Chunk metadata does not match upload session" });
+    }
 
-    const chunkPath = path.join(TEMP_UPLOADS_DIR, `${sessionId}_chunk_${parsedChunkIndex}`);
-    fs.writeFileSync(chunkPath, req.body as Buffer);
+    const chunkBuffer = req.body as Buffer;
+    const expectedChunkSize = parsedChunkIndex === expectedTotalChunks - 1
+      ? session.totalSize - parsedChunkIndex * Number(session.chunkSize)
+      : Number(session.chunkSize);
+    if (chunkBuffer.length !== expectedChunkSize) {
+      return res.status(400).json({ error: `Invalid chunk size: received ${chunkBuffer.length}, expected ${expectedChunkSize}` });
+    }
+
+    const fileHandle = fs.openSync(session.tempFilePath, 'r+');
+    try {
+      let written = 0;
+      const position = parsedChunkIndex * Number(session.chunkSize);
+      while (written < chunkBuffer.length) {
+        written += fs.writeSync(fileHandle, chunkBuffer, written, chunkBuffer.length - written, position + written);
+      }
+    } finally {
+      fs.closeSync(fileHandle);
+    }
 
     const existingChunk = session.chunks.find((chunk) => chunk.index === parsedChunkIndex);
-    if (existingChunk) existingChunk.path = chunkPath;
-    else session.chunks.push({ index: parsedChunkIndex, path: chunkPath });
+    if (existingChunk) existingChunk.path = session.tempFilePath;
+    else session.chunks.push({ index: parsedChunkIndex, path: session.tempFilePath });
     console.log(`📥 Chunk ${chunkIndex}/${totalChunks} received (${(req.body.length / (1024 * 1024)).toFixed(1)}MB)`);
     
     res.json({ 
@@ -101,30 +126,17 @@ activationRouter.post("/api/activation/upload/finalize", authenticateToken, isAd
   try {
     // Sort chunks by index and merge
     session.chunks.sort((a, b) => a.index - b.index);
-    const chunkSizes = session.chunks.map((chunk) => fs.statSync(chunk.path).size);
-    const receivedSize = chunkSizes.reduce((total, size) => total + size, 0);
+    const receivedSize = session.tempFilePath && fs.existsSync(session.tempFilePath) ? fs.statSync(session.tempFilePath).size : 0;
+    const expectedChunks = Math.ceil(session.totalSize / Number(session.chunkSize));
     const hasContiguousChunks = session.chunks.every((chunk, index) => chunk.index === index);
-    if (!hasContiguousChunks || receivedSize !== Number(session.totalSize)) {
+    if (!session.tempFilePath || session.chunks.length !== expectedChunks || !hasContiguousChunks || receivedSize !== Number(session.totalSize)) {
       return res.status(400).json({
         error: `Upload incomplete: received ${receivedSize} of ${session.totalSize} bytes across ${session.chunks.length} chunks`,
       });
     }
 
     const finalPath = path.join(UPLOADS_DIR_PATH, `activation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.bin`);
-    
-    const writeStream = fs.createWriteStream(finalPath);
-    for (const chunk of session.chunks) {
-      const data = fs.readFileSync(chunk.path);
-      writeStream.write(data);
-      fs.unlinkSync(chunk.path); // Delete chunk after writing
-    }
-    writeStream.end();
-
-    // Wait for stream to finish
-    await new Promise<void>((resolve, reject) => {
-      writeStream.on('finish', () => resolve());
-      writeStream.on('error', reject);
-    });
+    fs.renameSync(session.tempFilePath, finalPath);
 
     // Get final file size
     const fileStats = fs.statSync(finalPath);

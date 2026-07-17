@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Upload, Download, Trash2, KeyRound, Plus, X, FileCheck, Pencil, CheckCircle } from 'lucide-react';
+import { Upload, Download, Trash2, KeyRound, Plus, X, FileCheck, Pencil, CheckCircle, Gauge, Timer } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import api, { API_BASE_URL, uploadWithChunks } from '../../../utils/api';
 import EditActivationModal from '../Modals/EditActivationModal';
@@ -13,6 +13,14 @@ export interface ActivationFile {
   fileSize: number;
   note: string;
   createdAt: string;
+}
+
+interface UploadStats {
+  uploadedBytes: number;
+  totalBytes: number;
+  bytesPerSecond: number;
+  etaSeconds: number | null;
+  phase: 'uploading' | 'finalizing';
 }
 
 interface ActivationTabProps {
@@ -31,6 +39,7 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadStats, setUploadStats] = useState<UploadStats | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -42,9 +51,13 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
     if (!gameName.trim() || !selectedFile) return;
     setUploading(true);
     setUploadProgress(0);
+    setUploadStats({ uploadedBytes: 0, totalBytes: selectedFile.size, bytesPerSecond: 0, etaSeconds: null, phase: 'uploading' });
 
     try {
-      await uploadWithChunks(selectedFile, { gameName: gameName.trim(), note: note.trim() }, setUploadProgress);
+      await uploadWithChunks(selectedFile, { gameName: gameName.trim(), note: note.trim() }, (progress, stats) => {
+        setUploadProgress(progress);
+        if (stats) setUploadStats(stats);
+      });
       
       // Set to 100% and show success
       setUploadProgress(100);
@@ -57,12 +70,14 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
         setNote('');
         setSelectedFile(null);
         setUploadProgress(null);
+        setUploadStats(null);
         setShowSuccess(false);
         onRefresh();
       }, 2000);
     } catch (err) {
       showToast(`Upload thất bại: ${err instanceof Error ? err.message : String(err)}`, 'error', 3500);
       setUploadProgress(null);
+      setUploadStats(null);
     } finally {
       setUploading(false);
     }
@@ -81,6 +96,20 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  const formatSpeed = (bytesPerSecond: number) => {
+    if (!bytesPerSecond) return 'Đang đo...';
+    if (bytesPerSecond < 1024 * 1024) return `${(bytesPerSecond / 1024).toFixed(0)} KB/s`;
+    return `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`;
+  };
+
+  const formatEta = (seconds: number | null) => {
+    if (seconds === null || !Number.isFinite(seconds)) return 'Đang tính...';
+    if (seconds < 60) return `Còn khoảng ${seconds} giây`;
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `Còn khoảng ${minutes}:${String(remainingSeconds).padStart(2, '0')}`;
   };
 
   const handleDelete = async (id: number) => {
@@ -275,19 +304,30 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
                     </p>
                     <span className="text-xs font-mono font-bold text-amber-700">{uploadProgress}%</span>
                   </div>
-                  <div className="w-full h-2 bg-amber-200 rounded-full overflow-hidden">
+                   <div className="w-full h-2 bg-amber-200 rounded-full overflow-hidden">
                     <motion.div 
                       initial={{ width: 0 }}
                       animate={{ width: `${uploadProgress}%` }}
                       transition={{ type: 'spring', stiffness: 100 }}
                       className="h-full bg-gradient-to-r from-amber-500 to-amber-600 rounded-full shadow-lg"
                     />
-                  </div>
-                  <p className="text-[10px] text-amber-700 text-center flex items-center justify-center gap-1">
-                    {uploadProgress < 100 ? (
-                      <>
-                        <span className="inline-block w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
-                        Đang gửi file lên server...
+                   </div>
+                   {uploadStats && uploadProgress < 100 && <div className="grid grid-cols-2 gap-2 pt-1">
+                     <div className="rounded-lg bg-white/70 px-3 py-2">
+                       <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-amber-600"><Gauge className="h-3 w-3" />Tốc độ</p>
+                       <p className="mt-1 text-sm font-black text-slate-800">{uploadStats.phase === 'finalizing' ? 'Đã tải xong' : formatSpeed(uploadStats.bytesPerSecond)}</p>
+                     </div>
+                     <div className="rounded-lg bg-white/70 px-3 py-2">
+                       <p className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-amber-600"><Timer className="h-3 w-3" />Thời gian</p>
+                       <p className="mt-1 text-sm font-black text-slate-800">{uploadStats.phase === 'finalizing' ? 'Đang lưu file...' : formatEta(uploadStats.etaSeconds)}</p>
+                     </div>
+                     <p className="col-span-2 text-center text-[10px] font-bold text-amber-700">{formatSize(uploadStats.uploadedBytes)} / {formatSize(uploadStats.totalBytes)}</p>
+                   </div>}
+                   <p className="text-[10px] text-amber-700 text-center flex items-center justify-center gap-1">
+                     {uploadProgress < 100 ? (
+                       <>
+                         <span className="inline-block w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
+                         {uploadStats?.phase === 'finalizing' ? 'Đã gửi xong, đang hoàn tất...' : 'Đang gửi đồng thời 3 phần lên server...'}
                       </>
                     ) : (
                       <>

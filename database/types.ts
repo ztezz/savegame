@@ -44,5 +44,7 @@ export interface UploadSession {
   folderId?: number | null;
   relativePath?: string;
   mimeType?: string;
+  chunkSize?: number;
+  tempFilePath?: string;
   createdAt: number;
 }

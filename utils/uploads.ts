@@ -18,8 +18,10 @@ export function startUploadSessionCleanupInterval() {
     for (const [sessionId, session] of uploadSessions) {
       if (now - session.createdAt > 24 * 60 * 60 * 1000) {
         // Clean up temp files
-        session.chunks.forEach(chunk => {
-          if (fs.existsSync(chunk.path)) fs.unlinkSync(chunk.path);
+        const tempPaths = new Set(session.chunks.map((chunk) => chunk.path));
+        if (session.tempFilePath) tempPaths.add(session.tempFilePath);
+        tempPaths.forEach((tempPath) => {
+          if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
         });
         uploadSessions.delete(sessionId);
         console.log(`🧹 Cleaned up old upload session: ${sessionId}`);
