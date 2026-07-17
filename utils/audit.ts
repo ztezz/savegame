@@ -15,6 +15,7 @@ function truncateString(value: string): string {
 function sanitizeForAudit(value: any, depth = 0): any {
   if (value == null) return value;
   if (depth > MAX_DEPTH) return "[truncated]";
+  if (Buffer.isBuffer(value)) return { type: "Buffer", bytes: value.length };
 
   if (typeof value === "string") return truncateString(value);
   if (typeof value === "number" || typeof value === "boolean") return value;
@@ -54,6 +55,16 @@ function shouldSkipPath(path: string): boolean {
     || path === "/api/task";
 }
 
+function isUploadPath(path: string): boolean {
+  return path === "/api/activation/upload"
+    || path.startsWith("/api/activation/upload/")
+    || path === "/api/drive/upload"
+    || path.startsWith("/api/drive/upload/")
+    || path === "/api/save/upload"
+    || path.startsWith("/api/save/upload/")
+    || path === "/api/system/agent/windows";
+}
+
 export async function writeAudit(
   userId: number | null,
   action: string,
@@ -87,9 +98,10 @@ export function auditApiRequestMiddleware(req: any, res: any, next: any) {
       ip: getClientIp(req),
       userAgent: req.headers?.["user-agent"] || null,
       query: sanitizeForAudit(req.query || {}),
+      contentLength: Number(req.headers?.["content-length"] || 0) || null,
     };
 
-    if (method !== "GET" && method !== "HEAD") {
+    if (method !== "GET" && method !== "HEAD" && !isUploadPath(resource)) {
       detail.body = sanitizeForAudit(req.body || {});
     }
 
