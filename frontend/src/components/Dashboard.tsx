@@ -892,7 +892,19 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
             <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải...</div>}>
               <OverviewTab 
                 games={recentGames}
+                devices={devices}
+                agentOnlineMap={agentOnlineMap}
+                restoreStatusMap={restoreStatusMap}
+                syncLogs={syncLogs}
+                autoSyncEnabled={autoSyncEnabled}
+                directoryConnected={Boolean(directoryHandle)}
+                isSyncing={isSyncing}
+                lastSyncTime={lastSyncTime}
+                uploadProgress={uploadProgress}
                 setActiveTab={(tab) => setActiveTab(tab as any)} 
+                handleOpenNew={handleOpenNew}
+                handleSelectDirectory={handleSelectDirectory}
+                performSync={performSync}
                 handleOpenHistory={handleOpenHistory} 
                 handleDownload={handleDownload} 
               />
