@@ -27,8 +27,7 @@
   },
   "include": [
     "src",
-    "vite.config.ts",
-    "worker.ts"
+    "vite.config.ts"
   ],
   "exclude": [
     "dist",

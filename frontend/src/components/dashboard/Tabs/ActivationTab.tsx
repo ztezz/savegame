@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Upload, Download, Trash2, KeyRound, Plus, X, FileCheck, Pencil, CheckCircle, Gauge, Timer } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import api, { API_BASE_URL, uploadWithChunks } from '../../../utils/api';
+import api, { API_BASE_URL, uploadWithProgress } from '../../../utils/api';
 import EditActivationModal from '../Modals/EditActivationModal';
 import DeleteConfirmModal from '../Modals/DeleteConfirmModal';
 import { useToast } from '../../../context/ToastContext';
@@ -53,8 +53,13 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
     setUploadProgress(0);
     setUploadStats({ uploadedBytes: 0, totalBytes: selectedFile.size, bytesPerSecond: 0, etaSeconds: null, phase: 'uploading' });
 
+    const formData = new FormData();
+    formData.append('activationfile', selectedFile);
+    formData.append('gameName', gameName.trim());
+    formData.append('note', note.trim());
+
     try {
-      await uploadWithChunks(selectedFile, { gameName: gameName.trim(), note: note.trim() }, (progress, stats) => {
+      await uploadWithProgress('/activation/upload', formData, (progress, stats) => {
         setUploadProgress(progress);
         if (stats) setUploadStats(stats);
       });

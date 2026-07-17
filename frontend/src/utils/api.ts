@@ -41,7 +41,7 @@ api.interceptors.response.use(
 export const uploadWithProgress = async (
   url: string,
   formData: FormData,
-  onProgress: (progress: number) => void
+  onProgress: (progress: number, stats?: { uploadedBytes: number; totalBytes: number; bytesPerSecond: number; etaSeconds: number | null; phase: 'uploading' | 'finalizing' }) => void
 ): Promise<any> => {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -53,6 +53,8 @@ export const uploadWithProgress = async (
     let simulatedProgress = 0;
     let lastProgressTime = Date.now();
     let lastProgressLoaded = 0;
+    const uploadStartedAt = Date.now();
+    let smoothedBytesPerSecond = 0;
     let simulateProgressTimer: ReturnType<typeof setTimeout> | null = null;
     
     // Calculate file size from FormData
@@ -94,12 +96,19 @@ export const uploadWithProgress = async (
         const sizeInMB = (e.loaded / (1024 * 1024)).toFixed(1);
         const totalMB = (e.total / (1024 * 1024)).toFixed(1);
         const speedBytesPerSec = loadedDiff > 0 ? loadedDiff / (timeDiff / 1000) : 0;
+        smoothedBytesPerSecond = smoothedBytesPerSecond ? smoothedBytesPerSecond * 0.7 + speedBytesPerSec * 0.3 : speedBytesPerSec;
         const speedKBps = (speedBytesPerSec / 1024).toFixed(0);
         const remaining = e.total - e.loaded;
         const etaSeconds = speedBytesPerSec > 0 ? Math.round(remaining / speedBytesPerSec) : 0;
         
         console.log(`📤 Upload: ${percentComplete}% (${sizeInMB}/${totalMB} MB) @ ${speedKBps}KB/s ETA: ${etaSeconds}s`);
-        onProgress(Math.min(percentComplete, 99));
+        onProgress(Math.min(percentComplete, 99), {
+          uploadedBytes: e.loaded,
+          totalBytes: e.total,
+          bytesPerSecond: smoothedBytesPerSecond || e.loaded / Math.max((Date.now() - uploadStartedAt) / 1000, 0.1),
+          etaSeconds: smoothedBytesPerSecond > 0 ? Math.ceil((e.total - e.loaded) / smoothedBytesPerSecond) : null,
+          phase: 'uploading',
+        });
       } else {
         const sizeInMB = (e.loaded / (1024 * 1024)).toFixed(1);
         console.log(`📤 Upload: ${sizeInMB} MB sent (total unknown)`);
@@ -143,6 +152,16 @@ export const uploadWithProgress = async (
       }
     });
 
+    xhr.upload.addEventListener('load', () => {
+      onProgress(99, {
+        uploadedBytes: totalFileSize,
+        totalBytes: totalFileSize,
+        bytesPerSecond: 0,
+        etaSeconds: null,
+        phase: 'finalizing',
+      });
+    });
+
     xhr.addEventListener('error', (err) => {
       clearTimeout(simulateTimer);
       if (simulateProgressTimer) clearTimeout(simulateProgressTimer);
@@ -184,183 +203,6 @@ export const uploadWithProgress = async (
   });
 };
 
-export const uploadWithChunks = async (
-  file: File,
-  metadata: { gameName: string; note?: string },
-  onProgress: (progress: number, stats?: { uploadedBytes: number; totalBytes: number; bytesPerSecond: number; etaSeconds: number | null; phase: 'uploading' | 'finalizing' }) => void
-): Promise<any> => {
-  const baseURL = UPLOAD_BASE_URL;
-  const token = localStorage.getItem('token');
-  
-  if (!token) {
-    throw new Error('No authentication token');
-  }
-
-  const MAX_CHUNK_RETRIES = 3;
-  const connection = (navigator as Navigator & { connection?: { effectiveType?: string; saveData?: boolean } }).connection;
-  const maxConcurrentChunks = connection?.saveData
-    ? 1
-    : connection?.effectiveType === '2g' || connection?.effectiveType === 'slow-2g'
-      ? 1
-      : connection?.effectiveType === '3g'
-        ? 2
-        : 4;
-  
-  try {
-    // Step 1: Initialize upload session
-    const initRes = await fetch(`${baseURL}/activation/upload/init`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({
-        fileName: file.name,
-        fileSize: file.size,
-        gameName: metadata.gameName,
-        note: metadata.note || ''
-      })
-    });
-
-    if (!initRes.ok) {
-      throw new Error(`Failed to initialize upload: ${initRes.statusText}`);
-    }
-
-    const { sessionId, chunkSize: serverChunkSize } = await initRes.json();
-    const chunkSize = Math.max(1 * 1024 * 1024, Number(serverChunkSize) || 32 * 1024 * 1024);
-    const totalChunks = Math.ceil(file.size / chunkSize);
-    const uploadedByChunk = new Array<number>(totalChunks).fill(0);
-    const uploadStartedAt = performance.now();
-    let smoothedBytesPerSecond = 0;
-    let lastSampleAt = uploadStartedAt;
-    let lastSampleBytes = 0;
-    console.log(`📝 Upload session created: ${sessionId} (${totalChunks} chunks, ${maxConcurrentChunks} concurrent)`);
-
-    const reportProgress = (phase: 'uploading' | 'finalizing') => {
-      const uploadedBytes = uploadedByChunk.reduce((total, loaded) => total + loaded, 0);
-      const now = performance.now();
-      const elapsedSinceSample = (now - lastSampleAt) / 1000;
-      if (elapsedSinceSample >= 0.4) {
-        const currentSpeed = Math.max(0, uploadedBytes - lastSampleBytes) / elapsedSinceSample;
-        smoothedBytesPerSecond = smoothedBytesPerSecond
-          ? smoothedBytesPerSecond * 0.7 + currentSpeed * 0.3
-          : currentSpeed;
-        lastSampleAt = now;
-        lastSampleBytes = uploadedBytes;
-      } else if (!smoothedBytesPerSecond && uploadedBytes > 0) {
-        smoothedBytesPerSecond = uploadedBytes / Math.max((now - uploadStartedAt) / 1000, 0.1);
-      }
-      const progress = phase === 'finalizing' ? 96 : Math.max(1, Math.min(Math.floor((uploadedBytes / file.size) * 95), 95));
-      const remainingBytes = Math.max(0, file.size - uploadedBytes);
-      onProgress(progress, {
-        uploadedBytes,
-        totalBytes: file.size,
-        bytesPerSecond: phase === 'uploading' ? smoothedBytesPerSecond : 0,
-        etaSeconds: phase === 'uploading' && smoothedBytesPerSecond > 0 ? Math.ceil(remainingBytes / smoothedBytesPerSecond) : null,
-        phase,
-      });
-    };
-
-    const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-    const uploadChunk = (chunk: Blob, chunkIndex: number, attempt: number) => new Promise<void>((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      const chunkUrl = `${baseURL}/activation/upload/chunk?sessionId=${encodeURIComponent(sessionId)}&chunkIndex=${chunkIndex}&totalChunks=${totalChunks}`;
-      const timeoutMs = Math.max(180000, (chunk.size / (1024 * 1024)) * 30000);
-
-      xhr.upload.addEventListener('progress', (event) => {
-        if (!event.lengthComputable) return;
-        uploadedByChunk[chunkIndex] = Math.min(event.loaded, chunk.size);
-        reportProgress('uploading');
-      });
-
-      xhr.addEventListener('load', () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          uploadedByChunk[chunkIndex] = chunk.size;
-          resolve();
-          return;
-        }
-
-        let message = xhr.statusText || `HTTP ${xhr.status}`;
-        try {
-          message = JSON.parse(xhr.responseText)?.error || message;
-        } catch {
-          if (xhr.responseText) message = xhr.responseText;
-        }
-        reject(new Error(`Failed to upload chunk ${chunkIndex + 1} (attempt ${attempt}): ${message}`));
-      });
-
-      xhr.addEventListener('error', () => reject(new Error(`Network error while uploading chunk ${chunkIndex + 1} (attempt ${attempt})`)));
-      xhr.addEventListener('abort', () => reject(new Error(`Upload chunk ${chunkIndex + 1} aborted (attempt ${attempt})`)));
-      xhr.addEventListener('timeout', () => reject(new Error(`Upload chunk ${chunkIndex + 1} timed out (attempt ${attempt})`)));
-
-      xhr.open('POST', chunkUrl);
-      xhr.timeout = timeoutMs;
-      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-      xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-      xhr.send(chunk);
-    });
-
-    const uploadChunkWithRetry = async (chunk: Blob, chunkIndex: number) => {
-      for (let attempt = 1; attempt <= MAX_CHUNK_RETRIES; attempt++) {
-        try {
-          await uploadChunk(chunk, chunkIndex, attempt);
-          return;
-        } catch (err) {
-          if (attempt === MAX_CHUNK_RETRIES) throw err;
-          uploadedByChunk[chunkIndex] = 0;
-          const delayMs = attempt * 1500;
-          console.warn(`⚠️ Chunk ${chunkIndex + 1}/${totalChunks} failed, retrying in ${delayMs}ms...`, err);
-          await sleep(delayMs);
-        }
-      }
-    };
-
-    // Step 2: Upload a small pool of chunks concurrently to avoid per-request latency.
-    let nextChunkIndex = 0;
-    const uploadWorker = async () => {
-      while (nextChunkIndex < totalChunks) {
-        const chunkIndex = nextChunkIndex++;
-        const start = chunkIndex * chunkSize;
-        const end = Math.min(start + chunkSize, file.size);
-        const chunk = file.slice(start, end);
-
-        console.log(`📤 Uploading chunk ${chunkIndex + 1}/${totalChunks} (${(chunk.size / (1024 * 1024)).toFixed(1)}MB)...`);
-        await uploadChunkWithRetry(chunk, chunkIndex);
-        reportProgress('uploading');
-        const progress = Math.floor((uploadedByChunk.reduce((total, loaded) => total + loaded, 0) / file.size) * 95);
-        console.log(`✅ Chunk ${chunkIndex + 1}/${totalChunks} uploaded (${progress}%)`);
-      }
-    };
-
-    await Promise.all(Array.from({ length: Math.min(maxConcurrentChunks, totalChunks) }, () => uploadWorker()));
-
-    // Step 3: Finalize upload
-    console.log(`🔗 Finalizing upload...`);
-    reportProgress('finalizing');
-    const finalizeRes = await fetch(`${baseURL}/activation/upload/finalize`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ sessionId })
-    });
-
-    if (!finalizeRes.ok) {
-      throw new Error(`Failed to finalize upload: ${finalizeRes.statusText}`);
-    }
-
-    const result = await finalizeRes.json();
-    onProgress(100, { uploadedBytes: file.size, totalBytes: file.size, bytesPerSecond: 0, etaSeconds: 0, phase: 'finalizing' });
-    console.log(`✅ Upload completed successfully!`, result);
-    return result;
-  } catch (err) {
-    console.error('❌ Upload failed:', err);
-    throw err;
-  }
-};
-
 export const downloadWithProgress = async (
   url: string,
   fileName: string,
@@ -369,7 +211,7 @@ export const downloadWithProgress = async (
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const token = localStorage.getItem('token');
-  const baseURL = UPLOAD_BASE_URL;
+    const baseURL = API_BASE_URL;
     
     const fullUrl = `${baseURL}${url}`;
     console.log(`📥 Download starting: ${fullUrl}`);

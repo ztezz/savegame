@@ -1,15 +1,10 @@
 import { Router } from "express";
-import express from "express";
 import * as path from "path";
 import * as fs from "fs";
 import { pool, isUsingDatabase } from "../config/database.js";
 import { upload, UPLOADS_DIR_PATH } from "../config/multer.js";
 import { authenticateToken, isAdmin } from "../middleware/auth.js";
-import { uploadSessions, getTempUploadDir } from "../utils/uploads.js";
-import { UploadSession } from "../database/types.js";
 import { streamFileDownload } from "../utils/download.js";
-
-const TEMP_UPLOADS_DIR = getTempUploadDir();
 
 export const activationRouter = Router();
 
@@ -32,138 +27,6 @@ async function insertActivationFileWithRetry(values: any[]) {
   throw lastErr;
 }
 
-// Chunked Upload
-activationRouter.post("/api/activation/upload/init", authenticateToken, isAdmin, express.json({ limit: '1mb' }), async (req: any, res) => {
-  const { fileName, fileSize, gameName, note } = req.body;
-  if (!fileName || fileSize <= 0) {
-    return res.status(400).json({ error: "Invalid fileName or fileSize" });
-  }
-
-  const sessionId = `${req.user.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  const chunkSize = 32 * 1024 * 1024;
-  const tempFilePath = path.join(TEMP_UPLOADS_DIR, `${sessionId}.upload`);
-  fs.closeSync(fs.openSync(tempFilePath, 'w'));
-  const session: UploadSession = {
-    sessionId,
-    userId: req.user.id,
-    fileName,
-    totalSize: fileSize,
-    chunks: [],
-    gameName,
-    note: note || '',
-    chunkSize,
-    tempFilePath,
-    createdAt: Date.now()
-  };
-  uploadSessions.set(sessionId, session);
-  console.log(`📝 Upload session created: ${sessionId} (${(fileSize / (1024 * 1024)).toFixed(1)}MB)`);
-  res.json({ sessionId, chunkSize });
-});
-
-activationRouter.post("/api/activation/upload/chunk", authenticateToken, isAdmin, express.raw({ type: 'application/octet-stream', limit: '100mb' }), async (req: any, res) => {
-  const { sessionId, chunkIndex, totalChunks } = req.query;
-  const session = uploadSessions.get(sessionId as string);
-  
-  if (!session || session.userId !== req.user.id) {
-    return res.status(404).json({ error: "Upload session not found" });
-  }
-
-  try {
-    const parsedChunkIndex = Number(chunkIndex);
-    const parsedTotalChunks = Number(totalChunks);
-    if (!Number.isInteger(parsedChunkIndex) || parsedChunkIndex < 0 || !Number.isInteger(parsedTotalChunks) || parsedTotalChunks < 1) {
-      return res.status(400).json({ error: "Invalid chunk metadata" });
-    }
-    const expectedTotalChunks = Math.ceil(session.totalSize / Number(session.chunkSize));
-    if (parsedTotalChunks !== expectedTotalChunks || parsedChunkIndex >= expectedTotalChunks || !session.tempFilePath) {
-      return res.status(400).json({ error: "Chunk metadata does not match upload session" });
-    }
-
-    const chunkBuffer = req.body as Buffer;
-    const expectedChunkSize = parsedChunkIndex === expectedTotalChunks - 1
-      ? session.totalSize - parsedChunkIndex * Number(session.chunkSize)
-      : Number(session.chunkSize);
-    if (chunkBuffer.length !== expectedChunkSize) {
-      return res.status(400).json({ error: `Invalid chunk size: received ${chunkBuffer.length}, expected ${expectedChunkSize}` });
-    }
-
-    const fileHandle = await fs.promises.open(session.tempFilePath, 'r+');
-    try {
-      let written = 0;
-      const position = parsedChunkIndex * Number(session.chunkSize);
-      while (written < chunkBuffer.length) {
-        const result = await fileHandle.write(chunkBuffer, written, chunkBuffer.length - written, position + written);
-        written += result.bytesWritten;
-      }
-    } finally {
-      await fileHandle.close();
-    }
-
-    const existingChunk = session.chunks.find((chunk) => chunk.index === parsedChunkIndex);
-    if (existingChunk) existingChunk.path = session.tempFilePath;
-    else session.chunks.push({ index: parsedChunkIndex, path: session.tempFilePath });
-    console.log(`📥 Chunk ${chunkIndex}/${totalChunks} received (${(req.body.length / (1024 * 1024)).toFixed(1)}MB)`);
-    
-    res.json({ 
-      success: true, 
-      chunkIndex, 
-      totalChunks,
-      received: session.chunks.length 
-    });
-  } catch (err) {
-    console.error('❌ Chunk save error:', err);
-    res.status(500).json({ error: "Failed to save chunk" });
-  }
-});
-
-activationRouter.post("/api/activation/upload/finalize", authenticateToken, isAdmin, express.json({ limit: '1mb' }), async (req: any, res) => {
-  const { sessionId } = req.body;
-  const session = uploadSessions.get(sessionId);
-  
-  if (!session || session.userId !== req.user.id) {
-    return res.status(404).json({ error: "Upload session not found" });
-  }
-
-  try {
-    // Sort chunks by index and merge
-    session.chunks.sort((a, b) => a.index - b.index);
-    const receivedSize = session.tempFilePath && fs.existsSync(session.tempFilePath) ? fs.statSync(session.tempFilePath).size : 0;
-    const expectedChunks = Math.ceil(session.totalSize / Number(session.chunkSize));
-    const hasContiguousChunks = session.chunks.every((chunk, index) => chunk.index === index);
-    if (!session.tempFilePath || session.chunks.length !== expectedChunks || !hasContiguousChunks || receivedSize !== Number(session.totalSize)) {
-      return res.status(400).json({
-        error: `Upload incomplete: received ${receivedSize} of ${session.totalSize} bytes across ${session.chunks.length} chunks`,
-      });
-    }
-
-    const finalPath = path.join(UPLOADS_DIR_PATH, `activation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.bin`);
-    fs.renameSync(session.tempFilePath, finalPath);
-
-    // Get final file size
-    const fileStats = fs.statSync(finalPath);
-    const fileName = path.basename(finalPath);
-
-    // Save to database
-    if (isUsingDatabase()) {
-      try {
-        const { rows } = await insertActivationFileWithRetry([req.user.id, session.gameName, session.fileName, fileName, fileStats.size, session.note]);
-        uploadSessions.delete(sessionId);
-        console.log(`✅ Upload finalized: ${session.fileName} (${(fileStats.size / (1024 * 1024)).toFixed(1)}MB)`);
-        res.status(201).json(rows[0]);
-      } catch (dbErr: any) {
-        fs.unlinkSync(finalPath);
-        throw dbErr;
-      }
-    } else {
-      uploadSessions.delete(sessionId);
-      res.status(201).json({ success: true, message: "Upload finalized" });
-    }
-  } catch (err) {
-    console.error('❌ Upload finalization error:', err);
-    res.status(500).json({ error: "Failed to finalize upload: " + (err instanceof Error ? err.message : String(err)) });
-  }
-});
-
 // Single file upload
 activationRouter.post("/api/activation/upload", authenticateToken, isAdmin, upload.single("activationfile"), async (req: any, res) => {
   const { gameName, note } = req.body;
@@ -176,6 +39,7 @@ activationRouter.post("/api/activation/upload", authenticateToken, isAdmin, uplo
       res.status(201).json(rows[0]);
     } catch (err) {
       console.error('❌ Upload activation file error:', err);
+      if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
       res.status(500).json({ error: "Upload failed: " + (err instanceof Error ? err.message : String(err)) });
     }
   } else {

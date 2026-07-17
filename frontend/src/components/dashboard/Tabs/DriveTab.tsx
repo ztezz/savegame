@@ -208,165 +208,44 @@ const DriveTab: React.FC = () => {
     setUploadStatus('Đang chuẩn bị upload...');
     setProgress(0);
     try {
-      const totalUploadBytes = uploadFilesInput.reduce((total, item) => total + item.file.size, 0);
-      let completedBytes = 0;
-      const finalizeUpload = async (sessionId: string) => {
-        let lastError: unknown;
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          try {
-            await api.post(`${UPLOAD_BASE_URL}/drive/upload/finalize`, { sessionId }, { timeout: 120000 });
-            return;
-          } catch (error: any) {
-            lastError = error;
-            const status = error.response?.status;
-            if (status && status < 500 && status !== 404) throw error;
-            if (attempt < 3) {
-              setUploadStatus(`Kết nối phản hồi bị gián đoạn, đang xác nhận lại (${attempt}/3)...`);
-              await new Promise((resolve) => window.setTimeout(resolve, attempt * 2000));
-            }
-          }
-        }
-        throw lastError;
-      };
-      const uploadFileInChunks = async (item: UploadItem, fileNumber: number) => {
+      await new Promise<void>((resolve, reject) => {
         const token = localStorage.getItem('token');
-        if (!token) throw new Error('Phiên đăng nhập đã hết hạn');
-        const relativePath = item.relativePath || item.file.webkitRelativePath || item.file.name;
-        const directUploadLimit = 24 * 1024 * 1024;
-
-        if (item.file.size <= directUploadLimit) {
-          setProgress(Math.max(1, Math.floor((completedBytes / totalUploadBytes) * 100)));
-          setUploadStatus(`Đang upload nhanh ${item.file.name} (${fileNumber}/${uploadFilesInput.length})`);
-          await new Promise<void>((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            const formData = new FormData();
-            formData.append('files', item.file);
-            formData.append('relativePaths', relativePath);
-            if (note.trim()) formData.append('note', note.trim());
-            if (currentFolderId) formData.append('folderId', String(currentFolderId));
-            activeUploadXhrsRef.current.add(xhr);
-            xhr.open('POST', `${UPLOAD_BASE_URL}/drive/upload`);
-            xhr.timeout = 10 * 60 * 1000;
-            xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-            xhr.upload.onprogress = (event) => {
-              if (!event.lengthComputable) return;
-              const uploadedBytes = completedBytes + Math.min(event.loaded, item.file.size);
-              setProgress(Math.max(1, Math.min(98, Math.floor((uploadedBytes / totalUploadBytes) * 100))));
-            };
-            xhr.upload.onload = () => {
-              setUploadPhase('finalizing');
-              setProgress(Math.min(99, Math.max(1, Math.floor(((completedBytes + item.file.size) / totalUploadBytes) * 100))));
-              setUploadStatus(`Đã gửi xong ${item.file.name}, server đang ghi dữ liệu...`);
-            };
-            xhr.onload = () => {
-              activeUploadXhrsRef.current.delete(xhr);
-              if (xhr.status >= 200 && xhr.status < 300) resolve();
-              else {
-                let error = `HTTP ${xhr.status}`;
-                try { error = JSON.parse(xhr.responseText)?.error || error; } catch { /* Use HTTP status. */ }
-                reject(new Error(error));
-              }
-            };
-            xhr.onerror = () => { activeUploadXhrsRef.current.delete(xhr); reject(new Error('Lỗi mạng khi upload file')); };
-            xhr.ontimeout = () => { activeUploadXhrsRef.current.delete(xhr); reject(new Error('Server xử lý file quá thời gian')); };
-            xhr.onabort = () => { activeUploadXhrsRef.current.delete(xhr); reject(new Error('Upload đã hủy')); };
-            xhr.send(formData);
-          });
-          completedBytes += item.file.size;
-          return;
+        if (!token) return reject(new Error('Phiên đăng nhập đã hết hạn'));
+        const xhr = new XMLHttpRequest();
+        const formData = new FormData();
+        for (const item of uploadFilesInput) {
+          formData.append('files', item.file);
+          formData.append('relativePaths', item.relativePath || item.file.webkitRelativePath || item.file.name);
         }
-
-        setUploadStatus(`Đang chuẩn bị ${item.file.name} (${fileNumber}/${uploadFilesInput.length})...`);
-        const initRes = await api.post(`${UPLOAD_BASE_URL}/drive/upload/init`, {
-          fileName: item.file.name,
-          fileSize: item.file.size,
-          folderId: currentFolderId,
-          relativePath,
-          mimeType: item.file.type,
-          note: note.trim(),
-        });
-        const sessionId = String(initRes.data.sessionId);
-        setUploadPhase('uploading');
-        const chunkSize = Number(initRes.data.chunkSize) || 32 * 1024 * 1024;
-        const totalChunks = Math.ceil(item.file.size / chunkSize);
-        const loadedByChunk = new Array<number>(totalChunks).fill(0);
-        const connection = (navigator as Navigator & { connection?: { effectiveType?: string; saveData?: boolean } }).connection;
-        const concurrency = connection?.saveData || connection?.effectiveType === '2g' || connection?.effectiveType === 'slow-2g'
-          ? 1
-          : connection?.effectiveType === '3g'
-            ? 2
-            : 4;
-        setProgress(Math.max(1, Math.floor((completedBytes / totalUploadBytes) * 95)));
-        setUploadStatus(`Đang upload ${item.file.name} (${fileNumber}/${uploadFilesInput.length})`);
-
-        const uploadChunk = (chunkIndex: number, attempt: number) => new Promise<void>((resolve, reject) => {
-          const start = chunkIndex * chunkSize;
-          const end = Math.min(start + chunkSize, item.file.size);
-          const chunk = item.file.slice(start, end);
-          const xhr = new XMLHttpRequest();
-          activeUploadXhrsRef.current.add(xhr);
-          xhr.open('POST', `${UPLOAD_BASE_URL}/drive/upload/chunk?sessionId=${encodeURIComponent(sessionId)}&chunkIndex=${chunkIndex}&totalChunks=${totalChunks}`);
-          xhr.timeout = Math.max(180000, (chunk.size / (1024 * 1024)) * 30000);
-          xhr.setRequestHeader('Authorization', `Bearer ${token}`);
-          xhr.setRequestHeader('Content-Type', 'application/octet-stream');
-          xhr.upload.onprogress = (event) => {
-            loadedByChunk[chunkIndex] = Math.min(event.loaded, chunk.size);
-            const currentFileBytes = loadedByChunk.reduce((total, loaded) => total + loaded, 0);
-            setProgress(Math.max(1, Math.min(95, Math.floor(((completedBytes + currentFileBytes) / totalUploadBytes) * 95))));
-          };
-          xhr.onload = () => {
-            activeUploadXhrsRef.current.delete(xhr);
-            if (xhr.status >= 200 && xhr.status < 300) {
-              loadedByChunk[chunkIndex] = chunk.size;
-              resolve();
-            } else {
-              let error = `HTTP ${xhr.status}`;
-              try { error = JSON.parse(xhr.responseText)?.error || error; } catch { /* Use HTTP status. */ }
-              reject(new Error(`Chunk ${chunkIndex + 1}, lần ${attempt}: ${error}`));
-            }
-          };
-          xhr.onerror = () => { activeUploadXhrsRef.current.delete(xhr); reject(new Error(`Lỗi mạng khi upload chunk ${chunkIndex + 1}`)); };
-          xhr.ontimeout = () => { activeUploadXhrsRef.current.delete(xhr); reject(new Error(`Chunk ${chunkIndex + 1} quá thời gian`)); };
-          xhr.onabort = () => { activeUploadXhrsRef.current.delete(xhr); reject(new Error('Upload đã hủy')); };
-          xhr.send(chunk);
-        });
-
-        const uploadChunkWithRetry = async (chunkIndex: number) => {
-          for (let attempt = 1; attempt <= 3; attempt++) {
-            try { await uploadChunk(chunkIndex, attempt); return; } catch (error) {
-              loadedByChunk[chunkIndex] = 0;
-              if (cancelUploadRef.current || attempt === 3) throw error;
-              await new Promise((resolve) => window.setTimeout(resolve, attempt * 1200));
-            }
-          }
+        if (note.trim()) formData.append('note', note.trim());
+        if (currentFolderId) formData.append('folderId', String(currentFolderId));
+        activeUploadXhrsRef.current.add(xhr);
+        xhr.open('POST', `${UPLOAD_BASE_URL}/drive/upload`);
+        xhr.timeout = 30 * 60 * 1000;
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.upload.onprogress = (event) => {
+          if (!event.lengthComputable) return;
+          setProgress(Math.max(1, Math.min(99, Math.floor((event.loaded / event.total) * 100))));
+          setUploadStatus(uploadFilesInput.length === 1 ? `Đang upload ${uploadFilesInput[0].file.name}` : `Đang upload ${uploadFilesInput.length} file`);
         };
-
-        let nextChunk = 0;
-        const worker = async () => {
-          while (nextChunk < totalChunks && !cancelUploadRef.current) {
-            const chunkIndex = nextChunk++;
-            await uploadChunkWithRetry(chunkIndex);
-          }
-        };
-
-        try {
-          await Promise.all(Array.from({ length: Math.min(concurrency, totalChunks) }, () => worker()));
-          if (cancelUploadRef.current) throw new Error('Upload đã hủy');
-          setProgress(Math.min(99, Math.max(1, Math.floor(((completedBytes + item.file.size) / totalUploadBytes) * 100))));
+        xhr.upload.onload = () => {
           setUploadPhase('finalizing');
-          setUploadStatus(`Đã gửi xong ${item.file.name}, server đang xác nhận file...`);
-          await finalizeUpload(sessionId);
-          completedBytes += item.file.size;
-          setUploadPhase('uploading');
-        } catch (error) {
-          void api.delete(`${UPLOAD_BASE_URL}/drive/upload/${encodeURIComponent(sessionId)}`).catch(() => undefined);
-          throw error;
-        }
-      };
-
-      for (let index = 0; index < uploadFilesInput.length; index++) {
-        await uploadFileInChunks(uploadFilesInput[index], index + 1);
-      }
+          setUploadStatus('Đã truyền xong, server đang lưu file...');
+        };
+        xhr.onload = () => {
+          activeUploadXhrsRef.current.delete(xhr);
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else {
+            let error = `Upload thất bại (HTTP ${xhr.status})`;
+            try { error = JSON.parse(xhr.responseText)?.error || error; } catch { /* Use status message. */ }
+            reject(new Error(error));
+          }
+        };
+        xhr.onerror = () => { activeUploadXhrsRef.current.delete(xhr); reject(new Error('Không kết nối được máy chủ upload')); };
+        xhr.ontimeout = () => { activeUploadXhrsRef.current.delete(xhr); reject(new Error('Upload quá thời gian')); };
+        xhr.onabort = () => { activeUploadXhrsRef.current.delete(xhr); reject(new Error('Upload đã hủy')); };
+        xhr.send(formData);
+      });
       setProgress(100);
       setUploadPhase('uploading');
       setUploadStatus('Hoàn tất, đang làm mới danh sách...');
