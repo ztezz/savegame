@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Download, Eye, Link, Pencil, RotateCcw, Trash2, X } from 'lucide-react';
-import api, { API_BASE_URL, UPLOAD_BASE_URL } from '../../../utils/api';
+import api, { API_BASE_URL, LARGE_UPLOAD_THRESHOLD, UPLOAD_BASE_URL, uploadLargeFile } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
 import { copyToClipboard } from '../../../utils/clipboard';
 import DrivePreviewModal from '../drive/DrivePreviewModal';
@@ -108,6 +108,7 @@ const DriveTab: React.FC = () => {
   const [renameSaving, setRenameSaving] = useState(false);
   const cancelUploadRef = useRef(false);
   const activeUploadXhrsRef = useRef<Set<XMLHttpRequest>>(new Set());
+  const chunkUploadAbortRef = useRef<AbortController | null>(null);
 
   const allItems = [
     ...folders.map((folder) => ({ type: 'folder' as const, id: folder.id, name: folder.name })),
@@ -208,12 +209,17 @@ const DriveTab: React.FC = () => {
     setUploadStatus('Đang chuẩn bị upload...');
     setProgress(0);
     try {
-      await new Promise<void>((resolve, reject) => {
+      const totalBytes = uploadFilesInput.reduce((total, item) => total + item.file.size, 0);
+      let completedBytes = 0;
+      const smallItems = uploadFilesInput.filter((item) => item.file.size <= LARGE_UPLOAD_THRESHOLD);
+      const largeItems = uploadFilesInput.filter((item) => item.file.size > LARGE_UPLOAD_THRESHOLD);
+
+      if (smallItems.length > 0) await new Promise<void>((resolve, reject) => {
         const token = localStorage.getItem('token');
         if (!token) return reject(new Error('Phiên đăng nhập đã hết hạn'));
         const xhr = new XMLHttpRequest();
         const formData = new FormData();
-        for (const item of uploadFilesInput) {
+        for (const item of smallItems) {
           formData.append('files', item.file);
           formData.append('relativePaths', item.relativePath || item.file.webkitRelativePath || item.file.name);
         }
@@ -225,8 +231,8 @@ const DriveTab: React.FC = () => {
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
         xhr.upload.onprogress = (event) => {
           if (!event.lengthComputable) return;
-          setProgress(Math.max(1, Math.min(99, Math.floor((event.loaded / event.total) * 100))));
-          setUploadStatus(uploadFilesInput.length === 1 ? `Đang upload ${uploadFilesInput[0].file.name}` : `Đang upload ${uploadFilesInput.length} file`);
+          setProgress(Math.max(1, Math.min(98, Math.floor((event.loaded / totalBytes) * 100))));
+          setUploadStatus(smallItems.length === 1 ? `Đang upload ${smallItems[0].file.name}` : `Đang upload ${smallItems.length} file nhỏ`);
         };
         xhr.upload.onload = () => {
           setUploadPhase('finalizing');
@@ -246,8 +252,30 @@ const DriveTab: React.FC = () => {
         xhr.onabort = () => { activeUploadXhrsRef.current.delete(xhr); reject(new Error('Upload đã hủy')); };
         xhr.send(formData);
       });
+      completedBytes += smallItems.reduce((total, item) => total + item.file.size, 0);
+      setUploadPhase('uploading');
+
+      chunkUploadAbortRef.current = new AbortController();
+      for (let index = 0; index < largeItems.length; index++) {
+        const item = largeItems[index];
+        const relativePath = item.relativePath || item.file.webkitRelativePath || item.file.name;
+        setUploadStatus(`Đang upload file lớn ${item.file.name} (${index + 1}/${largeItems.length})`);
+        await uploadLargeFile('/drive/upload', item.file, {
+          folderId: currentFolderId,
+          relativePath,
+          mimeType: item.file.type,
+          note: note.trim(),
+        }, (fileProgress, stats) => {
+          const fileBytes = stats?.uploadedBytes || (item.file.size * fileProgress) / 100;
+          setProgress(Math.max(1, Math.min(99, Math.floor(((completedBytes + fileBytes) / totalBytes) * 100))));
+          setUploadPhase(stats?.phase || 'uploading');
+        }, chunkUploadAbortRef.current.signal);
+        completedBytes += item.file.size;
+        setUploadPhase('uploading');
+      }
       setProgress(100);
       setUploadPhase('uploading');
+      chunkUploadAbortRef.current = null;
       setUploadStatus('Hoàn tất, đang làm mới danh sách...');
       const folderCount = new Set(uploadFilesInput.map((item) => (item.relativePath || item.file.webkitRelativePath || '').split('/').slice(0, -1).join('/')).filter(Boolean)).size;
       showToast(folderCount ? `Đã tải ${uploadFilesInput.length} file trong ${folderCount} thư mục` : `Đã tải ${uploadFilesInput.length} file lên Drive`, 'success');
@@ -271,6 +299,7 @@ const DriveTab: React.FC = () => {
     cancelUploadRef.current = true;
     for (const xhr of activeUploadXhrsRef.current) xhr.abort();
     activeUploadXhrsRef.current.clear();
+    chunkUploadAbortRef.current?.abort();
     setUploadStatus('Đang hủy upload...');
   };
 

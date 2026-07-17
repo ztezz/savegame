@@ -36,6 +36,7 @@ import { sqliteAdminRouter } from "./routes/sqliteAdmin.js";
 
 // Utils imports
 import { auditApiRequestMiddleware } from "./utils/audit.js";
+import { startUploadSessionCleanupInterval } from "./utils/uploads.js";
 
 const isProduction = NODE_ENV === "production";
 
@@ -45,6 +46,7 @@ async function startServer() {
   // Initialize database schema
   await initializeSchema();
   startDatabaseKeepAlive();
+  startUploadSessionCleanupInterval();
 
   // Ensure upload directory exists
   if (!fs.existsSync(UPLOADS_DIR_PATH)) {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Upload, Download, Trash2, KeyRound, Plus, X, FileCheck, Pencil, CheckCircle, Gauge, Timer } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import api, { API_BASE_URL, uploadWithProgress } from '../../../utils/api';
+import api, { API_BASE_URL, LARGE_UPLOAD_THRESHOLD, uploadLargeFile, uploadWithProgress } from '../../../utils/api';
 import EditActivationModal from '../Modals/EditActivationModal';
 import DeleteConfirmModal from '../Modals/DeleteConfirmModal';
 import { useToast } from '../../../context/ToastContext';
@@ -59,10 +59,15 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
     formData.append('note', note.trim());
 
     try {
-      await uploadWithProgress('/activation/upload', formData, (progress, stats) => {
+      const onProgress = (progress: number, stats?: UploadStats) => {
         setUploadProgress(progress);
         if (stats) setUploadStats(stats);
-      });
+      };
+      if (selectedFile.size > LARGE_UPLOAD_THRESHOLD) {
+        await uploadLargeFile('/activation/upload', selectedFile, { gameName: gameName.trim(), note: note.trim() }, onProgress);
+      } else {
+        await uploadWithProgress('/activation/upload', formData, onProgress);
+      }
       
       // Set to 100% and show success
       setUploadProgress(100);
@@ -279,7 +284,7 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
                       <FileCheck className="w-6 h-6 text-amber-500 mx-auto mb-1" />
                       <p className="text-xs font-bold text-slate-700">{selectedFile.name}</p>
                       <p className="text-xs text-slate-400">{formatSize(selectedFile.size)}</p>
-                      {selectedFile.size > 100 * 1024 * 1024 && <p className="mt-1 text-[10px] font-bold text-amber-600">File trên 100 MB cần API DNS-only nếu không dùng upload chia nhỏ.</p>}
+                      {selectedFile.size > LARGE_UPLOAD_THRESHOLD && <p className="mt-1 text-[10px] font-bold text-amber-600">File lớn sẽ được tự động chia nhỏ để upload ổn định.</p>}
                     </div>
                   ) : (
                     <div className="text-center">

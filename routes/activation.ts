@@ -1,10 +1,14 @@
 import { Router } from "express";
+import express from "express";
 import * as path from "path";
 import * as fs from "fs";
+import crypto from "node:crypto";
 import { pool, isUsingDatabase } from "../config/database.js";
 import { upload, UPLOADS_DIR_PATH } from "../config/multer.js";
 import { authenticateToken, isAdmin } from "../middleware/auth.js";
 import { streamFileDownload } from "../utils/download.js";
+import { assertUploadComplete, getTempUploadDir, removeUploadSession, uploadSessions, writeUploadChunk } from "../utils/uploads.js";
+import { UploadSession } from "../database/types.js";
 
 export const activationRouter = Router();
 
@@ -26,6 +30,68 @@ async function insertActivationFileWithRetry(values: any[]) {
   }
   throw lastErr;
 }
+
+activationRouter.post("/api/activation/upload/init", authenticateToken, isAdmin, express.json({ limit: "1mb" }), async (req: any, res) => {
+  const fileName = String(req.body?.fileName || "").trim();
+  const fileSize = Number(req.body?.fileSize || 0);
+  if (!fileName || !Number.isFinite(fileSize) || fileSize <= 0) return res.status(400).json({ error: "Invalid file" });
+
+  const sessionId = `activation_${req.user.id}_${Date.now()}_${crypto.randomBytes(6).toString("hex")}`;
+  const chunkSize = 16 * 1024 * 1024;
+  const tempFilePath = path.join(getTempUploadDir(), `${sessionId}.upload`);
+  await fs.promises.writeFile(tempFilePath, Buffer.alloc(0));
+  const session: UploadSession = {
+    sessionId,
+    userId: req.user.id,
+    fileName,
+    totalSize: fileSize,
+    chunkSize,
+    receivedChunks: new Set(),
+    tempFilePath,
+    createdAt: Date.now(),
+    gameName: String(req.body?.gameName || "").trim(),
+    note: String(req.body?.note || "").trim(),
+  };
+  uploadSessions.set(sessionId, session);
+  res.json({ sessionId, chunkSize });
+});
+
+activationRouter.post("/api/activation/upload/chunk", authenticateToken, isAdmin, express.raw({ type: "application/octet-stream", limit: "20mb" }), async (req: any, res) => {
+  const session = uploadSessions.get(String(req.query.sessionId || ""));
+  if (!session || session.userId !== req.user.id) return res.status(404).json({ error: "Upload session not found" });
+  try {
+    await writeUploadChunk(session, Number(req.query.chunkIndex), Number(req.query.totalChunks), req.body as Buffer);
+    res.json({ success: true, received: session.receivedChunks.size });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message || "Failed to save chunk" });
+  }
+});
+
+activationRouter.post("/api/activation/upload/finalize", authenticateToken, isAdmin, express.json({ limit: "1mb" }), async (req: any, res) => {
+  const sessionId = String(req.body?.sessionId || "");
+  const session = uploadSessions.get(sessionId);
+  if (!session || session.userId !== req.user.id) return res.status(404).json({ error: "Upload session not found" });
+  const storedName = `activation_${Date.now()}_${crypto.randomBytes(6).toString("hex")}.bin`;
+  const finalPath = path.join(UPLOADS_DIR_PATH, storedName);
+  try {
+    assertUploadComplete(session);
+    await fs.promises.rename(session.tempFilePath, finalPath);
+    const { rows } = await insertActivationFileWithRetry([req.user.id, session.gameName, session.fileName, storedName, session.totalSize, session.note || ""]);
+    uploadSessions.delete(sessionId);
+    res.status(201).json(rows[0]);
+  } catch (err: any) {
+    if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
+    removeUploadSession(sessionId);
+    res.status(err.status || 500).json({ error: err.message || "Failed to finalize upload" });
+  }
+});
+
+activationRouter.delete("/api/activation/upload/:sessionId", authenticateToken, isAdmin, (req: any, res) => {
+  const session = uploadSessions.get(req.params.sessionId);
+  if (!session || session.userId !== req.user.id) return res.status(404).json({ error: "Upload session not found" });
+  removeUploadSession(req.params.sessionId);
+  res.json({ success: true });
+});
 
 // Single file upload
 activationRouter.post("/api/activation/upload", authenticateToken, isAdmin, upload.single("activationfile"), async (req: any, res) => {

@@ -9,6 +9,8 @@ import { authenticateToken } from "../middleware/auth.js";
 import { DRIVE_QUOTA_BYTES, MAX_FILE_SIZE } from "../config/environment.js";
 import { UPLOADS_DIR_PATH } from "../config/multer.js";
 import { streamFileDownload } from "../utils/download.js";
+import { assertUploadComplete, getTempUploadDir, removeUploadSession, uploadSessions, writeUploadChunk } from "../utils/uploads.js";
+import { UploadSession } from "../database/types.js";
 
 export const driveRouter = Router();
 
@@ -246,6 +248,90 @@ driveRouter.get("/api/drive/usage", authenticateToken, async (req: any, res) => 
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to read drive usage" });
   }
+});
+
+driveRouter.post("/api/drive/upload/init", authenticateToken, express.json({ limit: "1mb" }), async (req: any, res) => {
+  const fileName = cleanName(req.body?.fileName, 255);
+  const fileSize = Number(req.body?.fileSize || 0);
+  const folderId = req.body?.folderId ? parseId(req.body.folderId) : null;
+  if (!fileName || !Number.isFinite(fileSize) || fileSize <= 0) return res.status(400).json({ error: "Invalid file" });
+  if (fileSize > MAX_FILE_SIZE) return res.status(413).json({ error: `File vượt quá giới hạn ${formatSize(MAX_FILE_SIZE)} mỗi file` });
+  if (req.body?.folderId && !folderId) return res.status(400).json({ error: "Invalid folder id" });
+
+  try {
+    await assertFolder(folderId, req.user.id);
+    await assertDriveQuota(req.user.id, fileSize);
+    const sessionId = `drive_${req.user.id}_${Date.now()}_${crypto.randomBytes(6).toString("hex")}`;
+    const chunkSize = 16 * 1024 * 1024;
+    const tempFilePath = path.join(getTempUploadDir(), `${sessionId}.upload`);
+    await fs.promises.writeFile(tempFilePath, Buffer.alloc(0));
+    const session: UploadSession = {
+      sessionId,
+      userId: req.user.id,
+      fileName,
+      totalSize: fileSize,
+      chunkSize,
+      receivedChunks: new Set(),
+      tempFilePath,
+      createdAt: Date.now(),
+      note: String(req.body?.note || "").trim(),
+      folderId,
+      relativePath: String(req.body?.relativePath || fileName).replace(/\\/g, "/"),
+      mimeType: String(req.body?.mimeType || ""),
+    };
+    uploadSessions.set(sessionId, session);
+    res.json({ sessionId, chunkSize });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message || "Failed to initialize upload" });
+  }
+});
+
+driveRouter.post("/api/drive/upload/chunk", authenticateToken, express.raw({ type: "application/octet-stream", limit: "20mb" }), async (req: any, res) => {
+  const session = uploadSessions.get(String(req.query.sessionId || ""));
+  if (!session || session.userId !== req.user.id) return res.status(404).json({ error: "Upload session not found" });
+  try {
+    await writeUploadChunk(session, Number(req.query.chunkIndex), Number(req.query.totalChunks), req.body as Buffer);
+    res.json({ success: true, received: session.receivedChunks.size });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message || "Failed to save chunk" });
+  }
+});
+
+driveRouter.post("/api/drive/upload/finalize", authenticateToken, express.json({ limit: "1mb" }), async (req: any, res) => {
+  const sessionId = String(req.body?.sessionId || "");
+  const session = uploadSessions.get(sessionId);
+  if (!session || session.userId !== req.user.id) return res.status(404).json({ error: "Upload session not found" });
+  const storedName = `drive-${Date.now()}-${crypto.randomBytes(6).toString("hex")}${path.extname(session.fileName)}`;
+  const finalPath = path.join(DRIVE_DIR, storedName);
+  try {
+    assertUploadComplete(session);
+    await assertFolder(session.folderId || null, req.user.id);
+    await assertDriveQuota(req.user.id, session.totalSize);
+    const relativePath = String(session.relativePath || session.fileName).replace(/\\/g, "/");
+    const parts = relativePath.split("/").filter(Boolean);
+    const folderPath = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
+    const targetFolderId = folderPath ? await getOrCreateFolderPath(req.user.id, session.folderId || null, folderPath) : session.folderId || null;
+    await fs.promises.rename(session.tempFilePath, finalPath);
+    const { rows } = await pool.query(
+      `INSERT INTO drive_files (user_id, folder_id, original_name, stored_name, mime_type, file_size, note)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, original_name, mime_type, file_size, note, created_at, deleted_at`,
+      [req.user.id, targetFolderId, parts.at(-1) || session.fileName, storedName, session.mimeType || null, session.totalSize, session.note || null]
+    );
+    uploadSessions.delete(sessionId);
+    res.status(201).json(rows[0]);
+  } catch (err: any) {
+    if (fs.existsSync(finalPath)) fs.unlinkSync(finalPath);
+    removeUploadSession(sessionId);
+    res.status(err.status || 500).json({ error: err.message || "Failed to finalize upload" });
+  }
+});
+
+driveRouter.delete("/api/drive/upload/:sessionId", authenticateToken, (req: any, res) => {
+  const session = uploadSessions.get(req.params.sessionId);
+  if (!session || session.userId !== req.user.id) return res.status(404).json({ error: "Upload session not found" });
+  removeUploadSession(req.params.sessionId);
+  res.json({ success: true });
 });
 
 driveRouter.get("/api/drive/folders/tree", authenticateToken, async (req: any, res) => {

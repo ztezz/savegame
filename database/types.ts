@@ -32,3 +32,19 @@ export interface Device {
   deviceName: string; 
   lastSync: string; 
 }
+
+export interface UploadSession {
+  sessionId: string;
+  userId: number;
+  fileName: string;
+  totalSize: number;
+  chunkSize: number;
+  receivedChunks: Set<number>;
+  tempFilePath: string;
+  createdAt: number;
+  gameName?: string;
+  note?: string;
+  folderId?: number | null;
+  relativePath?: string;
+  mimeType?: string;
+}

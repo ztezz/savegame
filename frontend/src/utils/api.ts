@@ -206,6 +206,105 @@ export const uploadWithProgress = async (
   });
 };
 
+export const LARGE_UPLOAD_THRESHOLD = 80 * 1024 * 1024;
+
+export const uploadLargeFile = async (
+  basePath: '/activation/upload' | '/drive/upload',
+  file: File,
+  metadata: Record<string, unknown>,
+  onProgress: (progress: number, stats?: { uploadedBytes: number; totalBytes: number; bytesPerSecond: number; etaSeconds: number | null; phase: 'uploading' | 'finalizing' }) => void,
+  signal?: AbortSignal,
+): Promise<any> => {
+  const token = localStorage.getItem('token');
+  if (!token) throw new Error('Phiên đăng nhập đã hết hạn');
+
+  const headers = { Authorization: `Bearer ${token}` };
+  const initResponse = await axios.post(`${UPLOAD_BASE_URL}${basePath}/init`, {
+    fileName: file.name,
+    fileSize: file.size,
+    ...metadata,
+  }, { headers, timeout: 30000 });
+  const sessionId = String(initResponse.data.sessionId);
+  const chunkSize = Number(initResponse.data.chunkSize);
+  const totalChunks = Math.ceil(file.size / chunkSize);
+  const loadedByChunk = new Array<number>(totalChunks).fill(0);
+  const startedAt = performance.now();
+  let lastBytes = 0;
+  let lastTime = startedAt;
+  let speed = 0;
+
+  const report = (phase: 'uploading' | 'finalizing') => {
+    const uploadedBytes = loadedByChunk.reduce((total, loaded) => total + loaded, 0);
+    const now = performance.now();
+    const elapsed = (now - lastTime) / 1000;
+    if (elapsed >= 0.4) {
+      const currentSpeed = Math.max(0, uploadedBytes - lastBytes) / elapsed;
+      speed = speed ? speed * 0.7 + currentSpeed * 0.3 : currentSpeed;
+      lastBytes = uploadedBytes;
+      lastTime = now;
+    }
+    onProgress(phase === 'finalizing' ? 99 : Math.max(1, Math.min(98, Math.floor((uploadedBytes / file.size) * 100))), {
+      uploadedBytes,
+      totalBytes: file.size,
+      bytesPerSecond: phase === 'uploading' ? speed : 0,
+      etaSeconds: phase === 'uploading' && speed > 0 ? Math.ceil((file.size - uploadedBytes) / speed) : null,
+      phase,
+    });
+  };
+
+  const uploadChunk = async (chunkIndex: number) => {
+    const start = chunkIndex * chunkSize;
+    const end = Math.min(start + chunkSize, file.size);
+    const chunk = file.slice(start, end);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          const abort = () => xhr.abort();
+          signal?.addEventListener('abort', abort, { once: true });
+          xhr.open('POST', `${UPLOAD_BASE_URL}${basePath}/chunk?sessionId=${encodeURIComponent(sessionId)}&chunkIndex=${chunkIndex}&totalChunks=${totalChunks}`);
+          xhr.timeout = 5 * 60 * 1000;
+          xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+          xhr.setRequestHeader('Content-Type', 'application/octet-stream');
+          xhr.upload.onprogress = (event) => {
+            loadedByChunk[chunkIndex] = Math.min(event.loaded, chunk.size);
+            report('uploading');
+          };
+          const finish = (callback: () => void) => { signal?.removeEventListener('abort', abort); callback(); };
+          xhr.onload = () => finish(() => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`HTTP ${xhr.status}`)));
+          xhr.onerror = () => finish(() => reject(new Error('Lỗi mạng')));
+          xhr.ontimeout = () => finish(() => reject(new Error('Quá thời gian')));
+          xhr.onabort = () => finish(() => reject(new Error('Upload đã hủy')));
+          xhr.send(chunk);
+        });
+        loadedByChunk[chunkIndex] = chunk.size;
+        report('uploading');
+        return;
+      } catch (error) {
+        loadedByChunk[chunkIndex] = 0;
+        if (signal?.aborted || attempt === 3) throw error;
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1200));
+      }
+    }
+  };
+
+  try {
+    let nextChunk = 0;
+    const worker = async () => {
+      while (nextChunk < totalChunks && !signal?.aborted) await uploadChunk(nextChunk++);
+    };
+    await Promise.all(Array.from({ length: Math.min(3, totalChunks) }, () => worker()));
+    if (signal?.aborted) throw new Error('Upload đã hủy');
+    report('finalizing');
+    const response = await axios.post(`${UPLOAD_BASE_URL}${basePath}/finalize`, { sessionId }, { headers, timeout: 120000 });
+    onProgress(100, { uploadedBytes: file.size, totalBytes: file.size, bytesPerSecond: 0, etaSeconds: 0, phase: 'finalizing' });
+    return response.data;
+  } catch (error) {
+    void axios.delete(`${UPLOAD_BASE_URL}${basePath}/${encodeURIComponent(sessionId)}`, { headers }).catch(() => undefined);
+    throw error;
+  }
+};
+
 export const downloadWithProgress = async (
   url: string,
   fileName: string,
