@@ -64,10 +64,18 @@ activationRouter.post("/api/activation/upload/chunk", authenticateToken, isAdmin
   }
 
   try {
-    const chunkPath = path.join(TEMP_UPLOADS_DIR, `${sessionId}_chunk_${chunkIndex}`);
+    const parsedChunkIndex = Number(chunkIndex);
+    const parsedTotalChunks = Number(totalChunks);
+    if (!Number.isInteger(parsedChunkIndex) || parsedChunkIndex < 0 || !Number.isInteger(parsedTotalChunks) || parsedTotalChunks < 1) {
+      return res.status(400).json({ error: "Invalid chunk metadata" });
+    }
+
+    const chunkPath = path.join(TEMP_UPLOADS_DIR, `${sessionId}_chunk_${parsedChunkIndex}`);
     fs.writeFileSync(chunkPath, req.body as Buffer);
-    
-    session.chunks.push({ index: parseInt(chunkIndex as string), path: chunkPath });
+
+    const existingChunk = session.chunks.find((chunk) => chunk.index === parsedChunkIndex);
+    if (existingChunk) existingChunk.path = chunkPath;
+    else session.chunks.push({ index: parsedChunkIndex, path: chunkPath });
     console.log(`📥 Chunk ${chunkIndex}/${totalChunks} received (${(req.body.length / (1024 * 1024)).toFixed(1)}MB)`);
     
     res.json({ 
@@ -93,6 +101,15 @@ activationRouter.post("/api/activation/upload/finalize", authenticateToken, isAd
   try {
     // Sort chunks by index and merge
     session.chunks.sort((a, b) => a.index - b.index);
+    const chunkSizes = session.chunks.map((chunk) => fs.statSync(chunk.path).size);
+    const receivedSize = chunkSizes.reduce((total, size) => total + size, 0);
+    const hasContiguousChunks = session.chunks.every((chunk, index) => chunk.index === index);
+    if (!hasContiguousChunks || receivedSize !== Number(session.totalSize)) {
+      return res.status(400).json({
+        error: `Upload incomplete: received ${receivedSize} of ${session.totalSize} bytes across ${session.chunks.length} chunks`,
+      });
+    }
+
     const finalPath = path.join(UPLOADS_DIR_PATH, `activation_${Date.now()}_${Math.random().toString(36).substr(2, 9)}.bin`);
     
     const writeStream = fs.createWriteStream(finalPath);
