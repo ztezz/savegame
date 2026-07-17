@@ -1,12 +1,16 @@
 ﻿import { Router } from "express";
 import * as path from "path";
 import * as fs from "fs";
+import crypto from "node:crypto";
+import express from "express";
 import { pool, isUsingDatabase } from "../config/database.js";
 import { upload, UPLOADS_DIR_PATH } from "../config/multer.js";
-import { DRIVE_QUOTA_BYTES } from "../config/environment.js";
+import { DRIVE_QUOTA_BYTES, MAX_FILE_SIZE } from "../config/environment.js";
 import { authenticateToken, isAdmin } from "../middleware/auth.js";
 import { writeAudit } from "../utils/audit.js";
 import { compactJsonPreview, extractAiText, parseSseAiText } from "../utils/aiResponse.js";
+import { assertUploadComplete, getTempUploadDir, removeUploadSession, uploadSessions, writeUploadChunk } from "../utils/uploads.js";
+import { UploadSession } from "../database/types.js";
 
 export const settingsRouter = Router();
 
@@ -272,6 +276,112 @@ settingsRouter.post('/api/system/agent/windows', authenticateToken, isAdmin, upl
     if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
     res.status(500).json({ error: err.message || 'Failed to update CloudSave Agent' });
   }
+});
+
+settingsRouter.post('/api/system/agent/windows/upload/init', authenticateToken, isAdmin, express.json({ limit: '1mb' }), async (req: any, res) => {
+  const fileName = String(req.body?.fileName || '').trim();
+  const fileSize = Number(req.body?.fileSize || 0);
+  const version = String(req.body?.version || '').trim();
+  if (!fileName || path.extname(fileName).toLowerCase() !== '.exe') {
+    return res.status(400).json({ error: 'Chỉ hỗ trợ file .exe cho CloudSave Agent' });
+  }
+  if (!Number.isFinite(fileSize) || fileSize <= 0) return res.status(400).json({ error: 'File Agent không hợp lệ' });
+  if (fileSize > MAX_FILE_SIZE) return res.status(413).json({ error: 'File Agent vượt quá giới hạn upload của server' });
+
+  try {
+    const sessionId = `agent_${req.user.id}_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
+    const chunkSize = 16 * 1024 * 1024;
+    const tempFilePath = path.join(getTempUploadDir(), `${sessionId}.upload`);
+    await fs.promises.writeFile(tempFilePath, Buffer.alloc(0));
+    const session: UploadSession = {
+      sessionId,
+      userId: req.user.id,
+      fileName,
+      totalSize: fileSize,
+      chunkSize,
+      receivedChunks: new Set(),
+      tempFilePath,
+      createdAt: Date.now(),
+      version,
+    };
+    uploadSessions.set(sessionId, session);
+    return res.json({ sessionId, chunkSize });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Không thể khởi tạo upload Agent' });
+  }
+});
+
+settingsRouter.post('/api/system/agent/windows/upload/chunk', authenticateToken, isAdmin, express.raw({ type: 'application/octet-stream', limit: '20mb' }), async (req: any, res) => {
+  const session = uploadSessions.get(String(req.query.sessionId || ''));
+  if (!session || session.userId !== req.user.id || !session.sessionId.startsWith('agent_')) {
+    return res.status(404).json({ error: 'Phiên upload Agent không tồn tại hoặc đã hết hạn' });
+  }
+  try {
+    await writeUploadChunk(session, Number(req.query.chunkIndex), Number(req.query.totalChunks), req.body as Buffer);
+    return res.json({ success: true, received: session.receivedChunks.size });
+  } catch (err: any) {
+    return res.status(err.status || 500).json({ error: err.message || 'Không thể lưu phần dữ liệu Agent' });
+  }
+});
+
+settingsRouter.post('/api/system/agent/windows/upload/finalize', authenticateToken, isAdmin, express.json({ limit: '1mb' }), async (req: any, res) => {
+  const sessionId = String(req.body?.sessionId || '');
+  const session = uploadSessions.get(sessionId);
+  if (!session || session.userId !== req.user.id || !sessionId.startsWith('agent_')) {
+    return res.status(404).json({ error: 'Phiên upload Agent không tồn tại hoặc đã hết hạn' });
+  }
+
+  const nextAgentPath = path.join(WINDOWS_AGENT_DIR, `${WINDOWS_AGENT_FILENAME}.next`);
+  const backupAgentPath = path.join(WINDOWS_AGENT_DIR, `${WINDOWS_AGENT_FILENAME}.bak`);
+  try {
+    assertUploadComplete(session);
+    await fs.promises.mkdir(WINDOWS_AGENT_DIR, { recursive: true });
+    if (fs.existsSync(nextAgentPath)) await fs.promises.unlink(nextAgentPath);
+    await fs.promises.rename(session.tempFilePath, nextAgentPath);
+    if (fs.existsSync(backupAgentPath)) await fs.promises.unlink(backupAgentPath);
+    if (fs.existsSync(WINDOWS_AGENT_PATH)) await fs.promises.rename(WINDOWS_AGENT_PATH, backupAgentPath);
+    try {
+      await fs.promises.rename(nextAgentPath, WINDOWS_AGENT_PATH);
+      if (fs.existsSync(backupAgentPath)) await fs.promises.unlink(backupAgentPath);
+    } catch (replaceErr) {
+      if (fs.existsSync(backupAgentPath) && !fs.existsSync(WINDOWS_AGENT_PATH)) await fs.promises.rename(backupAgentPath, WINDOWS_AGENT_PATH);
+      throw replaceErr;
+    }
+
+    const stat = await fs.promises.stat(WINDOWS_AGENT_PATH);
+    const metadata = {
+      filename: WINDOWS_AGENT_FILENAME,
+      originalName: session.fileName,
+      version: session.version || '',
+      size: stat.size,
+      updatedAt: new Date().toISOString(),
+      available: true,
+    };
+    if (isUsingDatabase()) {
+      await pool.query(
+        `INSERT INTO system_settings (key, value_json, updated_by, updated_at)
+         VALUES ($1, $2::jsonb, $3, NOW())
+         ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json, updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+        [WINDOWS_AGENT_SETTINGS_KEY, JSON.stringify(metadata), req.user?.id || null]
+      );
+    }
+    await writeAudit(req.user?.id || null, 'UPDATE', 'windows_agent', { ...metadata, chunked: true });
+    uploadSessions.delete(sessionId);
+    return res.json({ success: true, windowsAgent: metadata });
+  } catch (err: any) {
+    if (fs.existsSync(nextAgentPath)) await fs.promises.unlink(nextAgentPath).catch(() => undefined);
+    removeUploadSession(sessionId);
+    return res.status(err.status || 500).json({ error: err.message || 'Không thể hoàn tất upload CloudSave Agent' });
+  }
+});
+
+settingsRouter.delete('/api/system/agent/windows/upload/:sessionId', authenticateToken, isAdmin, (req: any, res) => {
+  const session = uploadSessions.get(req.params.sessionId);
+  if (!session || session.userId !== req.user.id || !req.params.sessionId.startsWith('agent_')) {
+    return res.status(404).json({ error: 'Phiên upload Agent không tồn tại' });
+  }
+  removeUploadSession(req.params.sessionId);
+  return res.json({ success: true });
 });
 
 settingsRouter.get('/api/system/storage', authenticateToken, isAdmin, async (_req: any, res) => {

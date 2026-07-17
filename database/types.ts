@@ -47,4 +47,5 @@ export interface UploadSession {
   folderId?: number | null;
   relativePath?: string;
   mimeType?: string;
+  version?: string;
 }

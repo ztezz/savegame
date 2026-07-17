@@ -209,7 +209,7 @@ export const uploadWithProgress = async (
 export const LARGE_UPLOAD_THRESHOLD = 80 * 1024 * 1024;
 
 export const uploadLargeFile = async (
-  basePath: '/activation/upload' | '/drive/upload',
+  basePath: '/activation/upload' | '/drive/upload' | '/system/agent/windows/upload',
   file: File,
   metadata: Record<string, unknown>,
   onProgress: (progress: number, stats?: { uploadedBytes: number; totalBytes: number; bytesPerSecond: number; etaSeconds: number | null; phase: 'uploading' | 'finalizing' }) => void,

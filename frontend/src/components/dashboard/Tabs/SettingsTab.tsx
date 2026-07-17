@@ -1,7 +1,7 @@
 ﻿import React, { useEffect, useState } from 'react';
 import { Shield, RefreshCw, Monitor, Server, UploadCloud, Download, CheckCircle2, AlertCircle, Save, FolderOpen, HardDrive, MessageCircle, SlidersHorizontal, Bot } from 'lucide-react';
 import api from '../../../utils/api';
-import { API_ORIGIN, uploadWithProgress } from '../../../utils/api';
+import { API_ORIGIN, uploadLargeFile } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
 
 interface SettingsTabProps {
@@ -122,20 +122,21 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       return;
     }
 
-    const formData = new FormData();
-    formData.append('agentFile', agentFile);
-    formData.append('version', agentVersion.trim());
-
     setAgentUploading(true);
     setAgentUploadProgress(0);
     try {
-      const result = await uploadWithProgress('/system/agent/windows', formData, setAgentUploadProgress);
+      const result = await uploadLargeFile(
+        '/system/agent/windows/upload',
+        agentFile,
+        { version: agentVersion.trim() },
+        setAgentUploadProgress,
+      );
       setSettings((s: any) => ({ ...s, windowsAgent: result.windowsAgent || s.windowsAgent }));
       setAgentFile(null);
       setAgentUploadProgress(100);
       showToast('Đã cập nhật CloudSave Agent', 'success');
     } catch (err: any) {
-      showToast(err.message || 'Cập nhật CloudSave Agent thất bại', 'error');
+      showToast(err.response?.data?.error || err.message || 'Cập nhật CloudSave Agent thất bại', 'error', 5000);
     } finally {
       setAgentUploading(false);
     }
