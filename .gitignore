@@ -14,5 +14,4 @@ data/
 !.dev.vars.example
 .env*
 !.env.example
-!frontend/.env.production
 .env

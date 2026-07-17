@@ -6,12 +6,11 @@ import { defineConfig, loadEnv } from 'vite';
 import { cloudflare } from "@cloudflare/vite-plugin";
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, '.', '');
+  const envDir = path.resolve(__dirname, '..');
+  const env = loadEnv(mode, envDir, '');
   return {
+    envDir,
     plugins: [react(), tailwindcss(), cloudflare()],
-    define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
-    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
