@@ -43,12 +43,12 @@ const UploadModal: React.FC<UploadModalProps> = ({
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-white/20"
+            className="w-full max-w-md overflow-hidden rounded-3xl border border-white/20 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
           >
             <div className="p-8">
               <div className="flex items-center justify-between mb-8">
-                <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">Tải lên Trạng thái</h3>
-                <button onClick={onClose} className="text-slate-400 hover:text-slate-900 font-bold text-xs uppercase">Đóng</button>
+                <h3 className="text-xl font-black uppercase tracking-tight text-slate-900 dark:text-white">Tải lên bản lưu</h3>
+                <button onClick={onClose} className="text-xs font-bold uppercase text-slate-400 hover:text-slate-900 dark:hover:text-white">Đóng</button>
               </div>
               
               <form onSubmit={(e) => {
@@ -70,7 +70,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
                     value={newGameName}
                     onChange={(e) => setNewGameName(e.target.value)}
                     placeholder="vd: ELDEN_RING_DLC"
-                    className="w-full px-4 py-4 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all font-bold text-sm tracking-tight"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-4 text-sm font-bold tracking-tight text-slate-800 outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   />
                 </div>
                 <div className="space-y-2">
@@ -78,7 +78,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
                   <select 
                     value={newGameCategory}
                     onChange={(e) => setNewGameCategory(e.target.value)}
-                    className="w-full px-4 py-4 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all font-bold text-sm tracking-tight"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-4 text-sm font-bold tracking-tight text-slate-800 outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   >
                     {categories.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
@@ -90,7 +90,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
                     value={newGameFilePath}
                     onChange={(e) => setNewGameFilePath(e.target.value)}
                     placeholder="vd: C:\\Users\\TaiKhoan\\Documents\\SaveGames\\TenGame"
-                    className="w-full px-4 py-4 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all font-bold text-sm tracking-tight"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-4 text-sm font-bold tracking-tight text-slate-800 outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   />
                   <p className="px-1 text-[10px] text-slate-400">Bắt buộc nếu muốn khôi phục từ xa. Nhập thư mục chứa save, không nhập tên tệp.</p>
                 </div>
@@ -99,14 +99,14 @@ const UploadModal: React.FC<UploadModalProps> = ({
                      <button 
                        type="button"
                        onClick={() => { setIsFolderUpload(false); setSelectedFile(null); setSelectedFiles([]); }}
-                       className={`flex-1 py-2 text-[10px] font-black uppercase rounded-lg border transition-all ${!isFolderUpload ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}
+                       className={`flex-1 rounded-lg border py-2 text-[10px] font-black uppercase transition-all ${!isFolderUpload ? 'border-indigo-600 bg-indigo-600 text-white shadow-md' : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}
                      >
                        Tải tệp tin
                      </button>
                      <button 
                        type="button"
                        onClick={() => { setIsFolderUpload(true); setSelectedFile(null); setSelectedFiles([]); }}
-                       className={`flex-1 py-2 text-[10px] font-black uppercase rounded-lg border transition-all ${isFolderUpload ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-white text-slate-400 border-slate-100 hover:border-slate-200'}`}
+                       className={`flex-1 rounded-lg border py-2 text-[10px] font-black uppercase transition-all ${isFolderUpload ? 'border-indigo-600 bg-indigo-600 text-white shadow-md' : 'border-slate-100 bg-white text-slate-400 hover:border-slate-200 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}
                      >
                        Tải thư mục
                      </button>
@@ -131,7 +131,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
                         }}
                         className="absolute inset-0 opacity-0 cursor-pointer z-10"
                       />
-                      <div className="border-2 border-dashed border-slate-200 rounded-2xl p-8 text-center group-hover:border-indigo-400 group-hover:bg-indigo-50/30 transition-all">
+                      <div className="rounded-2xl border-2 border-dashed border-slate-200 p-8 text-center transition-all group-hover:border-indigo-400 group-hover:bg-indigo-50/30 dark:border-slate-700 dark:group-hover:bg-indigo-950/30">
                         {isFolderUpload ? <FolderClosed className="w-8 h-8 text-slate-300 mx-auto mb-3 group-hover:text-indigo-500 transition-colors" /> : <Upload className="w-8 h-8 text-slate-300 mx-auto mb-3 group-hover:text-indigo-500 transition-colors" />}
                         <p className="text-xs font-bold text-slate-500 uppercase tracking-tighter">
                           {isFolderUpload 
@@ -146,9 +146,9 @@ const UploadModal: React.FC<UploadModalProps> = ({
 
                 {/* Progress Bar */}
                 {uploadProgress !== null && (
-                  <div className="space-y-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                  <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs font-bold text-slate-700 uppercase tracking-widest">
+                      <p className="text-xs font-bold uppercase tracking-widest text-slate-700 dark:text-slate-200">
                         {uploadProgress === 100 ? '✓ Tải lên hoàn tất' : `Đang tải lên: ${uploadProgress}%`}
                       </p>
                       <span className="text-xs font-mono font-bold text-indigo-600">{uploadProgress}%</span>
@@ -204,14 +204,14 @@ const UploadModal: React.FC<UploadModalProps> = ({
                   <button 
                     type="button"
                     onClick={onClose}
-                    className="flex-1 px-4 py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xs transition-all uppercase tracking-widest"
+                    className="flex-1 rounded-xl bg-slate-100 px-4 py-4 text-xs font-black uppercase tracking-widest text-slate-700 transition-all hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                   >
                     Huỷ bỏ
                   </button>
                   <button 
                     type="submit"
                     disabled={uploadProgress !== null}
-                    className="flex-1 px-4 py-4 bg-slate-900 hover:bg-black text-white rounded-xl font-black text-xs transition-all shadow-xl shadow-slate-200 disabled:opacity-50 uppercase tracking-widest"
+                    className="flex-1 rounded-xl bg-slate-900 px-4 py-4 text-xs font-black uppercase tracking-widest text-white shadow-xl shadow-slate-200 transition-all hover:bg-black disabled:opacity-50 dark:bg-indigo-600 dark:shadow-none dark:hover:bg-indigo-700"
                   >
                     Khởi tạo Tải lên
                   </button>

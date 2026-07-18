@@ -42,15 +42,15 @@ const HistoryModal: React.FC<HistoryModalProps> = ({
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            className="bg-white rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl border border-white/20"
+            className="w-full max-w-2xl overflow-hidden rounded-3xl border border-white/20 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
           >
             <div className="p-8">
               <div className="flex items-center justify-between mb-8">
                 <div>
-                  <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">LỊCH SỬ PHIÊN BẢN</h3>
+                  <h3 className="text-xl font-black uppercase tracking-tight text-slate-900 dark:text-white">LỊCH SỬ PHIÊN BẢN</h3>
                   <p className="text-xs text-slate-400 font-bold mt-1 uppercase tracking-widest">{selectedGame?.gameName}</p>
                 </div>
-                <button onClick={onClose} className="text-slate-400 hover:text-slate-900 font-bold text-xs uppercase">Đóng</button>
+                <button onClick={onClose} className="text-xs font-bold uppercase text-slate-400 hover:text-slate-900 dark:hover:text-white">Đóng</button>
               </div>
 
               <div className="max-h-[60vh] overflow-y-auto">
@@ -60,7 +60,7 @@ const HistoryModal: React.FC<HistoryModalProps> = ({
                   <div className="p-12 text-center text-slate-400 italic">Không có dữ liệu lịch sử</div>
                 ) : (
                   <table className="w-full text-left">
-                    <thead className="bg-slate-50 text-[10px] uppercase text-slate-400 font-black tracking-widest">
+                    <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:bg-slate-800">
                       <tr>
                         <th className="px-6 py-3">Phiên bản</th>
                         <th className="px-6 py-3">Thời gian</th>
@@ -68,16 +68,16 @@ const HistoryModal: React.FC<HistoryModalProps> = ({
                         <th className="px-6 py-3 text-right">Hành động</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100">
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                       {history.map((v) => (
-                        <tr key={v.id} className="hover:bg-slate-50 transition-colors">
+                        <tr key={v.id} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/70">
                           <td className="px-6 py-4">
                             <span className="font-mono text-sm font-bold text-indigo-600">v{v.version}.0</span>
                           </td>
                           <td className="px-6 py-4 text-xs text-slate-500">
                             {new Date(v.createdAt).toLocaleString('vi-VN')}
                           </td>
-                          <td className="px-6 py-4 font-mono text-xs text-slate-600">
+                          <td className="px-6 py-4 font-mono text-xs text-slate-600 dark:text-slate-300">
                             {formatSize(v.fileSize)}
                           </td>
                           <td className="px-6 py-4 text-right">

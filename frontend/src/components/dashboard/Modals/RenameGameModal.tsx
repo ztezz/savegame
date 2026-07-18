@@ -48,12 +48,12 @@ const RenameGameModal: React.FC<RenameGameModalProps> = ({
             initial={{ scale: 0.9, opacity: 0, y: 20 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             exit={{ scale: 0.9, opacity: 0, y: 20 }}
-            className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-white/20"
+            className="w-full max-w-md overflow-hidden rounded-3xl border border-white/20 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
           >
             <div className="p-8">
               <div className="flex items-center justify-between mb-8">
-                <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">Chỉnh sửa Tên Game</h3>
-                <button onClick={onClose} className="text-slate-400 hover:text-slate-900 font-bold text-xs uppercase">Đóng</button>
+                <h3 className="text-xl font-black uppercase tracking-tight text-slate-900 dark:text-white">Chỉnh sửa Tên Game</h3>
+                <button onClick={onClose} className="text-xs font-bold uppercase text-slate-400 hover:text-slate-900 dark:hover:text-white">Đóng</button>
               </div>
               
               <form onSubmit={handleSubmit} className="space-y-6">
@@ -65,7 +65,7 @@ const RenameGameModal: React.FC<RenameGameModalProps> = ({
                     value={gameName}
                     onChange={(e) => setGameName(e.target.value)}
                     placeholder="Nhập tên game..."
-                    className="w-full px-4 py-4 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all font-bold text-sm tracking-tight"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-4 text-sm font-bold tracking-tight text-slate-800 outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     autoFocus
                   />
                 </div>
@@ -75,7 +75,7 @@ const RenameGameModal: React.FC<RenameGameModalProps> = ({
                   <select 
                     value={category}
                     onChange={(e) => setCategory(e.target.value)}
-                    className="w-full px-4 py-4 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all font-bold text-sm tracking-tight"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-4 text-sm font-bold tracking-tight text-slate-800 outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   >
                     {categories.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
@@ -88,7 +88,7 @@ const RenameGameModal: React.FC<RenameGameModalProps> = ({
                     value={filePath}
                     onChange={(e) => setFilePath(e.target.value)}
                     placeholder="vd: C:\\Users\\TaiKhoan\\Documents\\SaveGames\\TenGame"
-                    className="w-full px-4 py-4 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all font-bold text-sm tracking-tight"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-4 text-sm font-bold tracking-tight text-slate-800 outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                   />
                   <p className="px-1 text-[10px] text-slate-400">Bắt buộc nếu muốn khôi phục từ xa. Nhập thư mục chứa save, không nhập tên tệp.</p>
                 </div>
@@ -97,7 +97,7 @@ const RenameGameModal: React.FC<RenameGameModalProps> = ({
                   <button 
                     type="button"
                     onClick={onClose}
-                    className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all uppercase tracking-tight"
+                    className="flex-1 rounded-xl bg-slate-100 py-3 text-sm font-bold uppercase tracking-tight text-slate-700 transition-all hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                   >
                     Hủy
                   </button>

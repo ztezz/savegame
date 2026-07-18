@@ -50,14 +50,14 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ show, onClose
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl border border-white/20"
+            className="w-full max-w-md overflow-hidden rounded-3xl border border-white/20 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
           >
             <div className="p-8">
               <div className="flex items-center gap-3 mb-8">
                 <div className="w-10 h-10 bg-indigo-100 rounded-xl flex items-center justify-center">
                   <Lock className="w-5 h-5 text-indigo-600" />
                 </div>
-                <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase">
+                <h3 className="text-xl font-black uppercase tracking-tight text-slate-900 dark:text-white">
                   Đổi Mật Khẩu
                 </h3>
               </div>
@@ -72,7 +72,7 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ show, onClose
                       value={oldPassword}
                       onChange={(e) => setOldPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full px-4 pr-12 py-4 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all font-bold text-sm tracking-tight"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-4 pr-12 text-sm font-bold tracking-tight text-slate-800 outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     />
                     <button
                       type="button"
@@ -93,7 +93,7 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ show, onClose
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full px-4 pr-12 py-4 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all font-bold text-sm tracking-tight"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-4 pr-12 text-sm font-bold tracking-tight text-slate-800 outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     />
                     <button
                       type="button"
@@ -114,7 +114,7 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ show, onClose
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="••••••••"
-                      className="w-full px-4 pr-12 py-4 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all font-bold text-sm tracking-tight"
+                      className="w-full rounded-xl border border-slate-200 px-4 py-4 pr-12 text-sm font-bold tracking-tight text-slate-800 outline-none transition-all focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                     />
                     <button
                       type="button"
@@ -126,7 +126,7 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ show, onClose
                   </div>
                 </div>
 
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950">
                   <p className="text-[11px] font-bold text-amber-700 leading-relaxed">
                     ⚠️ Mật khẩu phải có ít nhất 6 ký tự. Xác nhận mật khẩu phải khớp.
                   </p>
@@ -137,7 +137,7 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ show, onClose
                     type="button"
                     onClick={handleClose}
                     disabled={loading}
-                    className="flex-1 px-4 py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xs transition-all uppercase tracking-widest disabled:opacity-50"
+                    className="flex-1 rounded-xl bg-slate-100 px-4 py-4 text-xs font-black uppercase tracking-widest text-slate-700 transition-all hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                   >
                     Huỷ
                   </button>

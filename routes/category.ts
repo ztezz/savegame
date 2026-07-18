@@ -9,13 +9,22 @@ categoryRouter.get('/api/category/list', authenticateToken, async (req: any, res
   try {
     if (isUsingDatabase()) {
       const { rows } = await pool.query(
-        `SELECT name FROM categories WHERE user_id = $1
-         UNION
-         SELECT DISTINCT category AS name FROM games WHERE user_id = $1 AND category IS NOT NULL AND category != 'Uncategorized'
-         ORDER BY name`,
+        `WITH category_names AS (
+           SELECT name FROM categories WHERE user_id = $1
+           UNION
+           SELECT DISTINCT category AS name
+           FROM games
+           WHERE user_id = $1 AND category IS NOT NULL AND category != 'Uncategorized'
+         )
+         SELECT category_names.name, COUNT(games.id) AS game_count
+         FROM category_names
+         LEFT JOIN games
+           ON games.user_id = $1 AND games.category = category_names.name
+         GROUP BY category_names.name
+         ORDER BY category_names.name`,
         [req.user.id]
       );
-      const categories = rows.map(r => ({ id: r.name, name: r.name }));
+      const categories = rows.map(r => ({ id: r.name, name: r.name, game_count: Number(r.game_count || 0) }));
       res.json({ categories });
     } else {
       res.json({ categories: [] });

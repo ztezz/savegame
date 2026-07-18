@@ -185,10 +185,18 @@ activationRouter.delete("/api/activation/:id", authenticateToken, isAdmin, async
 // Update activation file
 activationRouter.put("/api/activation/:id", authenticateToken, isAdmin, async (req: any, res) => {
   const id = parseInt(req.params.id);
-  const { gameName, note } = req.body;
+  const gameName = String(req.body?.gameName || '').trim();
+  const originalName = String(req.body?.originalName || '').trim();
+  const note = String(req.body?.note || '').trim();
 
-  if (!gameName || gameName.trim() === '') {
+  if (!gameName) {
     return res.status(400).json({ error: "Game name is required" });
+  }
+  if (!originalName) {
+    return res.status(400).json({ error: "File name is required" });
+  }
+  if (originalName.length > 255 || /[\\/\u0000-\u001f]/.test(originalName)) {
+    return res.status(400).json({ error: "Invalid file name" });
   }
 
   if (isUsingDatabase()) {
@@ -201,11 +209,25 @@ activationRouter.put("/api/activation/:id", authenticateToken, isAdmin, async (r
         return res.status(404).json({ error: "File not found" });
       }
 
-      await pool.query(
-        'UPDATE activation_files SET game_name = $1, note = $2 WHERE id = $3',
-        [gameName.trim(), note || '', id]
+      const { rows } = await pool.query(
+        `UPDATE activation_files
+         SET game_name = $1, original_name = $2, note = $3
+         WHERE id = $4
+         RETURNING id, game_name, original_name, file_size, note, created_at`,
+        [gameName, originalName, note, id]
       );
-      res.json({ message: "Updated successfully" });
+      const record = rows[0];
+      res.json({
+        message: "Updated successfully",
+        file: {
+          id: record.id,
+          gameName: record.game_name,
+          originalName: record.original_name,
+          fileSize: Number(record.file_size),
+          note: record.note,
+          createdAt: record.created_at,
+        },
+      });
     } catch (err) {
       console.error('❌ Update activation file error:', err);
       res.status(500).json({ error: "Database error" });

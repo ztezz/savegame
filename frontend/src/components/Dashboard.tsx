@@ -866,9 +866,9 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
               
               {/* User Menu Dropdown */}
               {showUserMenu && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 py-2 z-50">
-                  <div className="px-4 py-3 border-b border-slate-100">
-                    <p className="text-sm font-bold text-slate-900">{currentUser?.username || 'User'}</p>
+                <div className="absolute right-0 z-50 mt-2 w-48 rounded-lg border border-slate-200 bg-white py-2 shadow-xl dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/30">
+                  <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+                    <p className="text-sm font-bold text-slate-900 dark:text-white">{currentUser?.username || 'User'}</p>
                     <p className="text-xs text-slate-500 mt-0.5">{currentUser?.role || 'User'}</p>
                   </div>
                   <button
@@ -876,7 +876,7 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
                       setShowUserMenu(false);
                       setActiveTab('account');
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
                   >
                     <User className="w-4 h-4" />
                     Hồ sơ của tôi
@@ -886,7 +886,7 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
                       setShowUserMenu(false);
                       setShowChangePasswordModal(true);
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
                   >
                     <Lock className="w-4 h-4" />
                     Đổi mật khẩu
@@ -896,7 +896,7 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
                       setShowUserMenu(false);
                       onLogout();
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                    className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950"
                   >
                     <LogOut className="w-4 h-4" />
                     Đăng xuất
@@ -1189,8 +1189,8 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
       {/* Reset Password Modal (inline simple) */}
       {showResetPasswordModal && resetPasswordTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
-          <div className="bg-white rounded-3xl w-full max-w-sm p-8 shadow-2xl">
-            <h3 className="text-lg font-black text-slate-900 mb-1 uppercase tracking-tight">Reset mật khẩu</h3>
+          <div className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl dark:border dark:border-slate-700 dark:bg-slate-900">
+            <h3 className="mb-1 text-lg font-black uppercase tracking-tight text-slate-900 dark:text-white">Reset mật khẩu</h3>
             <p className="text-sm text-slate-500 mb-5">Tài khoản: <strong>{resetPasswordTarget.username}</strong></p>
             <div className="space-y-4">
               <div>
@@ -1200,13 +1200,13 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
                   value={resetPasswordValue}
                   onChange={e => setResetPasswordValue(e.target.value)}
                   placeholder="Tối thiểu 6 ký tự"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold text-slate-800 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/5 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 />
               </div>
               <div className="flex gap-3">
                 <button
                   onClick={() => { setShowResetPasswordModal(false); setResetPasswordTarget(null); }}
-                  className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xs uppercase"
+                  className="flex-1 rounded-xl bg-slate-100 px-4 py-3 text-xs font-black uppercase text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
                   Huỷ
                 </button>

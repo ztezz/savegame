@@ -36,26 +36,26 @@ const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl border border-white/20"
+            className="w-full max-w-sm overflow-hidden rounded-2xl border border-white/20 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
           >
             <div className="p-8 text-center">
-              <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-6">
+              <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-rose-50 text-rose-500 dark:bg-rose-950 dark:text-rose-300">
                 <Trash2 className="w-8 h-8" />
               </div>
-              <h3 className="text-xl font-black text-slate-900 tracking-tight uppercase mb-2">{title}</h3>
+              <h3 className="mb-2 text-xl font-black uppercase tracking-tight text-slate-900 dark:text-white">{title}</h3>
               <p className="text-sm text-slate-500 font-medium mb-8 leading-relaxed">{message}</p>
               <div className="flex gap-3">
                 <button
                   onClick={onClose}
                   disabled={isDeleting}
-                  className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xs transition-all uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 rounded-xl bg-slate-100 px-4 py-3 text-xs font-black uppercase tracking-widest text-slate-700 transition-all hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
                   Huỷ bỏ
                 </button>
                 <button
                   onClick={handleConfirm}
                   disabled={isDeleting}
-                  className="flex-1 px-4 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-black text-xs transition-all shadow-lg shadow-rose-100 uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-rose-500 px-4 py-3 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-rose-100 transition-all hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-50 dark:shadow-none"
                 >
                   {isDeleting ? (
                     <>
