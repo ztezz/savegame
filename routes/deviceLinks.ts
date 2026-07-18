@@ -12,7 +12,7 @@ function generateToken(): string {
   return crypto.randomBytes(24).toString("hex");
 }
 
-function getFrontendBaseUrl(req: any): string {
+function getFrontendBaseUrl(): string {
   if (FRONTEND_APP_URL) {
     return FRONTEND_APP_URL.replace(/\/$/, "");
   }
@@ -40,7 +40,7 @@ function getFrontendBaseUrl(req: any): string {
     return preferred.replace(/\/$/, "");
   }
 
-  return `${req.protocol}://${req.get("host")}`.replace(/\/$/, "");
+  throw new Error("No trusted frontend origin is configured");
 }
 
 // POST /api/device-links/start
@@ -68,7 +68,7 @@ deviceLinksRouter.post("/api/device-links/start", async (req: any, res) => {
     }
 
     const token = generateToken();
-    const frontendBase = getFrontendBaseUrl(req);
+    const frontendBase = getFrontendBaseUrl();
     const verificationUrl = `${frontendBase}/?device_link=${token}`;
 
     await pool.query(

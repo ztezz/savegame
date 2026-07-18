@@ -6,6 +6,7 @@ import { upload, UPLOADS_DIR_PATH } from "../config/multer.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { Game, Save } from "../database/types.js";
 import { streamFileDownload } from "../utils/download.js";
+import { hashFile, sanitizeOriginalFilename } from "../utils/save-artifact.js";
 
 // Mock data (for demo mode)
 let games: Game[] = [];
@@ -20,6 +21,17 @@ savesRouter.post("/api/save/upload", authenticateToken, upload.single("savefile"
   const file = req.file;
 
   if (!file) return res.status(400).json({ error: "No file uploaded" });
+
+  const uploadedPath = path.join(UPLOADS_DIR_PATH, file.filename);
+  let artifact: Awaited<ReturnType<typeof hashFile>>;
+  const originalFilename = sanitizeOriginalFilename(file.originalname);
+  try {
+    artifact = await hashFile(uploadedPath);
+    if (!originalFilename) throw new Error("Invalid original filename");
+  } catch (err) {
+    await fs.promises.unlink(uploadedPath).catch(() => undefined);
+    return res.status(400).json({ error: "Uploaded artifact is invalid: " + (err instanceof Error ? err.message : String(err)) });
+  }
 
   if (isUsingDatabase()) {
     const client = await pool.connect();
@@ -50,8 +62,8 @@ savesRouter.post("/api/save/upload", authenticateToken, upload.single("savefile"
       const quickAccessPath = customFilePath || null;
 
       const insertSaveRes = await client.query(
-        'INSERT INTO saves (game_id, file_path, custom_file_path, version, file_size) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [gameId, storageFilePath, quickAccessPath, nextVersion, file.size]
+        'INSERT INTO saves (game_id, file_path, custom_file_path, version, file_size, sha256, original_filename) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+        [gameId, storageFilePath, quickAccessPath, nextVersion, artifact.fileSize, artifact.sha256, originalFilename]
       );
 
       await client.query('COMMIT');
@@ -59,6 +71,7 @@ savesRouter.post("/api/save/upload", authenticateToken, upload.single("savefile"
     } catch (err) {
       console.error('❌ Upload error:', err);
       await client.query('ROLLBACK');
+      await fs.promises.unlink(uploadedPath).catch(() => undefined);
       res.status(500).json({ error: "Upload failed: " + (err instanceof Error ? err.message : String(err)) });
     } finally {
       client.release();
@@ -85,7 +98,9 @@ savesRouter.post("/api/save/upload", authenticateToken, upload.single("savefile"
       filePath: storageFilePath,
       customFilePath: quickAccessPath,
       version,
-      fileSize: file.size,
+      fileSize: artifact.fileSize,
+      sha256: artifact.sha256,
+      originalFilename,
       createdAt: new Date().toISOString()
     };
     saves.push(newSave);
@@ -106,7 +121,7 @@ savesRouter.get("/api/save/list", authenticateToken, async (req: any, res) => {
     try {
       const { rows } = await pool.query(`
         SELECT g.id, g.game_name, g.category,
-               s.id as save_id, s.version, s.file_size, s.created_at, s.file_path, s.custom_file_path
+                s.id as save_id, s.version, s.file_size, s.sha256, s.original_filename, s.created_at, s.file_path, s.custom_file_path
         FROM games g
         LEFT JOIN (
           SELECT * FROM (
@@ -131,8 +146,11 @@ savesRouter.get("/api/save/list", authenticateToken, async (req: any, res) => {
             id: r.save_id,
             version: r.version,
             fileSize: Number(r.file_size),
+            sha256: r.sha256,
+            originalFilename: r.original_filename,
             createdAt: r.created_at,
-            filePath: r.custom_file_path || r.file_path
+            filePath: r.custom_file_path || r.file_path,
+            savePath: r.custom_file_path || null
           } : undefined,
           versions: r.version || 0
         };
@@ -149,7 +167,10 @@ savesRouter.get("/api/save/list", authenticateToken, async (req: any, res) => {
       const gameSaves = saves.filter(s => s.gameId === game.id).sort((a, b) => b.version - a.version);
       return {
         ...game,
-        latestSave: gameSaves[0],
+        latestSave: gameSaves[0] ? {
+          ...gameSaves[0],
+          savePath: gameSaves[0].customFilePath || null,
+        } : undefined,
         versions: gameSaves.length
       };
     });
@@ -163,7 +184,7 @@ savesRouter.get("/api/save/history/:gameId", authenticateToken, async (req: any,
   if (isUsingDatabase()) {
     try {
       const { rows } = await pool.query(`
-        SELECT s.id, s.version, s.file_size, s.created_at, s.file_path, s.custom_file_path
+        SELECT s.id, s.version, s.file_size, s.sha256, s.original_filename, s.created_at, s.file_path, s.custom_file_path
         FROM saves s
         JOIN games g ON s.game_id = g.id
         WHERE g.id = $1 AND g.user_id = $2
@@ -174,8 +195,11 @@ savesRouter.get("/api/save/history/:gameId", authenticateToken, async (req: any,
         id: r.id,
         version: r.version,
         fileSize: Number(r.file_size),
+        sha256: r.sha256,
+        originalFilename: r.original_filename,
         createdAt: r.created_at,
-        filePath: r.custom_file_path || r.file_path
+        filePath: r.custom_file_path || r.file_path,
+        savePath: r.custom_file_path || null
       })));
     } catch (err) {
       console.error('❌ Error fetching history:', err);

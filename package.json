@@ -11,6 +11,7 @@
     "backend:3003": "cross-env API_PORT=3003 tsx watch server.ts",
     "build": "npm --prefix frontend run build",
     "backend:build": "tsc --outDir dist",
+    "backend:test": "tsx --test utils/*.test.ts",
     "start": "node dist/server.js",
     "frontend:dev": "npm --prefix frontend run dev",
     "frontend:build": "npm --prefix frontend run build",

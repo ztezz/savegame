@@ -34,6 +34,8 @@ export const authenticateToken = async (req: any, res: any, next: any) => {
         );
         if (userRows.length === 0) return res.sendStatus(401);
         req.user = { id: userRows[0].id, username: userRows[0].username, role: userRows[0].role };
+        req.authType = 'apiKey';
+        req.deviceName = rows[0].device_name;
         if (!isNoisyPollPath) console.log('✅ ApiKey auth - User:', req.user.username, 'Device:', rows[0].device_name);
         return next();
       } catch (err: any) {
@@ -84,6 +86,13 @@ export const authenticateToken = async (req: any, res: any, next: any) => {
     
     next();
   });
+};
+
+export const requireApiKey = (req: any, res: any, next: any) => {
+  if (req.authType !== 'apiKey' || !req.deviceName) {
+    return res.status(401).json({ error: 'Device API key required' });
+  }
+  next();
 };
 
 export const isAdmin = (req: any, res: any, next: any) => {

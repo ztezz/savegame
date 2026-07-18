@@ -8,11 +8,14 @@ import time
 import webbrowser
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
+from urllib.parse import urlsplit
 
 try:
     import tkinter as tk
+    from tkinter import messagebox
 except Exception:
     tk = None  # type: ignore[assignment]
+    messagebox = None  # type: ignore[assignment]
 
 try:
     from PIL import Image, ImageDraw
@@ -31,6 +34,7 @@ AgentFactory = Callable[[AgentEventHandler, threading.Event], Any]
 
 
 class DesktopAgentApp:
+    MAX_EVENTS_PER_TICK = 50
     BG = "#07101b"
     CARD = "#17191f"
     CARD_SOFT = "#20242c"
@@ -71,11 +75,17 @@ class DesktopAgentApp:
         self.events: "queue.Queue[tuple[str, Dict[str, Any]]]" = queue.Queue()
         self.stop_event = threading.Event()
         self.verification_url = ""
+        self.api_key = ""
         self.authenticated = False
         self.window_hidden = False
         self.closing = False
         self.tray_icon: Any = None
+        self.tray_image: Any = None
         self.tray_thread: Optional[threading.Thread] = None
+        self.tray_ready = False
+        self.tray_failed = False
+        self.auto_hide_after_id: Optional[str] = None
+        self.animation_after_id: Optional[str] = None
         self.toast_windows: list[Any] = []
         self.neuron_nodes: list[Dict[str, float]] = []
         self.drag_offset_x = 0
@@ -99,7 +109,7 @@ class DesktopAgentApp:
         self.start_tray_icon()
 
         self.agent = self.agent_factory(self.enqueue_event, self.stop_event)
-        self.worker_thread = threading.Thread(target=self.agent.run_forever, name="cloudsave-agent", daemon=True)
+        self.worker_thread = threading.Thread(target=self.agent.run_forever, name="cloudsave-agent", daemon=False)
         self.worker_thread.start()
 
         self.root.after(160, self.process_events)
@@ -144,7 +154,7 @@ class DesktopAgentApp:
         window_actions = tk.Frame(title_bar, bg=self.CARD)
         window_actions.pack(side="right")
         self.make_icon_button(window_actions, "_", self.hide_to_tray).pack(side="left", padx=(0, 6))
-        self.make_icon_button(window_actions, "X", self.quit_app, danger=True).pack(side="left")
+        self.make_icon_button(window_actions, "X", self.hide_to_tray, danger=True).pack(side="left")
 
         header = tk.Frame(card, bg=self.CARD)
         header.pack(fill="x", pady=(12, 0))
@@ -382,7 +392,10 @@ class DesktopAgentApp:
             logging.debug("Could not apply rounded window shape", exc_info=True)
 
     def animate_neuron_field(self) -> None:
+        self.animation_after_id = None
         if self.closing:
+            return
+        if self.window_hidden:
             return
 
         self.background_phase += 0.012
@@ -405,7 +418,7 @@ class DesktopAgentApp:
 
         self.draw_neuron_field()
         self.update_status_pulse()
-        self.root.after(42, self.animate_neuron_field)
+        self.animation_after_id = self.root.after(42, self.animate_neuron_field)
 
     def draw_neuron_field(self) -> None:
         canvas = self.background_canvas
@@ -563,20 +576,53 @@ class DesktopAgentApp:
         self.events.put((event_type, payload))
 
     def process_events(self) -> None:
-        while True:
+        for _ in range(self.MAX_EVENTS_PER_TICK):
             try:
                 event_type, payload = self.events.get_nowait()
             except queue.Empty:
                 break
-            self.handle_event(event_type, payload)
+            try:
+                self.handle_event(event_type, payload)
+            except Exception:
+                logging.exception("Desktop UI event handler failed for %s", event_type)
 
         if not self.closing:
             self.root.after(180, self.process_events)
 
     def handle_event(self, event_type: str, payload: Dict[str, Any]) -> None:
+        if event_type == "_tray_ready":
+            self.tray_ready = True
+            self.tray_failed = False
+            self.append_activity("Biểu tượng khay hệ thống đã sẵn sàng.")
+            return
+
+        if event_type == "_tray_failed":
+            self.tray_ready = False
+            self.tray_failed = True
+            error = str(payload.get("error", "Lỗi không xác định"))
+            self.append_activity(f"Không thể khởi động biểu tượng tray: {error}")
+            return
+
+        if event_type == "_tray_stopped":
+            self.tray_ready = False
+            return
+
+        if event_type == "_tray_show":
+            self.show_window()
+            return
+
+        if event_type == "_tray_open_verification":
+            self.open_verification_url()
+            return
+
+        if event_type == "_tray_exit":
+            self.quit_app()
+            return
+
         if event_type == "key_ready":
             self.device_id_var.set(str(payload.get("device_id", "-")))
-            self.api_key_var.set(str(payload.get("api_key", "-")))
+            self.api_key = str(payload.get("api_key", "")).strip()
+            self.api_key_var.set(self.mask_api_key(self.api_key))
 
             if payload.get("is_new"):
                 self.set_status("Khóa sẵn sàng", "Tạo khóa xong. Hoàn tất bước đăng nhập trên trình duyệt để agent chạy ẩn.", tone="warning")
@@ -589,6 +635,8 @@ class DesktopAgentApp:
             return
 
         if event_type == "link_required":
+            self.cancel_auto_hide()
+            self.authenticated = False
             self.verification_url = str(payload.get("verification_url", "")).strip()
             self.set_status("Yêu cầu đăng nhập", "Trình duyệt đã được mở. Sau khi đăng nhập thành công, cửa sổ này sẽ tự ẩn xuống tray.", tone="warning")
             self.link_hint_var.set(self.verification_url or "Không thể xác định URL đăng nhập.")
@@ -599,6 +647,7 @@ class DesktopAgentApp:
 
         if event_type == "authenticated":
             self.authenticated = True
+            self.verification_url = ""
             self.set_status("Đã kết nối", "Thiết bị đã xác thực. Agent đang chạy nền trong tray và sẽ tự xử lý khôi phục.", tone="success")
             self.link_hint_var.set("Xác thực hoàn tất. Bạn có thể đóng cửa sổ; biểu tượng tray sẽ giữ agent hoạt động.")
             self.append_activity("Xác thực thành công. Chế độ tray hiện đang hoạt động.")
@@ -606,7 +655,30 @@ class DesktopAgentApp:
             if not payload.get("linked_via_browser"):
                 message = "Thiết bị đã được liên kết. CloudSave đang chạy trong khay hệ thống."
             self.show_toast("CloudSave hoạt động", message, tone="success")
-            self.root.after(900, lambda: self.hide_to_tray(silent=True))
+            self.cancel_auto_hide()
+            self.auto_hide_after_id = self.root.after(900, self.auto_hide_authenticated)
+            return
+
+        if event_type == "update_available":
+            current = str(payload.get("current_version", "?")).strip()
+            latest = str(payload.get("latest_version", "?")).strip()
+            download_url = str(payload.get("download_url", "")).strip()
+            sha256 = str(payload.get("sha256", "")).strip()
+            size = payload.get("size")
+            parsed = urlsplit(download_url)
+            expected_path = f"/api/agent/download/{sha256}"
+            valid = (parsed.scheme == "https" and parsed.hostname == "api.luugame.fun" and
+                     parsed.port in (None, 443) and parsed.path == expected_path and not parsed.query and
+                     not parsed.fragment and len(sha256) == 64 and all(char in "0123456789abcdef" for char in sha256) and
+                     type(size) is int and size > 0)
+            if not valid:
+                logging.warning("UI ignored invalid update metadata")
+                return
+            message = f"Có bản cập nhật CloudSave {latest} (hiện tại {current}, {size / 1024 / 1024:.1f} MB)."
+            self.append_activity(message)
+            self.show_toast("Có bản cập nhật", message, tone="info")
+            if messagebox and messagebox.askyesno("Có bản cập nhật", f"{message}\n\nMở trang tải xuống đã xác minh?"):
+                webbrowser.open(download_url)
             return
 
         if event_type == "task_processing":
@@ -677,11 +749,10 @@ class DesktopAgentApp:
         self.log_label.configure(text=entry)
 
     def copy_api_key(self) -> None:
-        api_key = self.api_key_var.get().strip()
-        if not api_key or api_key == "-":
+        if not self.api_key:
             return
         self.root.clipboard_clear()
-        self.root.clipboard_append(api_key)
+        self.root.clipboard_append(self.api_key)
         self.root.update_idletasks()
         self.append_activity("Khóa API đã được sao chép vào bộ nhớ tạm.")
         self.show_toast("Đã sao chép", "Khóa API đã được sao chép vào bộ nhớ tạm.", tone="info")
@@ -690,10 +761,52 @@ class DesktopAgentApp:
         if not self.verification_url:
             self.append_activity("URL đăng nhập chưa có.")
             return
+        if not self.is_valid_verification_url(self.verification_url):
+            self.append_activity("URL đăng nhập không hợp lệ và đã bị chặn.")
+            self.show_toast("Liên kết bị chặn", "URL đăng nhập không thuộc miền CloudSave hợp lệ.", tone="danger")
+            return
         webbrowser.open(self.verification_url)
         self.append_activity("Đã mở trang đăng nhập trình duyệt theo cách thủ công.")
 
+    @staticmethod
+    def is_valid_verification_url(url: str) -> bool:
+        try:
+            parsed = urlsplit(url)
+            return (
+                parsed.scheme.lower() == "https"
+                and parsed.hostname is not None
+                and parsed.hostname.lower() in {"api.luugame.fun", "luugame.fun"}
+                and parsed.username is None
+                and parsed.password is None
+                and parsed.port in (None, 443)
+            )
+        except ValueError:
+            return False
+
+    @staticmethod
+    def mask_api_key(api_key: str) -> str:
+        if not api_key:
+            return "-"
+        if len(api_key) <= 4:
+            return "•" * len(api_key)
+        return f"{'•' * min(12, len(api_key) - 4)}{api_key[-4:]}"
+
+    def cancel_auto_hide(self) -> None:
+        if self.auto_hide_after_id is None:
+            return
+        try:
+            self.root.after_cancel(self.auto_hide_after_id)
+        except Exception:
+            pass
+        self.auto_hide_after_id = None
+
+    def auto_hide_authenticated(self) -> None:
+        self.auto_hide_after_id = None
+        if self.authenticated:
+            self.hide_to_tray(silent=True)
+
     def show_window(self) -> None:
+        self.cancel_auto_hide()
         self.window_hidden = False
         self.root.deiconify()
         self.root.overrideredirect(True)
@@ -702,19 +815,22 @@ class DesktopAgentApp:
         self.root.lift()
         self.root.attributes("-topmost", True)
         self.root.after(250, lambda: self.root.attributes("-topmost", False))
+        if self.animation_after_id is None:
+            self.animate_neuron_field()
 
     def hide_to_tray(self, silent: bool = False) -> None:
         if self.closing:
             return
-        if self.tray_icon is None:
-            try:
-                self.root.overrideredirect(False)
-                self.root.iconify()
-            except Exception:
-                self.root.withdraw()
+        if not self.tray_ready:
+            reason = "tray chưa sẵn sàng" if not self.tray_failed else "tray không khởi động được"
+            self.append_activity(f"Không thể ẩn cửa sổ vì {reason}.")
             return
 
+        self.cancel_auto_hide()
         self.window_hidden = True
+        if self.animation_after_id is not None:
+            self.root.after_cancel(self.animation_after_id)
+            self.animation_after_id = None
         self.root.withdraw()
         if not silent:
             self.append_activity("Cửa sổ đã ẩn vào khay hệ thống.")
@@ -724,7 +840,8 @@ class DesktopAgentApp:
         icon_path = self.base_dir / "icon.ico"
         if Image and icon_path.exists():
             try:
-                return Image.open(icon_path)
+                with Image.open(icon_path) as source:
+                    return source.copy()
             except Exception:
                 pass
 
@@ -742,22 +859,46 @@ class DesktopAgentApp:
 
     def start_tray_icon(self) -> None:
         if pystray is None:
+            self.tray_failed = True
             self.append_activity("pystray không khả dụng. Ứng dụng sẽ ở dạng cửa sổ bình thường.")
             return
 
         tray_image = self.build_tray_image()
         if tray_image is None:
+            self.tray_failed = True
             self.append_activity("Hình ảnh tray không thể được tạo. Ứng dụng sẽ ở dạng cửa sổ bình thường.")
             return
 
         menu = pystray.Menu(
-            pystray.MenuItem("Mở CloudSave", lambda icon, item: self.root.after(0, self.show_window)),
-            pystray.MenuItem("Mở trang đăng nhập", lambda icon, item: self.root.after(0, self.open_verification_url)),
-            pystray.MenuItem("Thoát", lambda icon, item: self.root.after(0, self.quit_app)),
+            pystray.MenuItem("Mở CloudSave", lambda icon, item: self.enqueue_event("_tray_show", {})),
+            pystray.MenuItem("Mở trang đăng nhập", lambda icon, item: self.enqueue_event("_tray_open_verification", {})),
+            pystray.MenuItem("Thoát", lambda icon, item: self.enqueue_event("_tray_exit", {})),
         )
-        self.tray_icon = pystray.Icon("cloudsave-agent", tray_image, "CloudSave Desktop Agent", menu)
-        self.tray_thread = threading.Thread(target=self.tray_icon.run, name="cloudsave-tray", daemon=True)
+        self.tray_image = tray_image
+        try:
+            self.tray_icon = pystray.Icon("cloudsave-agent", self.tray_image, "CloudSave Desktop Agent", menu)
+        except Exception as exc:
+            self.tray_failed = True
+            self.tray_image.close()
+            self.tray_image = None
+            self.append_activity(f"Không thể tạo biểu tượng tray: {exc}")
+            logging.exception("Could not create tray icon")
+            return
+        self.tray_thread = threading.Thread(target=self.run_tray_icon, name="cloudsave-tray", daemon=False)
         self.tray_thread.start()
+
+    def run_tray_icon(self) -> None:
+        try:
+            def mark_ready(icon: Any) -> None:
+                icon.visible = True
+                self.enqueue_event("_tray_ready", {})
+
+            self.tray_icon.run(setup=mark_ready)
+        except Exception as exc:
+            logging.exception("Tray icon failed")
+            self.enqueue_event("_tray_failed", {"error": str(exc)})
+        finally:
+            self.enqueue_event("_tray_stopped", {})
 
     def show_toast(self, title: str, message: str, *, tone: str) -> None:
         palette = {
@@ -812,12 +953,32 @@ class DesktopAgentApp:
         if self.closing:
             return
         self.closing = True
+        self.cancel_auto_hide()
+        if self.animation_after_id is not None:
+            self.root.after_cancel(self.animation_after_id)
+            self.animation_after_id = None
         self.stop_event.set()
         if self.tray_icon is not None:
             try:
                 self.tray_icon.stop()
             except Exception:
                 logging.exception("Could not stop tray icon cleanly")
+        self.wait_for_shutdown()
+
+    def wait_for_shutdown(self) -> None:
+        worker_alive = self.worker_thread.is_alive()
+        tray_alive = self.tray_thread is not None and self.tray_thread.is_alive()
+        if worker_alive or tray_alive:
+            self.root.after(100, self.wait_for_shutdown)
+            return
+
+        if self.tray_image is not None:
+            try:
+                self.tray_image.close()
+            except Exception:
+                logging.debug("Could not close tray image", exc_info=True)
+            self.tray_image = None
+        self.tray_icon = None
         self.root.destroy()
 
     def run(self) -> None:
@@ -825,3 +986,12 @@ class DesktopAgentApp:
             self.root.mainloop()
         finally:
             self.stop_event.set()
+            if self.tray_icon is not None:
+                try:
+                    self.tray_icon.stop()
+                except Exception:
+                    logging.debug("Could not stop tray icon during final cleanup", exc_info=True)
+            if self.worker_thread.is_alive():
+                self.worker_thread.join()
+            if self.tray_thread is not None and self.tray_thread.is_alive():
+                self.tray_thread.join()

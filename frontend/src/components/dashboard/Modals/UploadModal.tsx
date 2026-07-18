@@ -84,14 +84,15 @@ const UploadModal: React.FC<UploadModalProps> = ({
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[11px] font-black uppercase text-slate-400 tracking-widest ml-1">Đường dẫn File Save (Tùy chọn)</label>
+                  <label className="text-[11px] font-black uppercase text-slate-400 tracking-widest ml-1">Thư mục Save trên máy Windows</label>
                   <input 
                     type="text"
                     value={newGameFilePath}
                     onChange={(e) => setNewGameFilePath(e.target.value)}
-                    placeholder="vd: C:\\Users\\Documents\\SaveGames\\game.save"
+                    placeholder="vd: C:\\Users\\TaiKhoan\\Documents\\SaveGames\\TenGame"
                     className="w-full px-4 py-4 rounded-xl border border-slate-200 focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none transition-all font-bold text-sm tracking-tight"
                   />
+                  <p className="px-1 text-[10px] text-slate-400">Bắt buộc nếu muốn khôi phục từ xa. Nhập thư mục chứa save, không nhập tên tệp.</p>
                 </div>
                 <div className="space-y-4">
                   <div className="flex gap-2">

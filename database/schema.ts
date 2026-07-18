@@ -34,6 +34,8 @@ export const sqliteSchema = `
     custom_file_path TEXT,
     version INTEGER DEFAULT 1,
     file_size INTEGER DEFAULT 0,
+    sha256 TEXT,
+    original_filename TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
   CREATE TABLE IF NOT EXISTS sync_logs (
@@ -58,6 +60,8 @@ export const sqliteSchema = `
     max_retries INTEGER NOT NULL DEFAULT 2,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     claimed_at TEXT,
+    lease_token TEXT,
+    lease_expires_at TEXT,
     completed_at TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_restore_commands_user_status_created ON restore_commands(user_id, status, created_at DESC);
@@ -205,10 +209,27 @@ export const sqliteSchema = `
   CREATE INDEX IF NOT EXISTS idx_community_bans_until ON community_bans(banned_until);
 `;
 
+const leaseIndexesSchema = `
+  CREATE INDEX IF NOT EXISTS idx_restore_commands_active_lease
+  ON restore_commands(user_id, device_name, status, lease_expires_at);
+`;
+
+async function addMissingColumns(table: string, columns: Record<string, string>) {
+  const { pool } = await import("../config/database.js");
+  const { rows } = await pool.query(`PRAGMA table_info(${table})`);
+  const existing = new Set(rows.map((row: any) => row.name));
+  for (const [name, definition] of Object.entries(columns)) {
+    if (!existing.has(name)) await pool.query(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+  }
+}
+
 export async function initializeSchema() {
   try {
     const { pool } = await import("../config/database.js");
     pool.exec(sqliteSchema);
+    await addMissingColumns("saves", { sha256: "TEXT", original_filename: "TEXT" });
+    await addMissingColumns("restore_commands", { lease_token: "TEXT", lease_expires_at: "TEXT" });
+    pool.exec(leaseIndexesSchema);
     await pool.query("UPDATE users SET role = 'Admin' WHERE username = 'admin' AND role != 'Admin'");
     await pool.query("UPDATE users SET display_name = username WHERE display_name IS NULL");
     console.log("✅ Đã khởi tạo SQLite schema thành công!");

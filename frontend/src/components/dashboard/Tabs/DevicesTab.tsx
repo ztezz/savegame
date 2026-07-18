@@ -10,9 +10,11 @@ interface AgentInfo {
   version: string;
   available: boolean;
   filename: string;
+  size: number;
+  sha256: string | null;
+  downloadUrl: string | null;
 }
 
-const AGENT_DOWNLOAD_URL = `${API_ORIGIN}/api/agent/download`;
 const AGENT_INFO_URL = `${API_ORIGIN}/api/agent/info`;
 
 interface DeviceKey {
@@ -212,15 +214,15 @@ const DevicesTab: React.FC = () => {
           </div>
 
           <a
-            href={AGENT_DOWNLOAD_URL}
+            href={agentInfo?.available && agentInfo.downloadUrl ? `${API_ORIGIN}${agentInfo.downloadUrl}` : undefined}
             download="restore_agent.exe"
             className={
               `flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-black uppercase tracking-widest transition-all shrink-0 ` +
-              (agentInfo?.available === false
+              (!agentInfo?.available || !agentInfo.downloadUrl
                 ? 'bg-slate-600 text-slate-400 cursor-not-allowed pointer-events-none'
                 : 'bg-sky-500 hover:bg-sky-400 text-white shadow-md hover:shadow-sky-500/30')
             }
-            onClick={e => { if (agentInfo?.available === false) e.preventDefault(); }}
+            onClick={e => { if (!agentInfo?.available || !agentInfo.downloadUrl) e.preventDefault(); }}
           >
             <Download className="w-4 h-4" />
             Tải về

@@ -3,7 +3,10 @@ param(
   [int]$PollIntervalSeconds = 5,
 
   [Parameter(Mandatory = $false)]
-  [int]$RequestTimeoutSeconds = 30,
+  [int]$ConnectTimeoutSeconds = 10,
+
+  [Parameter(Mandatory = $false)]
+  [int]$ReadTimeoutSeconds = 30,
 
   [Parameter(Mandatory = $false)]
   [string]$TaskName = "CloudSaveRestoreAgent"
@@ -42,7 +45,8 @@ Ensure-Path $LogDir
 $runnerContent = @"
 `$ErrorActionPreference = 'Stop'
 `$env:POLL_INTERVAL_SECONDS = '$PollIntervalSeconds'
-`$env:REQUEST_TIMEOUT_SECONDS = '$RequestTimeoutSeconds'
+`$env:CONNECT_TIMEOUT_SECONDS = '$ConnectTimeoutSeconds'
+`$env:READ_TIMEOUT_SECONDS = '$ReadTimeoutSeconds'
 
 Set-Location '$ScriptRoot'
 & '$PythonExe' '$AgentScript' '--headless' 1>> '$StdOutLog' 2>> '$StdErrLog'
@@ -53,7 +57,7 @@ Write-Info "Đã tạo runner script: $RunnerScript"
 
 $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File \"$RunnerScript\""
 $Trigger = New-ScheduledTaskTrigger -AtStartup
-$Principal = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -LogonType InteractiveToken -RunLevel Highest
+$Principal = New-ScheduledTaskPrincipal -UserId "$env:USERNAME" -LogonType InteractiveToken -RunLevel Limited
 $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
 
 try {

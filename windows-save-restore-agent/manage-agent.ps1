@@ -14,8 +14,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$OutLog = Join-Path $ScriptRoot "logs\agent.out.log"
-$ErrLog = Join-Path $ScriptRoot "logs\agent.err.log"
+$AgentLog = Join-Path $env:LOCALAPPDATA "CloudSave\logs\agent.log"
 
 function Try-GetTask {
   try {
@@ -93,18 +92,11 @@ switch ($Action) {
   }
 
   "logs" {
-    if (Test-Path $OutLog) {
-      Write-Host "--- agent.out.log ---"
-      Get-Content $OutLog -Tail 100
+    if (Test-Path $AgentLog) {
+      Write-Host "--- agent.log ---"
+      Get-Content $AgentLog -Tail 100
     } else {
-      Write-Host "Không thấy $OutLog"
-    }
-
-    if (Test-Path $ErrLog) {
-      Write-Host "--- agent.err.log ---"
-      Get-Content $ErrLog -Tail 100
-    } else {
-      Write-Host "Không thấy $ErrLog"
+      Write-Host "Không thấy $AgentLog"
     }
   }
 }

@@ -8,7 +8,13 @@ const fallbackFileName = (fileName: string) => {
   return baseName.replace(/["\\\r\n]/g, "_");
 };
 
-export function streamFileDownload(res: any, filePath: string, fileName: string) {
+interface DownloadOptions {
+  cacheControl?: string;
+  etag?: string;
+  digest?: string;
+}
+
+export function streamFileDownload(res: any, filePath: string, fileName: string, options: DownloadOptions = {}) {
   const stat = fs.statSync(filePath);
   const totalSize = stat.size;
   const safeName = fallbackFileName(fileName);
@@ -16,7 +22,9 @@ export function streamFileDownload(res: any, filePath: string, fileName: string)
   res.setHeader("Content-Type", "application/octet-stream");
   res.setHeader("Content-Disposition", `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`);
   res.setHeader("Accept-Ranges", "bytes");
-  res.setHeader("Cache-Control", "private, max-age=3600");
+  res.setHeader("Cache-Control", options.cacheControl || "private, max-age=3600");
+  if (options.etag) res.setHeader("ETag", options.etag);
+  if (options.digest) res.setHeader("Digest", `sha-256=${Buffer.from(options.digest, "hex").toString("base64")}`);
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Accel-Buffering", "no");
 

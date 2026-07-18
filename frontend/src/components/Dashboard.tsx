@@ -183,7 +183,7 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
     console.log('📤 handleOpenUpdate clicked', game.gameName);
     setNewGameName(game.gameName);
     setNewGameCategory(game.category);
-    setNewGameFilePath(game.latestSave?.filePath || '');
+    setNewGameFilePath(game.latestSave?.savePath || '');
     setShowUploadModal(true);
   };
 
@@ -1080,7 +1080,7 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
           onSubmit={handleSaveRename}
           initialGameName={selectedGameForRename?.gameName || ''}
           initialCategory={selectedGameForRename?.category || 'Uncategorized'}
-          initialFilePath={selectedGameForRename?.latestSave?.filePath || ''}
+          initialFilePath={selectedGameForRename?.latestSave?.savePath || ''}
           categories={categories}
         />
       </Suspense>

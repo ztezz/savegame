@@ -22,10 +22,9 @@ const defaultSettings = {
   ui: { compactMode: false, language: 'vi', showAdvancedStats: true },
   technical: { smtpHost: '', smtpPort: 587, smtpSecure: false, backupEnabled: false },
   ai: { enabled: false, provider: '9router', apiKey: '', model: 'cx/gpt-5.5', botName: 'Mây Mặn', baseUrl: 'https://api.9router.com/v1', humorLevel: 'funny' },
-  windowsAgent: { filename: 'Cloudsave.exe', version: '', size: 0, updatedAt: null, available: false }
+  windowsAgent: { filename: 'Cloudsave.exe', version: '', size: 0, sha256: '', downloadUrl: '', updatedAt: null, available: false }
 };
 
-const AGENT_DOWNLOAD_URL = `${API_ORIGIN}/api/agent/download`;
 type SettingsSection = 'core' | 'drive' | 'agent' | 'operations' | 'ai' | 'chat';
 
 const formatFileSize = (size: number) => {
@@ -513,7 +512,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           </div>}
         </div>}
       </div>}
-      {settings.windowsAgent?.available && <a href={AGENT_DOWNLOAD_URL} className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-100 px-4 py-3 text-sm font-black text-indigo-600 transition hover:bg-indigo-50"><Download className="h-4 w-4" />Tải thử bản hiện tại</a>}
+      {settings.windowsAgent?.available && settings.windowsAgent?.downloadUrl && <a href={`${API_ORIGIN}${settings.windowsAgent.downloadUrl}`} className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl border border-indigo-100 px-4 py-3 text-sm font-black text-indigo-600 transition hover:bg-indigo-50"><Download className="h-4 w-4" />Tải thử bản hiện tại</a>}
       {settings.windowsAgent?.updatedAt && <p className="mt-3 text-xs text-slate-500">Cập nhật lần cuối: {new Date(settings.windowsAgent.updatedAt).toLocaleString('vi-VN')}</p>}
     </div>}
 

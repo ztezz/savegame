@@ -1,7 +1,11 @@
 import { Router } from "express";
+import { randomBytes } from "node:crypto";
+import * as path from "node:path";
 import { pool, isUsingDatabase } from "../config/database.js";
-import { authenticateToken } from "../middleware/auth.js";
-import { upload } from "../config/multer.js";
+import { authenticateToken, requireApiKey } from "../middleware/auth.js";
+import { upload, UPLOADS_DIR_PATH } from "../config/multer.js";
+import { PUBLIC_API_ORIGIN, TASK_LEASE_SECONDS } from "../config/environment.js";
+import { hashFile } from "../utils/save-artifact.js";
 
 // Mock data
 let games: any[] = [];
@@ -10,7 +14,62 @@ let restoreCommands: any[] = [];
 let restoreCommandId = 1;
 
 export const syncRouter = Router();
-const RUNNING_TIMEOUT_MINUTES = 10;
+const MAX_DEVICE_ID_LENGTH = 255;
+const MAX_TASK_ERROR_LENGTH = 4000;
+const MAX_LEASE_TOKEN_LENGTH = 256;
+
+function parseDeviceId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const deviceId = value.trim();
+  if (!deviceId || deviceId.length > MAX_DEVICE_ID_LENGTH || /[\u0000-\u001f\u007f]/.test(deviceId)) return null;
+  return deviceId;
+}
+
+function getArtifactPath(filePath: unknown): string | null {
+  if (typeof filePath !== 'string' || !filePath) return null;
+  const uploadsRoot = path.resolve(UPLOADS_DIR_PATH);
+  const artifactPath = path.resolve(uploadsRoot, filePath);
+  if (artifactPath === uploadsRoot || !artifactPath.startsWith(uploadsRoot + path.sep)) return null;
+  return artifactPath;
+}
+
+function parseLeaseToken(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const token = value.trim();
+  return token && token.length <= MAX_LEASE_TOKEN_LENGTH ? token : null;
+}
+
+function requireBoundDevice(req: any, res: any, deviceId: string | null): boolean {
+  if (!deviceId || req.deviceName !== deviceId) {
+    res.status(403).json({ error: "device_id does not match the authenticated API key" });
+    return false;
+  }
+  return true;
+}
+
+function saveDownloadUrl(saveId: number) {
+  return `${PUBLIC_API_ORIGIN}/api/save/download/${saveId}`;
+}
+
+function formatSqliteTimestamp(value: unknown): string | null {
+  if (typeof value !== 'string' || !value) return null;
+  return value.includes('T') ? (value.endsWith('Z') ? value : `${value}Z`) : `${value.replace(' ', 'T')}Z`;
+}
+
+async function ensureArtifactMetadata(save: any, client: any) {
+  if (!save?.original_filename) throw new Error("Artifact original filename is unavailable; upload this save again");
+  if (typeof save.sha256 === 'string' && /^[a-f0-9]{64}$/.test(save.sha256) && Number.isSafeInteger(Number(save.file_size))) {
+    return { file_size: Number(save.file_size), sha256: save.sha256.toLowerCase(), original_filename: save.original_filename };
+  }
+  const artifactPath = getArtifactPath(save.file_path);
+  if (!artifactPath) throw new Error("Artifact path is unavailable");
+  const artifact = await hashFile(artifactPath);
+  await client.query(
+    `UPDATE saves SET file_size = $1, sha256 = $2 WHERE id = $3 AND (sha256 IS NULL OR sha256 = '')`,
+    [artifact.fileSize, artifact.sha256, save.id]
+  );
+  return { file_size: artifact.fileSize, sha256: artifact.sha256, original_filename: save.original_filename };
+}
 
 async function isKnownDeviceForUser(userId: number, deviceId: string): Promise<boolean> {
   if (!deviceId) return false;
@@ -20,9 +79,11 @@ async function isKnownDeviceForUser(userId: number, deviceId: string): Promise<b
       `SELECT EXISTS (
          SELECT 1
          FROM (
-           SELECT device_name FROM agent_heartbeats WHERE user_id = $1
-           UNION
-           SELECT device_name FROM restore_commands WHERE user_id = $1
+            SELECT device_name FROM agent_heartbeats WHERE user_id = $1
+            UNION
+            SELECT device_name FROM device_api_keys WHERE user_id = $1
+            UNION
+            SELECT device_name FROM restore_commands WHERE user_id = $1
            UNION
            SELECT device_name FROM sync_logs WHERE user_id = $1
          ) d
@@ -109,13 +170,13 @@ syncRouter.get("/api/sync/devices", authenticateToken, async (req: any, res) => 
 
 syncRouter.post("/api/restore", authenticateToken, async (req: any, res) => {
   const saveId = Number(req.body?.save_id);
-  const deviceId = (req.body?.device_id ?? '').toString().trim();
+  const deviceId = parseDeviceId(req.body?.device_id);
 
   if (!Number.isInteger(saveId) || saveId <= 0) {
     return res.status(400).json({ error: "save_id must be a positive integer" });
   }
   if (!deviceId) {
-    return res.status(400).json({ error: "device_id is required" });
+    return res.status(400).json({ error: "device_id must be a non-empty string of at most 255 characters" });
   }
 
   if (isUsingDatabase()) {
@@ -173,6 +234,7 @@ syncRouter.post("/api/restore", authenticateToken, async (req: any, res) => {
     saveId: save.id,
     gameName: game.gameName,
     deviceName: deviceId,
+    savePath: save.customFilePath || null,
     status: 'Pending',
     createdAt: new Date().toISOString(),
     claimedAt: null,
@@ -185,38 +247,66 @@ syncRouter.post("/api/restore", authenticateToken, async (req: any, res) => {
   return res.status(201).json({ message: "Restore task created", task });
 });
 
-syncRouter.get("/api/task", authenticateToken, async (req: any, res) => {
-  const deviceId = (req.query.device_id ?? '').toString().trim();
+syncRouter.get("/api/task", authenticateToken, requireApiKey, async (req: any, res) => {
+  const deviceId = parseDeviceId(req.query.device_id);
   if (!deviceId) {
-    return res.status(400).json({ error: "device_id is required" });
+    return res.status(400).json({ error: "device_id must be a non-empty string of at most 255 characters" });
   }
+  if (!requireBoundDevice(req, res, deviceId)) return;
 
   if (isUsingDatabase()) {
     const client = await pool.connect();
     try {
-      const knownDevice = await isKnownDeviceForUser(req.user.id, deviceId);
-      if (!knownDevice) {
-        return res.status(400).json({ error: "Device not found or not registered" });
+      await client.query('BEGIN');
+      const candidateRes = await client.query(
+        `SELECT candidate.id, candidate.save_id, s.file_path, s.file_size, s.sha256, s.original_filename
+         FROM restore_commands candidate
+         JOIN saves s ON s.id = candidate.save_id
+         WHERE candidate.user_id = $1
+           AND candidate.device_name = $2
+           AND NOT EXISTS (
+             SELECT 1 FROM restore_commands active
+             WHERE active.user_id = $1 AND active.device_name = $2
+               AND active.status = 'Running' AND active.lease_expires_at > CURRENT_TIMESTAMP
+           )
+           AND (candidate.status = 'Pending' OR
+                (candidate.status = 'Running' AND (candidate.lease_expires_at IS NULL OR candidate.lease_expires_at <= CURRENT_TIMESTAMP)))
+         ORDER BY CASE WHEN candidate.status = 'Running' THEN 0 ELSE 1 END,
+                  candidate.created_at ASC, candidate.id ASC
+         LIMIT 1`,
+        [req.user.id, deviceId]
+      );
+      const candidate = candidateRes.rows[0];
+      if (!candidate) {
+        await client.query('COMMIT');
+        return res.json({ task: null });
       }
 
-       await client.query('BEGIN');
-       const claimRes = await client.query(
-         `UPDATE restore_commands
-          SET status = 'Running', claimed_at = CURRENT_TIMESTAMP
-          WHERE id = (
-            SELECT id FROM restore_commands
-            WHERE user_id = $1 AND status = 'Pending' AND device_name = $2
-            ORDER BY created_at ASC, id ASC LIMIT 1
-          ) AND user_id = $1 AND status = 'Pending'
-          RETURNING id, game_id, save_id, game_name, device_name, save_path, status, created_at, claimed_at`,
-         [req.user.id, deviceId]
-       );
+      let artifact;
+      try {
+        artifact = await ensureArtifactMetadata(candidate, client);
+      } catch (err) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: err instanceof Error ? err.message : "Artifact metadata unavailable" });
+      }
 
-       if (claimRes.rows.length === 0) {
-         await client.query('COMMIT');
-         return res.json({ task: null });
-       }
-       await client.query('COMMIT');
+      const leaseToken = randomBytes(32).toString('hex');
+      const claimRes = await client.query(
+        `UPDATE restore_commands
+         SET status = 'Running', claimed_at = CURRENT_TIMESTAMP, lease_token = $1,
+             lease_expires_at = datetime('now', '+' || $2 || ' seconds')
+         WHERE id = $3 AND user_id = $4 AND device_name = $5
+           AND (status = 'Pending' OR
+                (status = 'Running' AND (lease_expires_at IS NULL OR lease_expires_at <= CURRENT_TIMESTAMP)))
+         RETURNING id, game_id, save_id, game_name, device_name, save_path, status, created_at,
+                   claimed_at, lease_token, lease_expires_at`,
+        [leaseToken, TASK_LEASE_SECONDS, candidate.id, req.user.id, deviceId]
+      );
+      if (!claimRes.rows[0]) {
+        await client.query('ROLLBACK');
+        return res.json({ task: null });
+      }
+      await client.query('COMMIT');
 
       const claimedTask = claimRes.rows[0];
       await writeSyncLog(req.user.id, deviceId, 'Info', `Task #${claimedTask.id} claimed by agent`);
@@ -231,7 +321,11 @@ syncRouter.get("/api/task", authenticateToken, async (req: any, res) => {
           status: claimedTask.status,
           created_at: claimedTask.created_at,
           claimed_at: claimedTask.claimed_at,
-          file_url: `${req.protocol}://${req.get('host')}/api/save/download/${claimedTask.save_id}`,
+          lease_token: claimedTask.lease_token,
+          lease_expires_at: formatSqliteTimestamp(claimedTask.lease_expires_at),
+          lease_seconds: TASK_LEASE_SECONDS,
+          file_url: saveDownloadUrl(claimedTask.save_id),
+          ...artifact,
         },
       });
     } catch (err) {
@@ -243,98 +337,80 @@ syncRouter.get("/api/task", authenticateToken, async (req: any, res) => {
     }
   }
 
-  const pending = restoreCommands.find(
-    (c: any) => c.userId === req.user.id && c.status === 'Pending' && c.deviceName === deviceId
-  );
-
-  if (!pending) {
-    return res.json({ task: null });
-  }
-
-  pending.status = 'Running';
-  pending.claimedAt = new Date().toISOString();
-
-  return res.json({
-    task: {
-      id: pending.id,
-      game_id: pending.gameId,
-      save_id: pending.saveId,
-      game_name: pending.gameName,
-      device_id: pending.deviceName,
-      status: pending.status,
-      created_at: pending.createdAt,
-      claimed_at: pending.claimedAt,
-      file_url: `${req.protocol}://${req.get('host')}/api/save/download/${pending.saveId}`,
-    },
-  });
+  return res.status(503).json({ error: "Task leasing requires persistent storage" });
 });
 
-syncRouter.post("/api/done", authenticateToken, async (req: any, res) => {
+syncRouter.post("/api/task/:id/renew", authenticateToken, requireApiKey, async (req: any, res) => {
+  const taskId = Number(req.params.id);
+  const deviceId = parseDeviceId(req.body?.device_id);
+  const leaseToken = parseLeaseToken(req.body?.lease_token ?? req.body?.token);
+  if (!Number.isInteger(taskId) || taskId <= 0) return res.status(400).json({ error: "Invalid task id" });
+  if (!deviceId || !leaseToken) return res.status(400).json({ error: "device_id and lease_token are required" });
+  if (!requireBoundDevice(req, res, deviceId)) return;
+
+  try {
+    const { rows } = await pool.query(
+      `UPDATE restore_commands
+       SET lease_expires_at = datetime('now', '+' || $1 || ' seconds')
+       WHERE id = $2 AND user_id = $3 AND device_name = $4 AND status = 'Running'
+         AND lease_token = $5 AND lease_expires_at > CURRENT_TIMESTAMP
+       RETURNING id, lease_expires_at`,
+      [TASK_LEASE_SECONDS, taskId, req.user.id, deviceId, leaseToken]
+    );
+    if (!rows[0]) return res.status(409).json({ error: "Lease is missing, expired, or owned by another worker" });
+    return res.json({
+      lease_token: leaseToken,
+      lease_expires_at: formatSqliteTimestamp(rows[0].lease_expires_at),
+      lease_seconds: TASK_LEASE_SECONDS,
+    });
+  } catch (err) {
+    console.error('❌ Renew task error:', err);
+    return res.status(500).json({ error: "Database error" });
+  }
+});
+
+syncRouter.post("/api/done", authenticateToken, requireApiKey, async (req: any, res) => {
   const taskId = Number(req.body?.task_id);
-  const deviceId = (req.body?.device_id ?? '').toString().trim();
+  const deviceId = parseDeviceId(req.body?.device_id);
+  const leaseToken = parseLeaseToken(req.body?.lease_token ?? req.body?.token);
   const rawSuccess = req.body?.success;
-  if (typeof rawSuccess !== 'boolean') {
-    return res.status(400).json({ error: "success must be a boolean" });
-  }
-  const success = rawSuccess;
-  const errorMessage = req.body?.error ? String(req.body.error) : null;
+  if (typeof rawSuccess !== 'boolean') return res.status(400).json({ error: "success must be a boolean" });
+  if (req.body?.error != null && typeof req.body.error !== 'string') return res.status(400).json({ error: "error must be a string or null" });
+  const errorMessage = req.body?.error || null;
+  if (errorMessage && errorMessage.length > MAX_TASK_ERROR_LENGTH) return res.status(400).json({ error: `error must be at most ${MAX_TASK_ERROR_LENGTH} characters` });
+  if (!Number.isInteger(taskId) || taskId <= 0) return res.status(400).json({ error: "task_id must be a positive integer" });
+  if (!deviceId || !leaseToken) return res.status(400).json({ error: "device_id and lease_token are required" });
+  if (!requireBoundDevice(req, res, deviceId)) return;
 
-  if (!Number.isInteger(taskId) || taskId <= 0) {
-    return res.status(400).json({ error: "task_id must be a positive integer" });
-  }
-  if (!deviceId) {
-    return res.status(400).json({ error: "device_id is required" });
-  }
-
-  const nextStatus = success ? 'Done' : 'Failed';
-
-  if (isUsingDatabase()) {
-    try {
-      const { rows } = await pool.query(
-        `UPDATE restore_commands
-         SET status = $1,
-             error_message = $2,
-             completed_at = NOW(),
-             claimed_at = COALESCE(claimed_at, NOW())
-         WHERE id = $3
-           AND user_id = $4
-           AND device_name = $5
-           AND status IN ('Pending', 'Running')
-         RETURNING id, status, error_message, completed_at`,
-        [nextStatus, errorMessage, taskId, req.user.id, deviceId]
+  const nextStatus = rawSuccess ? 'Done' : 'Failed';
+  try {
+    const { rows } = await pool.query(
+      `UPDATE restore_commands
+       SET status = $1, error_message = $2, completed_at = CURRENT_TIMESTAMP,
+           lease_expires_at = NULL
+       WHERE id = $3 AND user_id = $4 AND device_name = $5 AND status = 'Running'
+          AND lease_token = $6
+       RETURNING id, status, error_message, completed_at`,
+      [nextStatus, errorMessage, taskId, req.user.id, deviceId, leaseToken]
+    );
+    if (!rows[0]) {
+      const existing = await pool.query(
+        `SELECT id, status, error_message, completed_at, lease_token FROM restore_commands
+         WHERE id = $1 AND user_id = $2 AND device_name = $3`,
+        [taskId, req.user.id, deviceId]
       );
-
-      if (rows.length === 0) {
-        return res.status(409).json({ error: "Task not found, already finished, or device mismatch" });
+      const task = existing.rows[0];
+      if (task?.lease_token === leaseToken && task.status === nextStatus && (task.error_message || null) === errorMessage) {
+        return res.json({ success: true, task });
       }
-
-      await writeSyncLog(
-        req.user.id,
-        deviceId,
-        success ? 'Success' : 'Error',
-        success ? `Task #${taskId} completed` : `Task #${taskId} failed: ${errorMessage || 'Unknown error'}`
-      );
-
-      return res.json({ success: true, task: rows[0] });
-    } catch (err) {
-      console.error('❌ Complete task error:', err);
-      return res.status(500).json({ error: "Database error" });
+      return res.status(409).json({ error: "Lease is missing, expired, rotated, or task is already finished" });
     }
+    await writeSyncLog(req.user.id, deviceId, rawSuccess ? 'Success' : 'Error', rawSuccess ? `Task #${taskId} completed` : `Task #${taskId} failed: ${errorMessage || 'Unknown error'}`);
+    return res.json({ success: true, task: rows[0] });
+  } catch (err) {
+    console.error('❌ Complete task error:', err);
+    return res.status(500).json({ error: "Database error" });
   }
-
-  const task = restoreCommands.find((c: any) => c.id === taskId && c.userId === req.user.id && c.deviceName === deviceId);
-  if (!task) {
-    return res.status(404).json({ error: "Task not found" });
-  }
-  if (task.status !== 'Pending' && task.status !== 'Running') {
-    return res.status(409).json({ error: "Task is already finished" });
-  }
-
-  task.status = nextStatus;
-  task.errorMessage = errorMessage;
-  task.completedAt = new Date().toISOString();
-  task.claimedAt = task.claimedAt || new Date().toISOString();
-  return res.json({ success: true, task });
 });
 
 syncRouter.post("/api/sync/push", authenticateToken, upload.single("savefile"), async (req: any, res) => {
@@ -353,17 +429,22 @@ syncRouter.post("/api/sync/push", authenticateToken, upload.single("savefile"), 
 
 syncRouter.post("/api/sync/restore/:gameId", authenticateToken, async (req: any, res) => {
   const gameId = parseInt(req.params.gameId);
-  const { deviceName, maxRetries } = req.body || {};
+  const { maxRetries } = req.body || {};
+  const rawDeviceName = req.body?.deviceName;
+  const deviceName = rawDeviceName == null || rawDeviceName === '' ? null : parseDeviceId(rawDeviceName);
   const normalizedMaxRetries = Number.isInteger(maxRetries) ? Math.max(0, Math.min(maxRetries, 10)) : 2;
 
   if (Number.isNaN(gameId)) {
     return res.status(400).json({ error: "Invalid game id" });
   }
+  if (rawDeviceName != null && rawDeviceName !== '' && !deviceName) {
+    return res.status(400).json({ error: "deviceName must be a non-empty string of at most 255 characters" });
+  }
 
   if (isUsingDatabase()) {
     try {
       const { rows } = await pool.query(`
-        SELECT g.id AS game_id, g.game_name, s.id AS save_id, s.version
+        SELECT g.id AS game_id, g.game_name, s.id AS save_id, s.version, s.custom_file_path
         FROM games g
         LEFT JOIN saves s ON s.game_id = g.id
         WHERE g.id = $1 AND g.user_id = $2
@@ -381,10 +462,10 @@ syncRouter.post("/api/sync/restore/:gameId", authenticateToken, async (req: any,
       }
 
       const insertRes = await pool.query(
-        `INSERT INTO restore_commands (user_id, game_id, save_id, game_name, device_name, status, max_retries)
-         VALUES ($1, $2, $3, $4, $5, 'Pending', $6)
-         RETURNING id, game_name, save_id, status, created_at, device_name, retry_count, max_retries`,
-        [req.user.id, row.game_id, row.save_id, row.game_name, deviceName || null, normalizedMaxRetries]
+        `INSERT INTO restore_commands (user_id, game_id, save_id, game_name, device_name, save_path, status, max_retries)
+         VALUES ($1, $2, $3, $4, $5, $6, 'Pending', $7)
+         RETURNING id, game_name, save_id, save_path, status, created_at, device_name, retry_count, max_retries`,
+        [req.user.id, row.game_id, row.save_id, row.game_name, deviceName || null, row.custom_file_path || null, normalizedMaxRetries]
       );
 
       return res.json({
@@ -410,6 +491,7 @@ syncRouter.post("/api/sync/restore/:gameId", authenticateToken, async (req: any,
     saveId: latest.id,
     gameName: game.gameName,
     deviceName: deviceName || null,
+    savePath: latest.customFilePath || null,
     status: 'Pending',
     createdAt: new Date().toISOString(),
     claimedAt: null,
@@ -457,7 +539,7 @@ syncRouter.get("/api/sync/commands", authenticateToken, async (req: any, res) =>
         createdAt: r.created_at,
         retryCount: r.retry_count,
         maxRetries: r.max_retries,
-        downloadUrl: `${req.protocol}://${req.get('host')}/api/save/download/${r.save_id}`,
+        downloadUrl: saveDownloadUrl(r.save_id),
       })));
     } catch (err) {
       res.status(500).json({ error: "Database error" });
@@ -473,75 +555,25 @@ syncRouter.get("/api/sync/commands", authenticateToken, async (req: any, res) =>
       ...c,
       retryCount: c.retryCount ?? 0,
       maxRetries: c.maxRetries ?? 2,
-      downloadUrl: `${req.protocol}://${req.get('host')}/api/save/download/${c.saveId}`,
+      downloadUrl: saveDownloadUrl(c.saveId),
     }));
 
   res.json(result);
 });
 
 syncRouter.post("/api/sync/commands/:id/claim", authenticateToken, async (req: any, res) => {
-  const commandId = parseInt(req.params.id);
-  const deviceName = (req.body?.deviceName as string | undefined)?.trim();
-
-  if (Number.isNaN(commandId)) {
-    return res.status(400).json({ error: "Invalid command id" });
-  }
-
-  if (isUsingDatabase()) {
-    try {
-      const { rows } = await pool.query(
-        `UPDATE restore_commands
-         SET status = 'Running',
-             claimed_at = COALESCE(claimed_at, NOW())
-         WHERE id = $1
-           AND user_id = $2
-           AND status = 'Pending'
-           AND ($3::text IS NULL OR device_name IS NULL OR device_name = $3)
-         RETURNING id, game_id, save_id, game_name, status, claimed_at, retry_count, max_retries`,
-        [commandId, req.user.id, deviceName || null]
-      );
-
-      if (rows.length === 0) {
-        return res.status(409).json({ error: "Command is not pending, not found, or device mismatch" });
-      }
-
-      return res.json({ success: true, command: rows[0] });
-    } catch (err) {
-      return res.status(500).json({ error: "Database error" });
-    }
-  }
-
-  const command = restoreCommands.find(c => c.id === commandId && c.userId === req.user.id);
-  if (!command) return res.status(404).json({ error: "Command not found" });
-  if (command.status !== 'Pending') {
-    return res.status(409).json({ error: "Command is not pending" });
-  }
-  if (deviceName && command.deviceName && command.deviceName !== deviceName) {
-    return res.status(409).json({ error: "Command device mismatch" });
-  }
-
-  command.status = 'Running';
-  command.claimedAt = command.claimedAt || new Date().toISOString();
-  return res.json({ success: true, command });
+  return res.status(410).json({ error: "Legacy claim endpoint removed; use GET /api/task" });
 });
 
 syncRouter.get("/api/sync/restore-status", authenticateToken, async (req: any, res) => {
   if (isUsingDatabase()) {
     try {
-      await pool.query(
-        `UPDATE restore_commands
-         SET status = 'Timeout',
-             error_message = COALESCE(error_message, 'Command timed out'),
-             completed_at = NOW()
-         WHERE user_id = $1
-           AND status = 'Running'
-            AND claimed_at < datetime('now', '-' || $2 || ' minutes')`,
-        [req.user.id, RUNNING_TIMEOUT_MINUTES]
-      );
-
       const { rows } = await pool.query(
-        `SELECT id, game_id, save_id, game_name, status, device_name, error_message,
-                retry_count, max_retries, created_at, claimed_at, completed_at
+        `SELECT id, game_id, save_id, game_name,
+                CASE WHEN status = 'Running' AND (lease_expires_at IS NULL OR lease_expires_at <= CURRENT_TIMESTAMP)
+                     THEN 'Timeout' ELSE status END AS display_status,
+                device_name, error_message, retry_count, max_retries, created_at, claimed_at,
+                lease_expires_at, completed_at
          FROM (
            SELECT rc.*, ROW_NUMBER() OVER (
              PARTITION BY rc.game_id ORDER BY rc.created_at DESC, rc.id DESC
@@ -560,33 +592,20 @@ syncRouter.get("/api/sync/restore-status", authenticateToken, async (req: any, r
         gameId: r.game_id,
         saveId: r.save_id,
         gameName: r.game_name,
-        status: r.status,
+        status: r.display_status,
         deviceName: r.device_name,
         errorMessage: r.error_message,
         retryCount: r.retry_count,
         maxRetries: r.max_retries,
         createdAt: r.created_at,
         claimedAt: r.claimed_at,
+        leaseExpiresAt: r.lease_expires_at,
         completedAt: r.completed_at,
       })));
     } catch (err) {
       return res.status(500).json({ error: "Database error" });
     }
   }
-
-  const now = Date.now();
-  restoreCommands.forEach((command) => {
-    if (
-      command.userId === req.user.id &&
-      command.status === 'Running' &&
-      command.claimedAt &&
-      now - new Date(command.claimedAt).getTime() > RUNNING_TIMEOUT_MINUTES * 60 * 1000
-    ) {
-      command.status = 'Timeout';
-      command.errorMessage = command.errorMessage || 'Command timed out';
-      command.completedAt = new Date().toISOString();
-    }
-  });
 
   const latestByGame = new Map<number, any>();
   const sorted = [...restoreCommands].sort((a, b) => {
@@ -613,9 +632,9 @@ syncRouter.post("/api/sync/commands/:id/cancel", authenticateToken, async (req: 
     try {
       const { rows } = await pool.query(
         `UPDATE restore_commands
-         SET status = 'Cancelled',
-             error_message = COALESCE(error_message, 'Cancelled by user'),
-             completed_at = NOW()
+          SET status = 'Cancelled',
+              error_message = COALESCE(error_message, 'Cancelled by user'),
+              completed_at = NOW(), lease_token = NULL, lease_expires_at = NULL
          WHERE id = $1 AND user_id = $2 AND status IN ('Pending', 'Running')
          RETURNING id, status, error_message, completed_at`,
         [commandId, req.user.id]
@@ -637,6 +656,8 @@ syncRouter.post("/api/sync/commands/:id/cancel", authenticateToken, async (req: 
   command.status = 'Cancelled';
   command.errorMessage = command.errorMessage || 'Cancelled by user';
   command.completedAt = new Date().toISOString();
+  command.leaseToken = null;
+  command.leaseExpiresAt = null;
   return res.json({ success: true, command });
 });
 
@@ -652,12 +673,15 @@ syncRouter.post("/api/sync/commands/:id/retry", authenticateToken, async (req: a
         `UPDATE restore_commands
          SET status = 'Pending',
              error_message = NULL,
-             claimed_at = NULL,
+              claimed_at = NULL,
+              lease_token = NULL,
+              lease_expires_at = NULL,
              completed_at = NULL,
              retry_count = retry_count + 1
          WHERE id = $1
            AND user_id = $2
-           AND status IN ('Failed', 'Timeout', 'Cancelled')
+           AND (status IN ('Failed', 'Timeout', 'Cancelled') OR
+                (status = 'Running' AND (lease_expires_at IS NULL OR lease_expires_at <= CURRENT_TIMESTAMP)))
            AND retry_count < max_retries
          RETURNING id, status, retry_count, max_retries`,
         [commandId, req.user.id]
@@ -681,59 +705,15 @@ syncRouter.post("/api/sync/commands/:id/retry", authenticateToken, async (req: a
   command.status = 'Pending';
   command.errorMessage = null;
   command.claimedAt = null;
+  command.leaseToken = null;
+  command.leaseExpiresAt = null;
   command.completedAt = null;
   command.retryCount = retryCount + 1;
   return res.json({ success: true, command });
 });
 
 syncRouter.post("/api/sync/commands/:id/ack", authenticateToken, async (req: any, res) => {
-  const commandId = parseInt(req.params.id);
-  const { status, errorMessage } = req.body || {};
-
-  if (Number.isNaN(commandId)) {
-    return res.status(400).json({ error: "Invalid command id" });
-  }
-
-  const allowedStatuses = ['Done', 'Failed', 'Timeout', 'Cancelled'];
-  if (!allowedStatuses.includes(status)) {
-    return res.status(400).json({ error: "status must be Done, Failed, Timeout, or Cancelled" });
-  }
-
-  if (isUsingDatabase()) {
-    try {
-      const { rows } = await pool.query(
-        `UPDATE restore_commands
-         SET status = $1,
-             error_message = $2,
-             claimed_at = COALESCE(claimed_at, NOW()),
-             completed_at = NOW()
-         WHERE id = $3 AND user_id = $4 AND status IN ('Pending', 'Running')
-         RETURNING id, status, error_message, completed_at`,
-        [status, errorMessage || null, commandId, req.user.id]
-      );
-
-      if (rows.length === 0) {
-        return res.status(404).json({ error: "Command not found" });
-      }
-
-      return res.json({ success: true, command: rows[0] });
-    } catch (err) {
-      return res.status(500).json({ error: "Database error" });
-    }
-  }
-
-  const command = restoreCommands.find(c => c.id === commandId && c.userId === req.user.id);
-  if (!command) return res.status(404).json({ error: "Command not found" });
-  if (command.status !== 'Pending' && command.status !== 'Running') {
-    return res.status(409).json({ error: "Command is already finished" });
-  }
-
-  command.status = status;
-  command.errorMessage = errorMessage || null;
-  command.claimedAt = command.claimedAt || new Date().toISOString();
-  command.completedAt = new Date().toISOString();
-
-  res.json({ success: true, command });
+  return res.status(410).json({ error: "Legacy acknowledgement endpoint removed; use POST /api/done" });
 });
 
 syncRouter.get("/api/sync/pull", authenticateToken, (req: any, res) => {
@@ -752,11 +732,12 @@ syncRouter.get("/api/sync/pull", authenticateToken, (req: any, res) => {
 
 const HEARTBEAT_ONLINE_MINUTES = 2;
 
-syncRouter.post("/api/sync/heartbeat", authenticateToken, async (req: any, res) => {
-  const deviceName = (req.body?.deviceName ?? "").toString().trim();
+syncRouter.post("/api/sync/heartbeat", authenticateToken, requireApiKey, async (req: any, res) => {
+  const deviceName = parseDeviceId(req.body?.deviceName);
   if (!deviceName) {
-    return res.status(400).json({ error: "deviceName is required" });
+    return res.status(400).json({ error: "deviceName must be a non-empty string of at most 255 characters" });
   }
+  if (!requireBoundDevice(req, res, deviceName)) return;
 
   if (isUsingDatabase()) {
     try {

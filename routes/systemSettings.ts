@@ -11,13 +11,19 @@ import { writeAudit } from "../utils/audit.js";
 import { compactJsonPreview, extractAiText, parseSseAiText } from "../utils/aiResponse.js";
 import { assertUploadComplete, getTempUploadDir, removeUploadSession, uploadSessions, writeUploadChunk } from "../utils/uploads.js";
 import { UploadSession } from "../database/types.js";
+import {
+  AGENT_FILENAME,
+  AGENT_SETTINGS_KEY,
+  AgentReleaseMetadata,
+  assertAgentVersion,
+  publishAgentRelease,
+  validateAgentReleaseMetadata,
+} from "../utils/agent-release.js";
 
 export const settingsRouter = Router();
 
-const WINDOWS_AGENT_FILENAME = "Cloudsave.exe";
-const WINDOWS_AGENT_SETTINGS_KEY = "windowsAgent";
-const WINDOWS_AGENT_DIR = path.join(UPLOADS_DIR_PATH, "agent");
-const WINDOWS_AGENT_PATH = path.join(WINDOWS_AGENT_DIR, WINDOWS_AGENT_FILENAME);
+const WINDOWS_AGENT_FILENAME = AGENT_FILENAME;
+const WINDOWS_AGENT_SETTINGS_KEY = AGENT_SETTINGS_KEY;
 
 const uploadAgentFile = (req: any, res: any, next: any) => {
   upload.any()(req, res, (err: any) => {
@@ -85,8 +91,29 @@ const DEFAULT_SETTINGS = {
   ui: { compactMode: false, language: "vi", showAdvancedStats: true },
   technical: { smtpHost: "", smtpPort: 587, smtpSecure: false, backupEnabled: false },
   ai: { enabled: false, provider: "9router", apiKey: "", model: "cx/gpt-5.5", botName: "Mây Mặn", baseUrl: "https://api.9router.com/v1", humorLevel: "funny" },
-  windowsAgent: { filename: WINDOWS_AGENT_FILENAME, version: "", size: 0, updatedAt: null, available: false }
+  windowsAgent: { filename: WINDOWS_AGENT_FILENAME, version: "", size: 0, sha256: "", releasePath: "", downloadUrl: "", updatedAt: null, available: false }
 };
+
+async function persistAgentMetadata(metadata: AgentReleaseMetadata, userId: number | null) {
+  if (!isUsingDatabase()) return;
+  await pool.query(
+    `INSERT INTO system_settings (key, value_json, updated_by, updated_at)
+     VALUES ($1, $2::jsonb, $3, NOW())
+     ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json, updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
+    [WINDOWS_AGENT_SETTINGS_KEY, JSON.stringify(metadata), userId]
+  );
+}
+
+async function publishUploadedAgent(sourcePath: string, originalName: string, version: string, userId: number | null, expectedSize?: number) {
+  return publishAgentRelease({
+    sourcePath,
+    uploadsDir: UPLOADS_DIR_PATH,
+    originalName,
+    version,
+    expectedSize,
+    persistMetadata: (metadata) => persistAgentMetadata(metadata, userId),
+  });
+}
 
 async function getStoredAiSettings() {
   if (!isUsingDatabase()) return DEFAULT_SETTINGS.ai;
@@ -110,10 +137,11 @@ settingsRouter.get('/api/system/settings', authenticateToken, async (_req: any, 
     data.drive = { ...DEFAULT_SETTINGS.drive, ...(data.drive || {}) };
     data.ai = { ...DEFAULT_SETTINGS.ai, ...(data.ai || {}) };
     if (data.ai.apiKey) data.ai.apiKey = '********';
+    const verifiedAgent = await validateAgentReleaseMetadata(UPLOADS_DIR_PATH, data.windowsAgent);
     data.windowsAgent = {
       ...DEFAULT_SETTINGS.windowsAgent,
-      ...(data.windowsAgent || {}),
-      available: fs.existsSync(WINDOWS_AGENT_PATH),
+      ...(verifiedAgent?.metadata || {}),
+      available: Boolean(verifiedAgent),
     };
     res.json(data);
   } catch (err: any) {
@@ -123,7 +151,7 @@ settingsRouter.get('/api/system/settings', authenticateToken, async (_req: any, 
 
 settingsRouter.put('/api/system/settings', authenticateToken, isAdmin, async (req: any, res) => {
   const payload = req.body || {};
-  const keys = ['security', 'sync', 'drive', 'ui', 'technical', 'ai', WINDOWS_AGENT_SETTINGS_KEY];
+  const keys = ['security', 'sync', 'drive', 'ui', 'technical', 'ai'];
   if (!isUsingDatabase()) return res.json({ success: true, settings: { ...DEFAULT_SETTINGS, ...payload } });
 
   try {
@@ -225,50 +253,11 @@ settingsRouter.post('/api/system/agent/windows', authenticateToken, isAdmin, upl
   }
 
   try {
-    if (!fs.existsSync(WINDOWS_AGENT_DIR)) fs.mkdirSync(WINDOWS_AGENT_DIR, { recursive: true });
-    const nextAgentPath = path.join(WINDOWS_AGENT_DIR, `${WINDOWS_AGENT_FILENAME}.next`);
-    const backupAgentPath = path.join(WINDOWS_AGENT_DIR, `${WINDOWS_AGENT_FILENAME}.bak`);
-
-    if (fs.existsSync(nextAgentPath)) fs.unlinkSync(nextAgentPath);
-    fs.renameSync(file.path, nextAgentPath);
-
-    if (fs.existsSync(backupAgentPath)) fs.unlinkSync(backupAgentPath);
-    if (fs.existsSync(WINDOWS_AGENT_PATH)) fs.renameSync(WINDOWS_AGENT_PATH, backupAgentPath);
-
-    try {
-      fs.renameSync(nextAgentPath, WINDOWS_AGENT_PATH);
-      if (fs.existsSync(backupAgentPath)) fs.unlinkSync(backupAgentPath);
-    } catch (replaceErr) {
-      if (fs.existsSync(backupAgentPath) && !fs.existsSync(WINDOWS_AGENT_PATH)) {
-        fs.renameSync(backupAgentPath, WINDOWS_AGENT_PATH);
-      }
-      throw replaceErr;
-    }
-
-    const stat = fs.statSync(WINDOWS_AGENT_PATH);
-    const metadata = {
-      filename: WINDOWS_AGENT_FILENAME,
-      originalName: file.originalname,
-      version,
-      size: stat.size,
-      updatedAt: new Date().toISOString(),
-      available: true,
-    };
-
-    if (isUsingDatabase()) {
-      await pool.query(
-        `INSERT INTO system_settings (key, value_json, updated_by, updated_at)
-         VALUES ($1, $2::jsonb, $3, NOW())
-         ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json, updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
-        [WINDOWS_AGENT_SETTINGS_KEY, JSON.stringify(metadata), req.user?.id || null]
-      );
-    }
+    assertAgentVersion(version);
+    const metadata = await publishUploadedAgent(file.path, file.originalname, version, req.user?.id || null, file.size);
 
     await writeAudit(req.user?.id || null, 'UPDATE', 'windows_agent', {
-      filename: WINDOWS_AGENT_FILENAME,
-      originalName: file.originalname,
-      version,
-      size: stat.size,
+      ...metadata,
     });
 
     res.json({ success: true, windowsAgent: metadata });
@@ -287,6 +276,11 @@ settingsRouter.post('/api/system/agent/windows/upload/init', authenticateToken, 
   }
   if (!Number.isFinite(fileSize) || fileSize <= 0) return res.status(400).json({ error: 'File Agent không hợp lệ' });
   if (fileSize > MAX_FILE_SIZE) return res.status(413).json({ error: 'File Agent vượt quá giới hạn upload của server' });
+  try {
+    assertAgentVersion(version);
+  } catch (err: any) {
+    return res.status(err.status || 400).json({ error: err.message });
+  }
 
   try {
     const sessionId = `agent_${req.user.id}_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`;
@@ -331,45 +325,19 @@ settingsRouter.post('/api/system/agent/windows/upload/finalize', authenticateTok
     return res.status(404).json({ error: 'Phiên upload Agent không tồn tại hoặc đã hết hạn' });
   }
 
-  const nextAgentPath = path.join(WINDOWS_AGENT_DIR, `${WINDOWS_AGENT_FILENAME}.next`);
-  const backupAgentPath = path.join(WINDOWS_AGENT_DIR, `${WINDOWS_AGENT_FILENAME}.bak`);
   try {
     assertUploadComplete(session);
-    await fs.promises.mkdir(WINDOWS_AGENT_DIR, { recursive: true });
-    if (fs.existsSync(nextAgentPath)) await fs.promises.unlink(nextAgentPath);
-    await fs.promises.rename(session.tempFilePath, nextAgentPath);
-    if (fs.existsSync(backupAgentPath)) await fs.promises.unlink(backupAgentPath);
-    if (fs.existsSync(WINDOWS_AGENT_PATH)) await fs.promises.rename(WINDOWS_AGENT_PATH, backupAgentPath);
-    try {
-      await fs.promises.rename(nextAgentPath, WINDOWS_AGENT_PATH);
-      if (fs.existsSync(backupAgentPath)) await fs.promises.unlink(backupAgentPath);
-    } catch (replaceErr) {
-      if (fs.existsSync(backupAgentPath) && !fs.existsSync(WINDOWS_AGENT_PATH)) await fs.promises.rename(backupAgentPath, WINDOWS_AGENT_PATH);
-      throw replaceErr;
-    }
-
-    const stat = await fs.promises.stat(WINDOWS_AGENT_PATH);
-    const metadata = {
-      filename: WINDOWS_AGENT_FILENAME,
-      originalName: session.fileName,
-      version: session.version || '',
-      size: stat.size,
-      updatedAt: new Date().toISOString(),
-      available: true,
-    };
-    if (isUsingDatabase()) {
-      await pool.query(
-        `INSERT INTO system_settings (key, value_json, updated_by, updated_at)
-         VALUES ($1, $2::jsonb, $3, NOW())
-         ON CONFLICT (key) DO UPDATE SET value_json = EXCLUDED.value_json, updated_by = EXCLUDED.updated_by, updated_at = NOW()`,
-        [WINDOWS_AGENT_SETTINGS_KEY, JSON.stringify(metadata), req.user?.id || null]
-      );
-    }
+    const metadata = await publishUploadedAgent(
+      session.tempFilePath,
+      session.fileName,
+      session.version || '',
+      req.user?.id || null,
+      session.totalSize,
+    );
     await writeAudit(req.user?.id || null, 'UPDATE', 'windows_agent', { ...metadata, chunked: true });
     uploadSessions.delete(sessionId);
     return res.json({ success: true, windowsAgent: metadata });
   } catch (err: any) {
-    if (fs.existsSync(nextAgentPath)) await fs.promises.unlink(nextAgentPath).catch(() => undefined);
     removeUploadSession(sessionId);
     return res.status(err.status || 500).json({ error: err.message || 'Không thể hoàn tất upload CloudSave Agent' });
   }

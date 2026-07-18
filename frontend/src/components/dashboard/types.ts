@@ -16,8 +16,9 @@ export interface GameSave {
     id: number;
     version: number;
     fileSize: number;
-    createdAt: string;
-    filePath: string;
+     createdAt: string;
+     filePath: string;
+     savePath?: string | null;
   };
   versions: number;
 }

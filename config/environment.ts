@@ -28,6 +28,20 @@ export const FRONTEND_ORIGIN = envOrigin
 
 export const FRONTEND_APP_URL = process.env.FRONTEND_APP_URL || "https://luugame.fun";
 
+function parsePublicApiOrigin(value: string) {
+  const url = new URL(value);
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new Error("PUBLIC_API_ORIGIN must use http or https");
+  }
+  return url.origin;
+}
+
+export const PUBLIC_API_ORIGIN = parsePublicApiOrigin(process.env.PUBLIC_API_ORIGIN || "https://api.luugame.fun");
+const configuredTaskLeaseSeconds = Number(process.env.TASK_LEASE_SECONDS || 600);
+export const TASK_LEASE_SECONDS = Number.isFinite(configuredTaskLeaseSeconds)
+  ? Math.max(30, Math.min(86400, Math.floor(configuredTaskLeaseSeconds)))
+  : 600;
+
 export const UPLOAD_LIMIT = process.env.UPLOAD_LIMIT || "2GB";
 export const MAX_FILE_SIZE = Math.max(1, Number(process.env.MAX_FILE_SIZE_MB || 2048)) * 1024 * 1024;
 export const DRIVE_QUOTA_BYTES = Math.max(1, Number(process.env.DRIVE_QUOTA_MB || 20480)) * 1024 * 1024;

@@ -23,6 +23,8 @@ export interface Save {
   customFilePath?: string;
   version: number; 
   fileSize: number; 
+  sha256?: string;
+  originalFilename?: string;
   createdAt: string; 
 }
 

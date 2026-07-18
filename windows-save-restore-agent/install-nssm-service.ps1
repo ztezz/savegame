@@ -3,7 +3,10 @@ param(
   [int]$PollIntervalSeconds = 5,
 
   [Parameter(Mandatory = $false)]
-  [int]$RequestTimeoutSeconds = 30,
+  [int]$ConnectTimeoutSeconds = 10,
+
+  [Parameter(Mandatory = $false)]
+  [int]$ReadTimeoutSeconds = 30,
 
   [Parameter(Mandatory = $false)]
   [string]$ServiceName = "CloudSaveRestoreAgent",
@@ -14,6 +17,8 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+throw "NSSM service installation is disabled: services normally run outside the player's Windows profile and can restore to the wrong save path. Use install-task-scheduler.ps1 instead."
 
 function Write-Info([string]$Message) {
   Write-Host "[INFO] $Message" -ForegroundColor Cyan
@@ -49,7 +54,7 @@ Ensure-Path $LogDir
 & $NssmPath set $ServiceName AppRotateOnline 1
 & $NssmPath set $ServiceName Start SERVICE_AUTO_START
 
-& $NssmPath set $ServiceName AppEnvironmentExtra "POLL_INTERVAL_SECONDS=$PollIntervalSeconds" "REQUEST_TIMEOUT_SECONDS=$RequestTimeoutSeconds"
+& $NssmPath set $ServiceName AppEnvironmentExtra "POLL_INTERVAL_SECONDS=$PollIntervalSeconds" "CONNECT_TIMEOUT_SECONDS=$ConnectTimeoutSeconds" "READ_TIMEOUT_SECONDS=$ReadTimeoutSeconds"
 
 Write-Info "Đã cấu hình service $ServiceName"
 Start-Service -Name $ServiceName
