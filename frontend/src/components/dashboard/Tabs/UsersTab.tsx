@@ -10,6 +10,8 @@ import { API_ORIGIN } from '../../../utils/api';
 
 interface UsersTabProps {
   users: UserAccount[];
+  loading?: boolean;
+  error?: string;
   handleOpenUserModal: (user?: UserAccount) => void;
   handleDeleteUser: (id: number) => Promise<void> | void;
   handleToggleStatus?: (userId: number, status: 'Active' | 'Locked') => Promise<void> | void;
@@ -26,7 +28,7 @@ const formatBytes = (bytes: number) => {
 
 const formatQuota = (quota?: number | null) => quota ? `${(quota / 1024).toFixed(quota >= 1024 ? 1 : 2)} GB` : 'Mặc định';
 
-const UsersTab: React.FC<UsersTabProps> = ({ users, handleOpenUserModal, handleDeleteUser, handleToggleStatus, handleViewDetail, onRefresh }) => {
+const UsersTab: React.FC<UsersTabProps> = ({ users, loading = false, error = '', handleOpenUserModal, handleDeleteUser, handleToggleStatus, handleViewDetail, onRefresh }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | 'Admin' | 'User'>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'Active' | 'Locked'>('all');
@@ -257,7 +259,11 @@ const UsersTab: React.FC<UsersTabProps> = ({ users, handleOpenUserModal, handleD
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50 text-slate-700">
-              {filteredUsers.map((user) => {
+              {loading ? (
+                <tr><td colSpan={8} className="px-6 py-16 text-center"><span className="mx-auto block h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-indigo-600" /><p className="mt-3 text-sm font-semibold text-slate-500">Đang tải danh sách tài khoản...</p></td></tr>
+              ) : error ? (
+                <tr><td colSpan={8} className="px-6 py-14 text-center"><p className="font-black text-rose-600">Không tải được tài khoản</p><p className="mx-auto mt-2 max-w-xl text-xs font-semibold text-slate-500">{error}</p><button onClick={onRefresh} className="mt-4 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-black text-white hover:bg-indigo-700">Thử lại</button></td></tr>
+              ) : filteredUsers.map((user) => {
                 const driveUsedBytes = Number(user.drive_used_bytes || 0);
                 const quotaBytes = user.drive_quota_mb ? Number(user.drive_quota_mb) * 1024 * 1024 : null;
                 const quotaPercent = quotaBytes ? Math.min(100, Math.round((driveUsedBytes / quotaBytes) * 100)) : null;
@@ -363,7 +369,7 @@ const UsersTab: React.FC<UsersTabProps> = ({ users, handleOpenUserModal, handleD
                   </tr>
                 );
               })}
-              {filteredUsers.length === 0 && (
+              {!loading && !error && filteredUsers.length === 0 && (
                 <tr><td colSpan={8} className="px-6 py-12 text-center text-sm font-semibold text-slate-500">Không tìm thấy tài khoản phù hợp.</td></tr>
               )}
             </tbody>

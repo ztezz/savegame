@@ -606,7 +606,7 @@ const DriveTab: React.FC = () => {
     </div>;
   };
 
-  return <div className="col-span-12 space-y-6 px-1 sm:px-0">
+  return <div className="admin-dark-surface col-span-12 space-y-6 px-1 sm:px-0">
     <DriveHeader viewMode={viewMode} trashMode={trashMode} onSetViewMode={setViewMode} onToggleTrash={() => toggleTrash(!trashMode)} />
 
     <DriveToolbar usage={usage} trashMode={trashMode} breadcrumb={breadcrumb} searchTerm={searchTerm} usagePercent={usagePercent} activePercent={activePercent} trashPercent={trashPercent} onOpenFolder={openFolder} onSetSearchTerm={setSearchTerm} onOpenFolderModal={() => setFolderModalOpen(true)} onOpenUploadModal={() => setUploadModalOpen(true)} />

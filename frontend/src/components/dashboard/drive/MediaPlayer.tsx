@@ -51,9 +51,9 @@ const MediaPlayer: React.FC<Props> = ({ src, title, type }) => {
     setMuted(media.muted);
   };
 
-  const controls = <div className="rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur">
+  const controls = <div className="rounded-3xl border border-slate-200 bg-white/95 p-4 shadow-xl backdrop-blur dark:border-slate-700 dark:bg-slate-900/95">
     <div className="mb-3 min-w-0">
-      <p className="truncate text-sm font-black text-slate-900">{title}</p>
+      <p className="truncate text-sm font-black text-slate-900 dark:text-white">{title}</p>
       <p className="text-xs font-semibold text-slate-500">{formatDuration(currentTime)} / {formatDuration(duration)}</p>
     </div>
     <input type="range" min="0" max={duration || 0} step="0.1" value={Math.min(currentTime, duration || 0)} onChange={(e) => seek(Number(e.target.value))} className="w-full accent-indigo-600" />
@@ -70,7 +70,7 @@ const MediaPlayer: React.FC<Props> = ({ src, title, type }) => {
   </div>;
 
   return <div className={type === 'video' ? 'flex min-h-[65vh] items-center justify-center' : 'flex min-h-[420px] items-center justify-center'}>
-    {type === 'video' ? <div className="w-full max-w-5xl space-y-4"><video ref={mediaRef} src={src} className="max-h-[62vh] w-full rounded-3xl bg-black shadow-2xl" onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)} onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)} onEnded={() => setPlaying(false)} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} />{controls}</div> : <div className="w-full max-w-2xl rounded-3xl bg-gradient-to-br from-indigo-50 to-violet-50 p-8 shadow-sm"><audio ref={mediaRef} src={src} onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)} onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)} onEnded={() => setPlaying(false)} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} /><div className="mb-6 flex justify-center"><div className="flex h-24 w-24 items-center justify-center rounded-full bg-white text-indigo-600 shadow-lg"><File className="h-12 w-12" /></div></div>{controls}</div>}
+    {type === 'video' ? <div className="w-full max-w-5xl space-y-4"><video ref={mediaRef} src={src} className="max-h-[62vh] w-full rounded-3xl bg-black shadow-2xl" onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)} onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)} onEnded={() => setPlaying(false)} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} />{controls}</div> : <div className="w-full max-w-2xl rounded-3xl bg-gradient-to-br from-indigo-50 to-violet-50 p-8 shadow-sm dark:from-slate-900 dark:via-indigo-950/60 dark:to-violet-950/60"><audio ref={mediaRef} src={src} onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)} onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)} onEnded={() => setPlaying(false)} onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} /><div className="mb-6 flex justify-center"><div className="flex h-24 w-24 items-center justify-center rounded-full bg-white text-indigo-600 shadow-lg dark:bg-slate-800 dark:text-indigo-300"><File className="h-12 w-12" /></div></div>{controls}</div>}
   </div>;
 };
 

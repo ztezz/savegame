@@ -183,37 +183,52 @@ usersRouter.get("/api/users/me/stats", authenticateToken, async (req: any, res) 
 usersRouter.get("/api/users", authenticateToken, isAdmin, async (req, res) => {
   if (isUsingDatabase()) {
     try {
+      const columns = await pool.query('PRAGMA table_info(users)');
+      const hasAvatar = columns.rows.some((column: any) => column.name === 'avatar_url');
       const { rows } = await pool.query(`
-        SELECT
-          u.id,
-          u.username,
-          u.display_name,
-          u.email,
-          u.role,
-          u.status,
-          u.drive_quota_mb,
-          u.avatar_url,
-          u.created_at,
-          COALESCE(df.drive_used_bytes, 0) AS drive_used_bytes,
-          COALESCE(df.drive_file_count, 0) AS drive_file_count,
-          COALESCE(sv.save_count, 0) AS save_count
-        FROM users u
-        LEFT JOIN (
-          SELECT user_id, SUM(file_size) AS drive_used_bytes, COUNT(*) AS drive_file_count
-          FROM drive_files
-          WHERE deleted_at IS NULL
-          GROUP BY user_id
-        ) df ON df.user_id = u.id
-        LEFT JOIN (
-          SELECT g.user_id, COUNT(s.id) AS save_count
-          FROM games g
-          LEFT JOIN saves s ON s.game_id = g.id
-          GROUP BY g.user_id
-        ) sv ON sv.user_id = u.id
-        ORDER BY u.id ASC
+        SELECT id, username, display_name, email, role, status, drive_quota_mb,
+               ${hasAvatar ? 'avatar_url' : 'NULL AS avatar_url'}, created_at
+        FROM users
+        ORDER BY id ASC
       `);
-      res.json(rows.map(r => ({ ...r, name: r.display_name, createdAt: r.created_at })));
+
+      const [driveResult, saveResult] = await Promise.allSettled([
+        pool.query(`
+          SELECT user_id, COALESCE(SUM(file_size), 0) AS drive_used_bytes, COUNT(*) AS drive_file_count
+          FROM drive_files WHERE deleted_at IS NULL GROUP BY user_id
+        `),
+        pool.query(`
+          SELECT g.user_id, COUNT(s.id) AS save_count
+          FROM games g LEFT JOIN saves s ON s.game_id = g.id GROUP BY g.user_id
+        `),
+      ]);
+
+      const driveByUser = new Map<number, any>();
+      if (driveResult.status === 'fulfilled') {
+        driveResult.value.rows.forEach((row: any) => driveByUser.set(Number(row.user_id), row));
+      } else {
+        console.error('Failed to load user drive stats:', driveResult.reason?.message || driveResult.reason);
+      }
+      const savesByUser = new Map<number, number>();
+      if (saveResult.status === 'fulfilled') {
+        saveResult.value.rows.forEach((row: any) => savesByUser.set(Number(row.user_id), Number(row.save_count || 0)));
+      } else {
+        console.error('Failed to load user save stats:', saveResult.reason?.message || saveResult.reason);
+      }
+
+      res.json(rows.map((row: any) => {
+        const drive = driveByUser.get(Number(row.id));
+        return {
+          ...row,
+          name: row.display_name,
+          createdAt: row.created_at,
+          drive_used_bytes: Number(drive?.drive_used_bytes || 0),
+          drive_file_count: Number(drive?.drive_file_count || 0),
+          save_count: savesByUser.get(Number(row.id)) || 0,
+        };
+      }));
     } catch (err: any) {
+      console.error('Failed to list users:', err?.message || err);
       res.status(500).json({ error: err.message });
     }
   } else {

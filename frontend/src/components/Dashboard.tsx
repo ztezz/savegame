@@ -95,6 +95,8 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
 
   // User Management State
   const [users, setUsers] = useState<UserAccount[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersError, setUsersError] = useState('');
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<UserAccount | null>(null);
   const [userUsername, setUserUsername] = useState('');
@@ -275,11 +277,20 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
 
   const fetchUsers = async () => {
     if (!isAdmin) return;
+    setUsersLoading(true);
+    setUsersError('');
     try {
-      const res = await api.get('/users');
+      const res = await api.get('/users', { timeout: 15000 });
+      if (!Array.isArray(res.data)) throw new Error('Phản hồi danh sách tài khoản không hợp lệ');
       setUsers(res.data);
-    } catch (err) {
+    } catch (err: any) {
+      const message = err.code === 'ECONNABORTED'
+        ? 'SQLite phản hồi quá chậm khi tải tài khoản.'
+        : err.response?.data?.error || err.message || 'Không tải được danh sách tài khoản.';
+      setUsersError(message);
       console.error(err);
+    } finally {
+      setUsersLoading(false);
     }
   };
 
@@ -1057,6 +1068,8 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
             <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải người dùng...</div>}>
               <UsersTab 
                 users={users}
+                loading={usersLoading}
+                error={usersError}
                 handleOpenUserModal={handleOpenUserModal}
                 handleDeleteUser={handleDeleteUser}
                 handleViewDetail={handleViewUserDetail}
