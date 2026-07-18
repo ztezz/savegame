@@ -35,7 +35,36 @@ export interface UserAccount {
   drive_used_bytes?: number | string;
   drive_file_count?: number;
   save_count?: number;
+  avatar_url?: string | null;
   createdAt: string;
+}
+
+export interface LoginHistoryItem {
+  created_at: string;
+  ip_address: string | null;
+  status: 'success' | 'failed';
+}
+
+export interface AccountStats {
+  save_count: number;
+  save_bytes: number;
+  drive_bytes: number;
+  drive_files: number;
+  device_count: number;
+  login_history: LoginHistoryItem[];
+}
+
+export interface UserDetail extends UserAccount {
+  stats: {
+    save_count: number;
+    save_bytes: number;
+    drive_bytes: number;
+    drive_files: number;
+    device_count: number;
+  };
+  devices: { device_name: string; created_at: string; last_used_at: string | null }[];
+  login_history: LoginHistoryItem[];
+  recent_games: { game_name: string; category: string; save_count: number; last_save: string | null }[];
 }
 
 export interface RestoreStatusItem {

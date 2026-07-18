@@ -109,6 +109,19 @@ function logAuthAudit(userId: number | null, action: string, detail: any) {
     console.error("Failed to write auth audit:", err?.message || err);
   });
 }
+
+async function recordLoginHistory(userId: number, req: any, status: 'success' | 'failed') {
+  try {
+    const ip = req.ip || req.socket?.remoteAddress || null;
+    const ua = req.headers?.['user-agent'] || null;
+    await pool.query(
+      'INSERT INTO login_history (user_id, ip_address, user_agent, status) VALUES ($1, $2, $3, $4)',
+      [userId, ip, ua, status]
+    );
+  } catch (_err) {
+    // Non-critical, silently ignore
+  }
+}
 authRouter.post("/api/auth/register", authRateLimit, async (req, res) => {
   const username = String(req.body?.username || '').trim();
   const password = String(req.body?.password || '');
@@ -250,6 +263,7 @@ authRouter.post("/api/auth/login", authRateLimit, async (req, res) => {
   const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
   loginFailures.delete(loginKey);
   await writeAudit(user.id, 'AUTH_LOGIN_SUCCESS', 'auth', { username, role: user.role });
+  if (isUsingDatabase()) await recordLoginHistory(user.id, req, 'success');
   res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
 });
 

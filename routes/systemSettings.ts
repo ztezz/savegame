@@ -425,20 +425,135 @@ settingsRouter.post('/api/system/storage/cleanup', authenticateToken, isAdmin, a
 });
 
 settingsRouter.get('/api/system/audit-logs', authenticateToken, isAdmin, async (req: any, res) => {
-  if (!isUsingDatabase()) return res.json([]);
+  if (!isUsingDatabase()) return res.json({ rows: [], total: 0 });
   try {
-    const limit = Math.min(Math.max(parseInt(String(req.query.limit || '50'), 10), 1), 200);
-    const { rows } = await pool.query(
-      `SELECT a.id, a.action, a.resource, a.detail_json, a.created_at, u.username
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit || '50'), 10), 1), 500);
+    const offset = Math.max(parseInt(String(req.query.offset || '0'), 10), 0);
+    const action = req.query.action ? String(req.query.action) : null;
+    const username = req.query.username ? String(req.query.username).trim() : null;
+    const resource = req.query.resource ? String(req.query.resource).trim() : null;
+    const status = req.query.status ? String(req.query.status) : null; // 'success' | 'error' | 'rejected'
+    const dateFrom = req.query.dateFrom ? String(req.query.dateFrom) : null;
+    const dateTo = req.query.dateTo ? String(req.query.dateTo) : null;
+
+    const conditions: string[] = [];
+    const params: any[] = [];
+    let p = 1;
+
+    if (action) { conditions.push(`(a.action = $${p} OR (a.detail_json->>'method') = $${p})`); params.push(action); p++; }
+    if (username) { conditions.push(`u.username ILIKE $${p}`); params.push(`%${username}%`); p++; }
+    if (resource) { conditions.push(`a.resource ILIKE $${p}`); params.push(`%${resource}%`); p++; }
+    if (dateFrom) { conditions.push(`a.created_at >= $${p}`); params.push(dateFrom); p++; }
+    if (dateTo) { conditions.push(`a.created_at <= $${p}`); params.push(dateTo + 'T23:59:59'); p++; }
+    if (status === 'success') {
+      conditions.push(`((a.detail_json->>'success')::boolean = true OR (CAST(a.detail_json->>'statusCode' AS INTEGER) BETWEEN 200 AND 399))`);
+    } else if (status === 'error') {
+      conditions.push(`((a.detail_json->>'success')::boolean = false AND (CAST(a.detail_json->>'statusCode' AS INTEGER) NOT IN (401, 403)))`);
+    } else if (status === 'rejected') {
+      conditions.push(`(CAST(a.detail_json->>'statusCode' AS INTEGER) IN (401, 403))`);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const countRes = await pool.query(
+      `SELECT COUNT(*) AS total FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id ${where}`,
+      params
+    );
+    const total = parseInt(countRes.rows[0].total, 10);
+
+    const dataRes = await pool.query(
+      `SELECT a.id, a.action, a.resource, a.detail_json, a.created_at, u.username, u.role as user_role
        FROM audit_logs a
        LEFT JOIN users u ON u.id = a.user_id
+       ${where}
        ORDER BY a.created_at DESC
-       LIMIT $1`,
-      [limit]
+       LIMIT $${p} OFFSET $${p + 1}`,
+      [...params, limit, offset]
     );
-    res.json(rows);
+
+    res.json({ rows: dataRes.rows, total, limit, offset });
   } catch (err: any) {
     res.status(500).json({ error: err.message || 'Database error' });
+  }
+});
+
+settingsRouter.get('/api/system/audit-stats', authenticateToken, isAdmin, async (req: any, res) => {
+  if (!isUsingDatabase()) return res.json({ total: 0, success: 0, error: 0, rejected: 0, topUsers: [], topActions: [], hourly: [] });
+  try {
+    const days = Math.min(parseInt(String(req.query.days || '7'), 10), 90);
+    const since = new Date(Date.now() - days * 86400000).toISOString();
+
+    const [totalRes, successRes, errorRes, rejectedRes, topUsersRes, topActionsRes, hourlyRes] = await Promise.all([
+      pool.query(`SELECT COUNT(*) AS c FROM audit_logs WHERE created_at >= $1`, [since]),
+      pool.query(`SELECT COUNT(*) AS c FROM audit_logs WHERE created_at >= $1 AND ((detail_json->>'success')::boolean = true OR (CAST(detail_json->>'statusCode' AS INTEGER) BETWEEN 200 AND 399))`, [since]),
+      pool.query(`SELECT COUNT(*) AS c FROM audit_logs WHERE created_at >= $1 AND (detail_json->>'success')::boolean = false AND (CAST(detail_json->>'statusCode' AS INTEGER) NOT IN (401,403))`, [since]),
+      pool.query(`SELECT COUNT(*) AS c FROM audit_logs WHERE created_at >= $1 AND (CAST(detail_json->>'statusCode' AS INTEGER) IN (401,403))`, [since]),
+      pool.query(
+        `SELECT u.username, COUNT(*) AS cnt FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id WHERE a.created_at >= $1 AND u.username IS NOT NULL GROUP BY u.username ORDER BY cnt DESC LIMIT 5`,
+        [since]
+      ),
+      pool.query(
+        `SELECT COALESCE(detail_json->>'method', action) AS act, COUNT(*) AS cnt FROM audit_logs WHERE created_at >= $1 GROUP BY act ORDER BY cnt DESC LIMIT 8`,
+        [since]
+      ),
+      pool.query(
+        `SELECT strftime('%Y-%m-%d %H:00', created_at) AS hour, COUNT(*) AS cnt FROM audit_logs WHERE created_at >= $1 GROUP BY hour ORDER BY hour ASC`,
+        [since]
+      ),
+    ]);
+
+    res.json({
+      total: parseInt(totalRes.rows[0].c, 10),
+      success: parseInt(successRes.rows[0].c, 10),
+      error: parseInt(errorRes.rows[0].c, 10),
+      rejected: parseInt(rejectedRes.rows[0].c, 10),
+      topUsers: topUsersRes.rows,
+      topActions: topActionsRes.rows,
+      hourly: hourlyRes.rows,
+      days,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || 'Stats error' });
+  }
+});
+
+settingsRouter.get('/api/system/audit-logs/export-csv', authenticateToken, isAdmin, async (req: any, res) => {
+  if (!isUsingDatabase()) return res.status(400).json({ error: 'Database required' });
+  try {
+    const limit = Math.min(parseInt(String(req.query.limit || '1000'), 10), 5000);
+    const dateFrom = req.query.dateFrom ? String(req.query.dateFrom) : null;
+    const dateTo = req.query.dateTo ? String(req.query.dateTo) : null;
+
+    const conditions: string[] = [];
+    const params: any[] = [];
+    let p = 1;
+    if (dateFrom) { conditions.push(`a.created_at >= $${p}`); params.push(dateFrom); p++; }
+    if (dateTo) { conditions.push(`a.created_at <= $${p}`); params.push(dateTo + 'T23:59:59'); p++; }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const { rows } = await pool.query(
+      `SELECT a.id, a.action, a.resource, a.detail_json, a.created_at, u.username
+       FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id
+       ${where} ORDER BY a.created_at DESC LIMIT $${p}`,
+      [...params, limit]
+    );
+
+    const headers = ['ID', 'Người dùng', 'Hành động', 'Tài nguyên', 'Trạng thái', 'IP', 'Thời gian'];
+    const csvRows = rows.map(r => {
+      const d = r.detail_json || {};
+      const code = d.statusCode ? Number(d.statusCode) : 0;
+      const ok = d.success ?? (code > 0 ? code < 400 : true);
+      const status = !ok ? (code === 401 || code === 403 ? 'Bị từ chối' : 'Lỗi') : 'Thành công';
+      return [r.id, r.username || 'hệ thống', d.method || r.action, r.resource, status, d.ip || '', r.created_at]
+        .map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',');
+    });
+
+    const csv = [headers.join(','), ...csvRows].join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="audit_logs_${new Date().toISOString().slice(0, 10)}.csv"`);
+    return res.send('\uFEFF' + csv);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
   }
 });
 

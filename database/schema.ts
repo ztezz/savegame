@@ -10,8 +10,18 @@ export const sqliteSchema = `
     status TEXT DEFAULT 'Active',
     password_hash TEXT NOT NULL,
     drive_quota_mb INTEGER,
+    avatar_url TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
+  CREATE TABLE IF NOT EXISTS login_history (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    ip_address TEXT,
+    user_agent TEXT,
+    status TEXT NOT NULL DEFAULT 'success',
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_login_history_user ON login_history(user_id, created_at DESC);
   CREATE TABLE IF NOT EXISTS games (
     id INTEGER PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -229,6 +239,7 @@ export async function initializeSchema() {
     pool.exec(sqliteSchema);
     await addMissingColumns("saves", { sha256: "TEXT", original_filename: "TEXT" });
     await addMissingColumns("restore_commands", { lease_token: "TEXT", lease_expires_at: "TEXT" });
+    await addMissingColumns("users", { avatar_url: "TEXT" });
     pool.exec(leaseIndexesSchema);
     await pool.query("UPDATE users SET role = 'Admin' WHERE username = 'admin' AND role != 'Admin'");
     await pool.query("UPDATE users SET display_name = username WHERE display_name IS NULL");

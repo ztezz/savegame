@@ -44,7 +44,7 @@ The backend API is hardcoded to `https://api.luugame.fun`. Optional runtime sett
 Build a versioned Windows release and SHA-256 manifest with:
 
 ```powershell
-.\build-exe.ps1 -Version 1.1.0
+.\build-exe.ps1 -Version 1.4.0
 ```
 
 3. Start the desktop agent:

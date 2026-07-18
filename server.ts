@@ -116,6 +116,11 @@ async function startServer() {
   // Audit API requests
   app.use(auditApiRequestMiddleware);
 
+  // Serve uploaded avatars statically
+  const avatarsPath = path.join(UPLOADS_DIR_PATH, "avatars");
+  if (!fs.existsSync(avatarsPath)) fs.mkdirSync(avatarsPath, { recursive: true });
+  app.use("/avatars", express.static(avatarsPath));
+
   // Routes
   app.use(authRouter);
   app.use(usersRouter);

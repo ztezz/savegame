@@ -29,6 +29,7 @@ const UploadModal = lazy(() => import('./dashboard/Modals/UploadModal'));
 const UserModal = lazy(() => import('./dashboard/Modals/UserModal'));
 const RenameGameModal = lazy(() => import('./dashboard/Modals/RenameGameModal'));
 const ChangePasswordModal = lazy(() => import('./dashboard/Modals/ChangePasswordModal'));
+const UserDetailModal = lazy(() => import('./dashboard/Modals/UserDetailModal'));
 
 // Types and Constants
 import { GameSave, UserAccount, RestoreStatusItem } from './dashboard/types';
@@ -108,6 +109,15 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [changePasswordLoading, setChangePasswordLoading] = useState(false);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('dashboardDarkMode') === '1');
+
+  // User Detail Modal State
+  const [showUserDetailModal, setShowUserDetailModal] = useState(false);
+  const [detailUserId, setDetailUserId] = useState<number | null>(null);
+
+  // Reset Password Modal State
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
+  const [resetPasswordTarget, setResetPasswordTarget] = useState<{ id: number; username: string } | null>(null);
+  const [resetPasswordValue, setResetPasswordValue] = useState('');
 
   useEffect(() => {
     localStorage.setItem('dashboardActiveTab', activeTab);
@@ -310,6 +320,47 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
       fetchUsers();
     } catch (err) {
       showToast('Xoá thất bại', 'error');
+    }
+  };
+
+  const handleViewUserDetail = (userId: number) => {
+    setDetailUserId(userId);
+    setShowUserDetailModal(true);
+  };
+
+  const handleResetPassword = (userId: number, username: string) => {
+    setResetPasswordTarget({ id: userId, username });
+    setResetPasswordValue('');
+    setShowResetPasswordModal(true);
+  };
+
+  const handleConfirmResetPassword = async () => {
+    if (!resetPasswordTarget || !resetPasswordValue) return;
+    if (resetPasswordValue.length < 6) {
+      showToast('Mật khẩu phải có ít nhất 6 ký tự', 'error');
+      return;
+    }
+    try {
+      await api.post(`/users/${resetPasswordTarget.id}/reset-password`, { newPassword: resetPasswordValue });
+      showToast(`Đã reset mật khẩu cho ${resetPasswordTarget.username}`, 'success');
+      setShowResetPasswordModal(false);
+      setResetPasswordTarget(null);
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Reset mật khẩu thất bại', 'error');
+    }
+  };
+
+  const handleDetailToggleStatus = async (userId: number, currentStatus: 'Active' | 'Locked') => {
+    const newStatus = currentStatus === 'Active' ? 'Locked' : 'Active';
+    try {
+      await api.patch(`/users/${userId}/status`, { status: newStatus });
+      fetchUsers();
+      showToast(`Đã ${newStatus === 'Active' ? 'mở khóa' : 'khóa'} tài khoản`, 'success');
+      // Refresh detail
+      setDetailUserId(null);
+      setTimeout(() => setDetailUserId(userId), 50);
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Cập nhật trạng thái thất bại', 'error');
     }
   };
 
@@ -969,6 +1020,7 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
                 currentUser={currentUser}
                 onSaveProfile={handleSaveMyProfile}
                 onOpenChangePassword={() => setShowChangePasswordModal(true)}
+                onUserUpdate={onUserUpdate}
               />
             </Suspense>
           )}
@@ -1005,6 +1057,8 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
                 users={users}
                 handleOpenUserModal={handleOpenUserModal}
                 handleDeleteUser={handleDeleteUser}
+                handleViewDetail={handleViewUserDetail}
+                onRefresh={fetchUsers}
               />
             </Suspense>
           )}
@@ -1116,6 +1170,55 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
           loading={changePasswordLoading}
         />
       </Suspense>
+
+      <Suspense fallback={null}>
+        <UserDetailModal
+          show={showUserDetailModal}
+          userId={detailUserId}
+          onClose={() => { setShowUserDetailModal(false); setDetailUserId(null); }}
+          onResetPassword={(userId, username) => {
+            setShowUserDetailModal(false);
+            handleResetPassword(userId, username);
+          }}
+          onToggleStatus={handleDetailToggleStatus}
+        />
+      </Suspense>
+
+      {/* Reset Password Modal (inline simple) */}
+      {showResetPasswordModal && resetPasswordTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+          <div className="bg-white rounded-3xl w-full max-w-sm p-8 shadow-2xl">
+            <h3 className="text-lg font-black text-slate-900 mb-1 uppercase tracking-tight">Reset mật khẩu</h3>
+            <p className="text-sm text-slate-500 mb-5">Tài khoản: <strong>{resetPasswordTarget.username}</strong></p>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-black uppercase text-slate-400 tracking-widest block mb-1">Mật khẩu mới</label>
+                <input
+                  type="password"
+                  value={resetPasswordValue}
+                  onChange={e => setResetPasswordValue(e.target.value)}
+                  placeholder="Tối thiểu 6 ký tự"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm font-semibold focus:ring-4 focus:ring-indigo-500/5 focus:border-indigo-500 outline-none"
+                />
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setShowResetPasswordModal(false); setResetPasswordTarget(null); }}
+                  className="flex-1 px-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-black text-xs uppercase"
+                >
+                  Huỷ
+                </button>
+                <button
+                  onClick={handleConfirmResetPassword}
+                  className="flex-1 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs uppercase shadow-lg"
+                >
+                  Xác nhận
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
