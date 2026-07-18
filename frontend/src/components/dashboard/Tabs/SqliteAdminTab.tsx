@@ -195,7 +195,7 @@ export default function SqliteAdminTab() {
   const resultColumns = queryResult?.rows?.length ? Object.keys(queryResult.rows[0]) : [];
   const totalPages = Math.max(1, Math.ceil((tableData?.total || 0) / (tableData?.limit || 50)));
 
-  return <div className="col-span-12 space-y-5">
+  return <div className="admin-dark-surface col-span-12 space-y-5">
     <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-end">
       <label className="min-w-0 flex-1 text-[10px] font-black uppercase tracking-widest text-slate-500">Database trên server
         <select value={selectedDatabase} onChange={(event) => setSelectedDatabase(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 font-mono text-xs font-bold normal-case tracking-normal text-slate-800 outline-none focus:border-emerald-400">

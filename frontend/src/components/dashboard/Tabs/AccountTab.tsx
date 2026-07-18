@@ -112,7 +112,7 @@ export default function AccountTab({ currentUser, onSaveProfile, onOpenChangePas
   ];
 
   return (
-    <div className="col-span-12 space-y-6">
+    <div className="admin-dark-surface col-span-12 space-y-6">
       {/* Stats Row */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {statCards.map((card) => (

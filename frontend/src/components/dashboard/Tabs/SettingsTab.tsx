@@ -286,7 +286,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
 
   const visibleSections = settingSections.filter((section) => isAdmin || !section.adminOnly);
 
-  return <div className="col-span-12 space-y-6 px-1 sm:px-0">
+  return <div className="admin-dark-surface col-span-12 space-y-6 px-1 sm:px-0">
     <div className="relative overflow-hidden rounded-3xl border border-slate-200 bg-slate-950 p-5 text-white shadow-xl shadow-slate-200/60 sm:p-7">
       <div className="absolute inset-y-0 right-0 w-1/2 bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.45),transparent_55%)]" />
       <div className="relative grid gap-6 lg:grid-cols-[1.3fr_1fr] lg:items-end">

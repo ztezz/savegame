@@ -274,7 +274,7 @@ const SystemLogsTab: React.FC<SystemLogsTabProps> = ({ currentUser }) => {
   const totalPages = Math.ceil(total / pageSize);
 
   return (
-    <div className="col-span-12 space-y-5">
+    <div className="admin-dark-surface col-span-12 space-y-5">
 
       {/* ── Stats Overview ── */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

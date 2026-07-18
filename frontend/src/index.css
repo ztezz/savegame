@@ -19,6 +19,123 @@
 }
 
 @layer utilities {
+  .dark .admin-dark-surface {
+    color-scheme: dark;
+  }
+
+  .dark .admin-dark-surface .bg-white {
+    background-color: rgb(15 23 42);
+  }
+
+  .dark .admin-dark-surface .bg-slate-50,
+  .dark .admin-dark-surface .bg-slate-50\/50,
+  .dark .admin-dark-surface .bg-slate-50\/60,
+  .dark .admin-dark-surface .bg-slate-50\/70,
+  .dark .admin-dark-surface .bg-slate-50\/80 {
+    background-color: rgb(30 41 59 / 0.72);
+  }
+
+  .dark .admin-dark-surface .bg-slate-100 {
+    background-color: rgb(51 65 85);
+  }
+
+  .dark .admin-dark-surface .border-slate-100 {
+    border-color: rgb(30 41 59);
+  }
+
+  .dark .admin-dark-surface .border-slate-200 {
+    border-color: rgb(51 65 85);
+  }
+
+  .dark .admin-dark-surface .border-slate-300 {
+    border-color: rgb(71 85 105);
+  }
+
+  .dark .admin-dark-surface .divide-slate-50 > :not(:last-child),
+  .dark .admin-dark-surface .divide-slate-100 > :not(:last-child) {
+    border-color: rgb(30 41 59);
+  }
+
+  .dark .admin-dark-surface .text-slate-900,
+  .dark .admin-dark-surface .text-slate-800 {
+    color: rgb(248 250 252);
+  }
+
+  .dark .admin-dark-surface .text-slate-700 {
+    color: rgb(226 232 240);
+  }
+
+  .dark .admin-dark-surface .text-slate-600 {
+    color: rgb(203 213 225);
+  }
+
+  .dark .admin-dark-surface .text-slate-500 {
+    color: rgb(148 163 184);
+  }
+
+  .dark .admin-dark-surface input:not([type='checkbox']):not([type='radio']),
+  .dark .admin-dark-surface textarea,
+  .dark .admin-dark-surface select {
+    border-color: rgb(51 65 85);
+    background-color: rgb(30 41 59);
+    color: rgb(241 245 249);
+  }
+
+  .dark .admin-dark-surface input::placeholder,
+  .dark .admin-dark-surface textarea::placeholder {
+    color: rgb(100 116 139);
+  }
+
+  .dark .admin-dark-surface .hover\:bg-slate-50:hover,
+  .dark .admin-dark-surface .hover\:bg-slate-50\/70:hover,
+  .dark .admin-dark-surface .hover\:bg-white:hover {
+    background-color: rgb(30 41 59);
+  }
+
+  .dark .admin-dark-surface .shadow-slate-100,
+  .dark .admin-dark-surface .shadow-slate-200,
+  .dark .admin-dark-surface .shadow-slate-200\/50,
+  .dark .admin-dark-surface .shadow-slate-200\/60 {
+    --tw-shadow-color: rgb(0 0 0 / 0.2);
+  }
+
+  .dark .fixed .bg-white {
+    background-color: rgb(15 23 42);
+  }
+
+  .dark .fixed .bg-slate-50,
+  .dark .fixed .bg-slate-100 {
+    background-color: rgb(30 41 59);
+  }
+
+  .dark .fixed .border-slate-100,
+  .dark .fixed .border-slate-200 {
+    border-color: rgb(51 65 85);
+  }
+
+  .dark .fixed .text-slate-900,
+  .dark .fixed .text-slate-800 {
+    color: rgb(248 250 252);
+  }
+
+  .dark .fixed .text-slate-700,
+  .dark .fixed .text-slate-600 {
+    color: rgb(203 213 225);
+  }
+
+  .dark .fixed input:not([type='checkbox']):not([type='radio']),
+  .dark .fixed textarea,
+  .dark .fixed select {
+    border-color: rgb(51 65 85);
+    background-color: rgb(30 41 59);
+    color: rgb(241 245 249);
+  }
+
+  .dark .fixed input::placeholder,
+  .dark .fixed textarea::placeholder {
+    color: rgb(100 116 139);
+  }
+
   .sidebar-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: rgb(71 85 105 / 0.75) transparent;

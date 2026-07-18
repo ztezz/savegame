@@ -42,7 +42,7 @@ const UserModal: React.FC<UserModalProps> = ({
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
-            className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-hidden shadow-2xl border border-white/20 flex flex-col"
+            className="admin-dark-surface flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-white/20 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
           >
             <div className="px-6 py-5 border-b border-slate-100 shrink-0">
               <div className="flex items-center justify-between gap-4">
@@ -152,7 +152,7 @@ const UserModal: React.FC<UserModalProps> = ({
               </form>
             </div>
 
-            <div className="shrink-0 border-t border-slate-100 bg-white px-6 py-4 flex gap-3">
+            <div className="flex shrink-0 gap-3 border-t border-slate-100 bg-white px-6 py-4 dark:border-slate-800 dark:bg-slate-900">
               <button 
                 type="button"
                 onClick={onClose}

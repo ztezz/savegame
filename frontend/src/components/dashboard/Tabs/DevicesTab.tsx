@@ -231,12 +231,12 @@ const DevicesTab: React.FC = () => {
       </div>
 
       {/* Hướng dẫn setup */}
-      <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-5">
-        <h3 className="font-black text-indigo-800 text-sm tracking-tight mb-2 flex items-center gap-2">
+      <div className="rounded-2xl border border-indigo-100 bg-indigo-50 p-5 dark:border-indigo-900 dark:bg-indigo-950/50">
+        <h3 className="mb-2 flex items-center gap-2 text-sm font-black tracking-tight text-indigo-800 dark:text-indigo-200">
           <Laptop className="w-4 h-4" /> CÁCH CÀI AGENT TRÊN MÁY WINDOWS
         </h3>
-        <ol className="text-xs text-indigo-700 space-y-1 list-decimal list-inside">
-          <li>Tải agent ở trên về máy, giải nén (nếu cần) rồi chạy <code className="bg-indigo-100 px-1 rounded">restore_agent.exe</code></li>
+        <ol className="list-inside list-decimal space-y-1 text-xs text-indigo-700 dark:text-indigo-300">
+          <li>Tải agent ở trên về máy, giải nén (nếu cần) rồi chạy <code className="rounded bg-indigo-100 px-1 dark:bg-indigo-900">restore_agent.exe</code></li>
           <li>Lần đầu chạy: agent tự mở trình duyệt — đăng nhập và nhấn <strong>Xác nhận</strong> để liên kết thiết bị</li>
           <li>Sau khi liên kết thành công, agent tự kết nối và chạy ngầm, đồng bộ save tự động</li>
           <li>Thiết bị sẽ hiện trong danh sách bên dưới sau khi đăng ký</li>
@@ -244,8 +244,8 @@ const DevicesTab: React.FC = () => {
       </div>
 
       {/* Form đăng ký key từ agent (primary) */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
-        <h3 className="font-black text-slate-800 text-sm tracking-tight flex items-center gap-2 mb-1">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h3 className="mb-1 flex items-center gap-2 text-sm font-black tracking-tight text-slate-800 dark:text-white">
           <div className="w-2 h-2 bg-emerald-500 rounded-sm" />
           ĐĂNG KÝ KEY TỪ AGENT
         </h3>
@@ -260,7 +260,7 @@ const DevicesTab: React.FC = () => {
               onChange={e => setImportDevice(e.target.value)}
               placeholder="DESKTOP-ABC123"
               required
-              className="text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-emerald-400 w-44"
+              className="w-44 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-emerald-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
           </div>
           <div className="flex flex-col gap-1">
@@ -270,7 +270,7 @@ const DevicesTab: React.FC = () => {
               onChange={e => setImportKey(e.target.value)}
               placeholder="64 ký tự hex..."
               required
-              className="text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-emerald-400 w-72 font-mono text-xs"
+              className="w-72 rounded-lg border border-slate-200 px-3 py-2 font-mono text-xs text-slate-800 outline-none focus:border-emerald-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
             />
           </div>
           <button
@@ -285,10 +285,10 @@ const DevicesTab: React.FC = () => {
       </div>
 
       {/* Form tạo key từ web (secondary / nâng cao) */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <button
           onClick={() => setShowGenerate(v => !v)}
-          className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-slate-50 transition-colors"
+          className="flex w-full items-center justify-between px-6 py-4 text-left transition-colors hover:bg-slate-50 dark:hover:bg-slate-800"
         >
           <span className="text-xs font-black text-slate-500 uppercase tracking-widest">
             Tạo key trong web (nâng cao)
@@ -297,9 +297,9 @@ const DevicesTab: React.FC = () => {
         </button>
 
         {showGenerate && (
-          <div className="px-6 pb-6 border-t border-slate-100">
+          <div className="border-t border-slate-100 px-6 pb-6 dark:border-slate-800">
             <p className="text-xs text-slate-500 my-3">
-              Tạo key ở đây rồi dán vào file <code className="bg-slate-100 px-1 rounded">.env</code> của agent.
+              Tạo key ở đây rồi dán vào file <code className="rounded bg-slate-100 px-1 dark:bg-slate-800 dark:text-slate-200">.env</code> của agent.
               Key chỉ hiển thị <strong>một lần</strong>.
             </p>
             <form onSubmit={handleGenerate} className="flex flex-wrap gap-3 items-end">
@@ -310,7 +310,7 @@ const DevicesTab: React.FC = () => {
                   onChange={e => setGenDevice(e.target.value)}
                   placeholder="MY_PC"
                   required
-                  className="text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400 w-44"
+                  className="w-44 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 />
               </div>
               <div className="flex flex-col gap-1">
@@ -319,7 +319,7 @@ const DevicesTab: React.FC = () => {
                   value={genNote}
                   onChange={e => setGenNote(e.target.value)}
                   placeholder="Máy văn phòng"
-                  className="text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:border-indigo-400 w-48"
+                  className="w-48 rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-800 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                 />
               </div>
               <button
@@ -333,24 +333,24 @@ const DevicesTab: React.FC = () => {
             </form>
 
             {newKey && (
-              <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-                <p className="text-xs font-black text-amber-700 uppercase tracking-widest mb-2">
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/60">
+                <p className="mb-2 text-xs font-black uppercase tracking-widest text-amber-700 dark:text-amber-300">
                   ⚠ Copy ngay — key chỉ hiển thị một lần!
                 </p>
                 <div className="flex items-center gap-2">
-                  <code className="flex-1 text-xs font-mono bg-white border border-amber-200 rounded-lg px-3 py-2 break-all select-all text-slate-800">
+                  <code className="flex-1 select-all break-all rounded-lg border border-amber-200 bg-white px-3 py-2 font-mono text-xs text-slate-800 dark:border-amber-800 dark:bg-slate-900 dark:text-amber-100">
                     {newKey}
                   </code>
                   <button
                     onClick={() => copyText(newKey)}
-                    className="p-2 rounded-lg border border-amber-300 text-amber-700 hover:bg-amber-100 transition-all"
+                    className="rounded-lg border border-amber-300 p-2 text-amber-700 transition-all hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300 dark:hover:bg-amber-900"
                     title="Copy"
                   >
                     {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                   </button>
                 </div>
                 <p className="text-[10px] text-amber-600 mt-2">
-                  Thêm vào <code className="bg-amber-100 px-1 rounded">.env</code>: <code>API_KEY={newKey}</code>
+                  Thêm vào <code className="rounded bg-amber-100 px-1 dark:bg-amber-900">.env</code>: <code>API_KEY={newKey}</code>
                 </p>
                 <button onClick={() => setNewKey(null)} className="mt-2 text-xs text-slate-400 hover:text-slate-600 underline">
                   Đã lưu, đóng lại
@@ -362,17 +362,17 @@ const DevicesTab: React.FC = () => {
       </div>
 
       {/* Danh sách keys */}
-      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-slate-100 flex items-center justify-between gap-4 flex-wrap">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-100 p-5 dark:border-slate-800">
           <div>
-            <h3 className="font-black text-slate-800 text-sm tracking-tight flex items-center gap-2">
+            <h3 className="flex items-center gap-2 text-sm font-black tracking-tight text-slate-800 dark:text-white">
               <Laptop className="w-4 h-4 text-indigo-500" />
               THIẾT BỊ ĐÃ ĐĂNG KÝ
             </h3>
             <div className="flex items-center gap-2 mt-2 text-[10px] font-black uppercase tracking-widest">
-              <span className="px-2 py-1 rounded bg-slate-100 text-slate-600">Tổng: {keys.length}</span>
-              <span className="px-2 py-1 rounded bg-emerald-50 text-emerald-700">Online: {onlineCount}</span>
-              <span className="px-2 py-1 rounded bg-slate-100 text-slate-500">Offline: {offlineCount}</span>
+              <span className="rounded bg-slate-100 px-2 py-1 text-slate-600 dark:bg-slate-800 dark:text-slate-300">Tổng: {keys.length}</span>
+              <span className="rounded bg-emerald-50 px-2 py-1 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">Online: {onlineCount}</span>
+              <span className="rounded bg-slate-100 px-2 py-1 text-slate-500 dark:bg-slate-800 dark:text-slate-400">Offline: {offlineCount}</span>
             </div>
             {selectedIds.length > 0 && (
               <p className="text-xs text-slate-500 mt-1">Đã chọn {selectedIds.length} thiết bị</p>
@@ -386,7 +386,7 @@ const DevicesTab: React.FC = () => {
                 setSelectedIds([]);
                 setPendingDeleteIds([]);
               }}
-              className="text-xs bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none text-slate-700"
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
             >
               <option value="all">Tất cả trạng thái</option>
               <option value="online">Đang online</option>
@@ -407,8 +407,8 @@ const DevicesTab: React.FC = () => {
               disabled={refreshing}
               className={`p-1.5 rounded-lg transition-all ${
                 refreshing 
-                  ? 'text-indigo-600 bg-indigo-50' 
-                  : 'text-slate-400 hover:text-indigo-600 hover:bg-slate-50'
+                  ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300'
+                  : 'text-slate-400 hover:bg-slate-50 hover:text-indigo-600 dark:hover:bg-slate-800 dark:hover:text-indigo-300'
               }`}
               title="Làm mới danh sách"
             >
@@ -422,11 +422,12 @@ const DevicesTab: React.FC = () => {
             <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
           </div>
         ) : filteredKeys.length === 0 ? (
-          <div className="p-10 text-center text-slate-400 text-sm italic">Chưa có thiết bị nào được đăng ký.</div>
+          <div className="p-10 text-center text-sm italic text-slate-400 dark:bg-slate-900">Chưa có thiết bị nào được đăng ký.</div>
         ) : (
-          <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 text-[10px] text-slate-400 uppercase tracking-widest">
-              <tr className="border-b border-slate-100">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[980px] text-left text-sm">
+            <thead className="bg-slate-50 text-[10px] uppercase tracking-widest text-slate-400 dark:bg-slate-800">
+              <tr className="border-b border-slate-100 dark:border-slate-700">
                 <th className="px-6 py-3 font-black w-12">
                   <input
                     type="checkbox"
@@ -448,9 +449,9 @@ const DevicesTab: React.FC = () => {
                 <th className="px-6 py-3 font-black text-right">Hành động</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-y divide-slate-50 dark:divide-slate-800">
               {filteredKeys.map(k => (
-                <tr key={k.id} className={`hover:bg-slate-50/70 transition-colors ${selectedIds.includes(k.id) ? 'bg-indigo-50/40' : ''}`}>
+                <tr key={k.id} className={`transition-colors hover:bg-slate-50/70 dark:hover:bg-slate-800/70 ${selectedIds.includes(k.id) ? 'bg-indigo-50/40 dark:bg-indigo-950/40' : ''}`}>
                   <td className="px-6 py-4">
                     <input
                       type="checkbox"
@@ -460,28 +461,28 @@ const DevicesTab: React.FC = () => {
                       className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                     />
                   </td>
-                  <td className="px-6 py-4 font-bold text-slate-800">{k.device_name}</td>
+                  <td className="px-6 py-4 font-bold text-slate-800 dark:text-slate-100">{k.device_name}</td>
                   <td className="px-4 py-4">
                     {k.is_online ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-black uppercase tracking-widest">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                         Online
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 border border-slate-200 text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
                         <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
                         {k.last_seen ? 'Offline' : 'Chưa kết nối'}
                       </span>
                     )}
                   </td>
-                  <td className="px-6 py-4 font-mono text-xs text-slate-500">{k.key_preview}</td>
+                  <td className="px-6 py-4 font-mono text-xs text-slate-500 dark:text-slate-400">{k.key_preview}</td>
                   <td className="px-6 py-4 text-slate-500 text-xs">{k.note || '—'}</td>
                   <td className="px-6 py-4 text-xs text-slate-400">{fmt(k.created_at)}</td>
                   <td className="px-6 py-4 text-xs text-slate-400">{fmt(k.last_used_at)}</td>
                   <td className="px-6 py-4 text-right">
                     <button
                       onClick={() => handleRevoke(k.id, k.device_name)}
-                      className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg border border-transparent hover:border-red-100 transition-all"
+                      className="rounded-lg border border-transparent p-2 text-slate-400 transition-all hover:border-red-100 hover:bg-red-50 hover:text-red-500 dark:hover:border-red-900 dark:hover:bg-red-950 dark:hover:text-red-400"
                       title="Thu hồi"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -491,6 +492,7 @@ const DevicesTab: React.FC = () => {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>
