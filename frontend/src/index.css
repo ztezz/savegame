@@ -27,6 +27,19 @@
     background-color: rgb(15 23 42);
   }
 
+  .dark .admin-dark-surface .bg-white\/80,
+  .dark .admin-dark-surface .bg-white\/85,
+  .dark .admin-dark-surface .bg-white\/90,
+  .dark .admin-dark-surface .bg-white\/95 {
+    background-color: rgb(15 23 42 / 0.9);
+  }
+
+  .dark .community-chat-pattern {
+    background-color: rgb(15 23 42) !important;
+    background-image: radial-gradient(circle at 15% 20%, rgb(99 102 241 / 0.12), transparent 28%), radial-gradient(circle at 85% 75%, rgb(14 165 233 / 0.1), transparent 28%), url('/pattern.svg') !important;
+    background-blend-mode: normal, normal, overlay !important;
+  }
+
   .dark .admin-dark-surface .bg-slate-50,
   .dark .admin-dark-surface .bg-slate-50\/50,
   .dark .admin-dark-surface .bg-slate-50\/60,

@@ -1,7 +1,9 @@
 import { Router } from "express";
 import * as path from "path";
 import * as fs from "fs";
+import jwt from "jsonwebtoken";
 import { pool, isUsingDatabase } from "../config/database.js";
+import { JWT_SECRET, PUBLIC_API_ORIGIN } from "../config/environment.js";
 import { upload, UPLOADS_DIR_PATH } from "../config/multer.js";
 import { authenticateToken } from "../middleware/auth.js";
 import { Game, Save } from "../database/types.js";
@@ -15,6 +17,13 @@ let devices: any[] = [];
 let nextId = 2;
 
 export const savesRouter = Router();
+
+const SAVE_DOWNLOAD_TOKEN_TTL = "5m";
+
+function createSaveDownloadUrl(saveId: number) {
+  const token = jwt.sign({ purpose: "save-download", saveId }, JWT_SECRET, { expiresIn: SAVE_DOWNLOAD_TOKEN_TTL });
+  return `${PUBLIC_API_ORIGIN}/api/save/download-link/${encodeURIComponent(token)}`;
+}
 
 savesRouter.post("/api/save/upload", authenticateToken, upload.single("savefile"), async (req: any, res) => {
   const { gameName, deviceName, category, customFilePath } = req.body;
@@ -214,6 +223,74 @@ savesRouter.get("/api/save/history/:gameId", authenticateToken, async (req: any,
       .sort((a, b) => b.version - a.version);
     res.json(history);
   }
+});
+
+savesRouter.post("/api/save/download/:id/link", authenticateToken, async (req: any, res) => {
+  const saveId = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(saveId) || saveId <= 0) return res.status(400).json({ error: "Invalid save ID" });
+
+  if (isUsingDatabase()) {
+    try {
+      const { rows } = await pool.query(
+        `SELECT g.user_id FROM saves s JOIN games g ON s.game_id = g.id WHERE s.id = $1`,
+        [saveId]
+      );
+      if (!rows[0]) return res.status(404).json({ error: `Save #${saveId} không tồn tại` });
+      if (rows[0].user_id !== req.user.id && req.user.role !== "Admin") return res.sendStatus(403);
+    } catch (err) {
+      console.error("Create save download link error:", err);
+      return res.status(500).json({ error: "Database error" });
+    }
+  } else {
+    const save = saves.find((item) => item.id === saveId);
+    const game = save && games.find((item) => item.id === save.gameId);
+    if (!save || !game) return res.status(404).json({ error: "Save not found" });
+    if (game.userId !== req.user.id && req.user.role !== "Admin") return res.sendStatus(403);
+  }
+
+  return res.json({ downloadUrl: createSaveDownloadUrl(saveId), expiresInSeconds: 300 });
+});
+
+savesRouter.get("/api/save/download-link/:token", async (req, res) => {
+  let saveId: number;
+  try {
+    const payload = jwt.verify(req.params.token, JWT_SECRET) as jwt.JwtPayload;
+    if (payload.purpose !== "save-download" || !Number.isInteger(payload.saveId)) throw new Error("Invalid download token");
+    saveId = payload.saveId;
+  } catch {
+    return res.status(401).json({ error: "Download link is invalid or expired" });
+  }
+
+  if (isUsingDatabase()) {
+    try {
+      const { rows } = await pool.query(`
+        SELECT s.file_path, s.version, g.game_name
+        FROM saves s
+        JOIN games g ON s.game_id = g.id
+        WHERE s.id = $1
+      `, [saveId]);
+      const save = rows[0];
+      if (!save) return res.status(404).json({ error: "Save not found" });
+
+      const filePath = path.join(UPLOADS_DIR_PATH, save.file_path);
+      if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Save file not found" });
+      return streamFileDownload(res, filePath, `${save.game_name}_v${save.version}${path.extname(save.file_path)}`, {
+        cacheControl: "private, no-store",
+      });
+    } catch (err) {
+      console.error("Save download link error:", err);
+      return res.status(500).json({ error: "Download failed" });
+    }
+  }
+
+  const save = saves.find((item) => item.id === saveId);
+  const game = save && games.find((item) => item.id === save.gameId);
+  if (!save || !game) return res.status(404).json({ error: "Save not found" });
+  const filePath = path.join(UPLOADS_DIR_PATH, save.filePath);
+  if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Save file not found" });
+  return streamFileDownload(res, filePath, `${game.gameName}_v${save.version}${path.extname(save.filePath)}`, {
+    cacheControl: "private, no-store",
+  });
 });
 
 savesRouter.get("/api/save/download/:id", authenticateToken, async (req: any, res) => {

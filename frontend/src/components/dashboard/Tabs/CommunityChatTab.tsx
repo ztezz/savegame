@@ -482,7 +482,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
     }
   };
 
-  return <motion.div initial={reduceMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="col-span-12 grid min-h-[calc(100vh-9rem)] grid-cols-1 gap-4 px-1 sm:px-0 xl:grid-cols-[280px_minmax(0,1fr)]">
+  return <motion.div initial={reduceMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="admin-dark-surface col-span-12 grid min-h-[calc(100vh-9rem)] grid-cols-1 gap-4 px-1 sm:px-0 xl:grid-cols-[280px_minmax(0,1fr)]">
     <div className="order-1 flex min-h-[680px] flex-col overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white shadow-2xl shadow-slate-200/60 xl:order-2 xl:h-[calc(100vh-9rem)]">
       <div className="relative overflow-hidden border-b border-white/10 bg-slate-950 p-5 text-white sm:p-6">
         <div className="pointer-events-none absolute -right-12 -top-20 h-48 w-48 rounded-full bg-indigo-500/30 blur-3xl" />
@@ -501,33 +501,33 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
         </div>
 
         <div className="relative mt-4 flex gap-2 overflow-x-auto pb-1 xl:hidden">
-          {rooms.map((room) => <button key={room.id} type="button" onClick={() => setActiveRoomId(room.id)} className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-black transition ${room.id === activeRoomId ? 'border-white bg-white text-slate-950 shadow-lg' : 'border-white/10 bg-white/[0.06] text-slate-300'}`}><span className="flex items-center gap-1.5"><Hash className="h-3 w-3" />{room.name}{!!unreadByRoom[room.id] && <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] text-white">{unreadByRoom[room.id]}</span>}</span></button>)}
+          {rooms.map((room) => <button key={room.id} type="button" onClick={() => setActiveRoomId(room.id)} className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-black transition ${room.id === activeRoomId ? 'border-white bg-white text-slate-950 shadow-lg dark:border-indigo-400 dark:bg-indigo-500 dark:text-white dark:shadow-none' : 'border-white/10 bg-white/[0.06] text-slate-300'}`}><span className="flex items-center gap-1.5"><Hash className="h-3 w-3" />{room.name}{!!unreadByRoom[room.id] && <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] text-white">{unreadByRoom[room.id]}</span>}</span></button>)}
         </div>
       </div>
 
       <div className="border-b border-slate-100 bg-white px-4 py-3">
-        <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-sm transition focus-within:border-indigo-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-100/60">
+        <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-sm transition focus-within:border-indigo-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-100/60 dark:focus-within:bg-slate-800 dark:focus-within:ring-indigo-950">
           <Search className="h-4 w-4 text-slate-400" />
-          <input value={chatSearch} onChange={(e) => setChatSearch(e.target.value)} placeholder="Tìm trong phòng chat..." className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-700 outline-none placeholder:text-slate-400" />
-          {chatSearch && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-indigo-600">{visibleMessages.length}</span>}
-          {chatSearch && <button type="button" aria-label="Xóa tìm kiếm" onClick={() => setChatSearch('')} className="rounded-lg p-1 text-slate-400 hover:bg-slate-200"><X className="h-3.5 w-3.5" /></button>}
+          <input value={chatSearch} onChange={(e) => setChatSearch(e.target.value)} placeholder="Tìm trong phòng chat..." className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-100 dark:caret-indigo-400" />
+          {chatSearch && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300">{visibleMessages.length}</span>}
+          {chatSearch && <button type="button" aria-label="Xóa tìm kiếm" onClick={() => setChatSearch('')} className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"><X className="h-3.5 w-3.5" /></button>}
         </div>
       </div>
 
-      {pinnedMessages.length > 0 && <div className="border-b border-amber-100 bg-amber-50 px-4 py-3">
-        <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-amber-700"><Pin className="h-3.5 w-3.5" />Tin ghim</div>
+      {pinnedMessages.length > 0 && <div className="border-b border-amber-100 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/50">
+        <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-amber-700 dark:text-amber-300"><Pin className="h-3.5 w-3.5" />Tin ghim</div>
         <div className="space-y-2">
-          {pinnedMessages.map((item) => <div key={item.id} className="flex items-start justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm shadow-sm">
+          {pinnedMessages.map((item) => <div key={item.id} className="flex items-start justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm shadow-sm dark:bg-slate-800">
             <div className="min-w-0">
-              <p className="text-xs font-black text-amber-700">{item.display_name || item.username}</p>
-              <p className="truncate font-semibold text-slate-700">{item.message}</p>
+              <p className="text-xs font-black text-amber-700 dark:text-amber-300">{item.display_name || item.username}</p>
+              <p className="truncate font-semibold text-slate-700 dark:text-slate-200">{item.message}</p>
             </div>
-            {isAdmin && <button type="button" onClick={() => togglePin(item)} className="rounded-full p-1 text-amber-600 hover:bg-amber-100"><X className="h-4 w-4" /></button>}
+            {isAdmin && <button type="button" onClick={() => togglePin(item)} className="rounded-full p-1 text-amber-600 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900"><X className="h-4 w-4" /></button>}
           </div>)}
         </div>
       </div>}
 
-      <div ref={listRef} onScroll={handleScroll} className="relative flex-1 space-y-4 overflow-y-auto p-4 sm:p-6" style={chatPattern}>
+      <div ref={listRef} onScroll={handleScroll} className="community-chat-pattern relative flex-1 space-y-4 overflow-y-auto p-4 sm:p-6" style={chatPattern}>
         {loading ? <div className="rounded-2xl bg-white/80 px-4 py-3 text-sm font-semibold text-slate-500 shadow-sm backdrop-blur">Đang tải tin nhắn...</div> : visibleMessages.length === 0 ? <div className="h-full flex items-center justify-center text-center text-slate-600 text-sm"><div className="rounded-3xl bg-white/80 px-6 py-5 shadow-sm backdrop-blur">{chatSearch ? 'Không tìm thấy tin nhắn phù hợp.' : 'Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện.'}</div></div> : visibleMessages.map((item, index) => {
           const mine = item.user_id === currentUser?.id || item.username === currentUser?.username;
           const isAi = item.sender_type === 'ai' || item.role === 'AI';
@@ -538,32 +538,32 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
             {showDay && <div className="sticky top-2 z-10 flex justify-center"><span className="rounded-full bg-white/80 px-3 py-1 text-[11px] font-black text-sky-700 shadow-sm backdrop-blur">{formatDay(item.created_at)}</span></div>}
             <motion.div initial={reduceMotion ? false : { opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.25 }} className={`flex items-end gap-2 ${mine ? 'justify-end' : 'justify-start'}`}>
             {!mine && <div className={`mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[10px] font-black text-white shadow-sm ${isAi ? 'bg-gradient-to-br from-violet-500 to-indigo-600' : 'bg-slate-800'}`}>{isAi ? <Bot className="h-4 w-4" /> : avatarLabel(item)}</div>}
-            <div className={`relative max-w-[88%] px-4 py-3 shadow-sm sm:max-w-[72%] ${mine ? 'rounded-2xl rounded-br-md bg-indigo-600 text-white shadow-indigo-100' : isAi ? 'rounded-2xl rounded-bl-md border border-violet-100 bg-violet-50 text-slate-800' : 'rounded-2xl rounded-bl-md border border-slate-200/70 bg-white text-slate-800'}`}>
+            <div className={`relative max-w-[88%] px-4 py-3 shadow-sm sm:max-w-[72%] ${mine ? 'rounded-2xl rounded-br-md bg-indigo-600 text-white shadow-indigo-100 dark:shadow-none' : isAi ? 'rounded-2xl rounded-bl-md border border-violet-100 bg-violet-50 text-slate-800 dark:border-violet-800 dark:bg-violet-950/70 dark:text-violet-100' : 'rounded-2xl rounded-bl-md border border-slate-200/70 bg-white text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100'}`}>
               <div className="flex items-center justify-between gap-3 mb-1">
-                <span className={`text-xs font-black ${mine ? 'text-indigo-100' : isAi ? 'text-violet-700' : 'text-slate-700'}`}>{item.display_name || item.username}{item.role === 'Admin' && <Shield className="inline w-3 h-3 ml-1" />}{isAi && <span className="ml-1 rounded-full bg-violet-200 px-1.5 py-0.5 text-[9px] text-violet-800">AI</span>}</span>
+                <span className={`text-xs font-black ${mine ? 'text-indigo-100' : isAi ? 'text-violet-700 dark:text-violet-300' : 'text-slate-700 dark:text-slate-200'}`}>{item.display_name || item.username}{item.role === 'Admin' && <Shield className="inline w-3 h-3 ml-1" />}{isAi && <span className="ml-1 rounded-full bg-violet-200 px-1.5 py-0.5 text-[9px] text-violet-800 dark:bg-violet-900 dark:text-violet-200">AI</span>}</span>
                 <span className={`text-[10px] ${mine ? 'text-indigo-100' : 'text-slate-400'}`}>{item.pinned_at && <Pin className="mr-1 inline h-3 w-3" />}{new Date(item.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
-              {reply && <div className={`mb-2 rounded-xl border-l-4 px-3 py-2 text-xs ${mine ? 'border-white/70 bg-white/10 text-sky-50' : 'border-sky-300 bg-sky-50 text-slate-600'}`}>
+              {reply && <div className={`mb-2 rounded-xl border-l-4 px-3 py-2 text-xs ${mine ? 'border-white/70 bg-white/10 text-sky-50' : 'border-sky-300 bg-sky-50 text-slate-600 dark:border-sky-700 dark:bg-slate-900/70 dark:text-slate-300'}`}>
                 <p className="font-black">{reply.display_name || reply.username}</p>
                 <p className="line-clamp-2">{reply.message}</p>
               </div>}
               {editingMessageId === item.id ? <div className="space-y-2">
-                <textarea value={editingText} onChange={(e) => setEditingText(e.target.value)} maxLength={1000} rows={3} className="w-full resize-none rounded-xl border border-sky-100 bg-white/90 px-3 py-2 text-sm text-slate-800 outline-none focus:border-sky-300" />
+                <textarea value={editingText} onChange={(e) => setEditingText(e.target.value)} maxLength={1000} rows={3} className="w-full resize-none rounded-xl border border-sky-100 bg-white/90 px-3 py-2 text-sm text-slate-800 caret-indigo-500 outline-none focus:border-sky-300 dark:border-slate-600 dark:bg-slate-900 dark:text-white dark:caret-indigo-400" />
                 <div className="flex gap-2">
                   <button type="button" onClick={saveEdit} className="rounded-lg bg-emerald-500 px-3 py-1 text-xs font-black text-white">Lưu</button>
-                  <button type="button" onClick={() => { setEditingMessageId(null); setEditingText(''); }} className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">Hủy</button>
+                  <button type="button" onClick={() => { setEditingMessageId(null); setEditingText(''); }} className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-black text-slate-600 dark:bg-slate-700 dark:text-slate-200">Hủy</button>
                 </div>
               </div> : <p className="text-sm whitespace-pre-wrap break-words leading-6">{item.message}</p>}
               {item.edited_at && <p className={`mt-1 text-[10px] font-semibold ${mine ? 'text-sky-100' : 'text-slate-400'}`}>đã sửa</p>}
               {item.reactions_json && Object.keys(item.reactions_json).length > 0 && <div className="mt-2 flex flex-wrap gap-1">
-                {Object.entries(item.reactions_json as Record<string, string[]>).map(([emoji, users]) => <button key={emoji} type="button" onClick={() => toggleReaction(item.id, emoji)} className={`rounded-full px-2 py-0.5 text-xs font-bold ${mine ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-600'}`}>{emoji} {users.length}</button>)}
+                {Object.entries(item.reactions_json as Record<string, string[]>).map(([emoji, users]) => <button key={emoji} type="button" onClick={() => toggleReaction(item.id, emoji)} className={`rounded-full px-2 py-0.5 text-xs font-bold ${mine ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200'}`}>{emoji} {users.length}</button>)}
               </div>}
               <div className="mt-2 flex flex-wrap gap-1">
                 <button type="button" onClick={() => setReplyTo(item)} className={`text-[10px] font-black ${mine ? 'text-sky-100 hover:text-white' : 'text-sky-600'}`}>Trả lời</button>
                 {((mine && !isAi) || isAdmin) && <button type="button" onClick={() => startEdit(item)} className={`text-[10px] font-black ${mine ? 'text-sky-100 hover:text-white' : 'text-slate-500'}`}>Sửa</button>}
                 {isAdmin && <button type="button" onClick={() => togglePin(item)} className={`inline-flex items-center gap-1 text-[10px] font-black ${mine ? 'text-sky-100 hover:text-white' : 'text-amber-600'}`}><Pin className="h-3 w-3" />{item.pinned_at ? 'Bỏ ghim' : 'Ghim'}</button>}
                 <button type="button" onClick={() => copyMessage(item.message)} className={`inline-flex items-center gap-1 text-[10px] font-black ${mine ? 'text-sky-100 hover:text-white' : 'text-slate-500'}`}><Copy className="h-3 w-3" />Copy</button>
-                {['👍', '😂', '❤️'].map((emoji) => <button key={emoji} type="button" onClick={() => toggleReaction(item.id, emoji)} className={`text-[11px] ${mine ? 'hover:bg-white/10' : 'hover:bg-slate-100'} rounded-full px-1`}>{emoji}</button>)}
+                {['👍', '😂', '❤️'].map((emoji) => <button key={emoji} type="button" onClick={() => toggleReaction(item.id, emoji)} className={`text-[11px] ${mine ? 'hover:bg-white/10' : 'hover:bg-slate-100 dark:hover:bg-slate-700'} rounded-full px-1`}>{emoji}</button>)}
               </div>
             </div>
             </motion.div>
@@ -571,28 +571,28 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
         })}
         {sending && <div className="flex justify-end"><div className="rounded-full bg-white/80 px-4 py-2 text-xs font-bold text-sky-700 shadow-sm backdrop-blur">Đang gửi...</div></div>}
         {Object.keys(typingUsers[activeRoomId] || {}).length > 0 && <div className="flex justify-start"><div className="rounded-full bg-white/85 px-4 py-2 text-xs font-bold text-slate-600 shadow-sm backdrop-blur">{Object.values(typingUsers[activeRoomId]).slice(0, 2).join(', ')} đang gõ...</div></div>}
-        {aiTyping && <div className="flex justify-start"><div className="rounded-full bg-amber-50 px-4 py-2 text-xs font-bold text-amber-700 shadow-sm backdrop-blur">AI đang gõ...</div></div>}
+        {aiTyping && <div className="flex justify-start"><div className="rounded-full bg-amber-50 px-4 py-2 text-xs font-bold text-amber-700 shadow-sm backdrop-blur dark:bg-amber-950/70 dark:text-amber-300">AI đang gõ...</div></div>}
         {showScrollButton && <button type="button" aria-label="Cuộn xuống tin nhắn mới nhất" onClick={scrollToBottom} className="sticky bottom-3 left-full ml-auto flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-white shadow-xl transition hover:bg-indigo-600"><ArrowDown className="h-4 w-4" /></button>}
       </div>
 
-      <form onSubmit={sendMessage} className="border-t border-slate-200 bg-white/95 p-3 backdrop-blur sm:p-4">
-        {roomLockedForUser && <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700">Phòng này đang bị khóa, chỉ admin có thể gửi tin nhắn.</div>}
-        {replyTo && <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border-l-4 border-sky-400 bg-white px-4 py-2 text-sm shadow-sm">
+      <form onSubmit={sendMessage} className="border-t border-slate-200 bg-white/95 p-3 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 sm:p-4">
+        {roomLockedForUser && <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">Phòng này đang bị khóa, chỉ admin có thể gửi tin nhắn.</div>}
+        {replyTo && <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border-l-4 border-sky-400 bg-white px-4 py-2 text-sm shadow-sm dark:bg-slate-800">
           <div className="min-w-0">
             <p className="font-black text-sky-700">Đang trả lời {replyTo.display_name || replyTo.username}</p>
             <p className="truncate text-xs text-slate-500">{replyTo.message}</p>
           </div>
-          <button type="button" onClick={() => setReplyTo(null)} className="rounded-full px-2 py-1 text-xs font-black text-slate-400 hover:bg-slate-100">Hủy</button>
+          <button type="button" onClick={() => setReplyTo(null)} className="rounded-full px-2 py-1 text-xs font-black text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">Hủy</button>
         </div>}
         <div className="relative mb-2">
-          <button type="button" onClick={() => setEmojiOpen((open) => !open)} disabled={sending} className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 transition hover:bg-indigo-50 hover:text-indigo-600 disabled:opacity-50"><Smile className="h-3.5 w-3.5" />Biểu cảm</button>
-          {emojiOpen && <div className="absolute bottom-full left-0 z-20 mb-2 flex max-w-[min(92vw,420px)] gap-2 overflow-x-auto rounded-2xl border border-sky-100 bg-white p-3 shadow-2xl shadow-sky-200/60">
-            {quickEmojis.map((emoji) => <button key={emoji} type="button" onClick={() => addEmoji(emoji)} disabled={sending} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-lg shadow-sm transition hover:scale-110 hover:bg-sky-100 disabled:opacity-50">{emoji}</button>)}
+          <button type="button" onClick={() => setEmojiOpen((open) => !open)} disabled={sending} className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 transition hover:bg-indigo-50 hover:text-indigo-600 disabled:opacity-50 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"><Smile className="h-3.5 w-3.5" />Biểu cảm</button>
+          {emojiOpen && <div className="absolute bottom-full left-0 z-20 mb-2 flex max-w-[min(92vw,420px)] gap-2 overflow-x-auto rounded-2xl border border-sky-100 bg-white p-3 shadow-2xl shadow-sky-200/60 dark:border-slate-700 dark:bg-slate-800 dark:shadow-black/40">
+            {quickEmojis.map((emoji) => <button key={emoji} type="button" onClick={() => addEmoji(emoji)} disabled={sending} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-lg shadow-sm transition hover:scale-110 hover:bg-sky-100 disabled:opacity-50 dark:bg-slate-700 dark:hover:bg-slate-600">{emoji}</button>)}
           </div>}
         </div>
-        <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-2 transition focus-within:border-indigo-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-100/60">
-          <textarea value={message} onChange={(e)=>handleMessageChange(e.target.value)} onKeyDown={handleMessageKeyDown} maxLength={1000} rows={2} disabled={roomLockedForUser} placeholder={roomLockedForUser ? 'Phòng đang bị khóa' : `Nhắn tin tới #${activeRoom?.name || 'cộng đồng'}`} className="max-h-32 min-h-12 flex-1 resize-none bg-transparent px-2 py-2 text-sm font-medium outline-none placeholder:text-slate-400 disabled:text-slate-400" />
-          <motion.button whileTap={reduceMotion ? undefined : { scale: 0.92 }} type="submit" disabled={!message.trim() || sending || roomLockedForUser} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"><Send className="h-4 w-4" /></motion.button>
+        <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-2 transition focus-within:border-indigo-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-100/60 dark:border-slate-700 dark:bg-slate-800 dark:focus-within:bg-slate-800 dark:focus-within:ring-indigo-950">
+          <textarea value={message} onChange={(e)=>handleMessageChange(e.target.value)} onKeyDown={handleMessageKeyDown} maxLength={1000} rows={2} disabled={roomLockedForUser} placeholder={roomLockedForUser ? 'Phòng đang bị khóa' : `Nhắn tin tới #${activeRoom?.name || 'cộng đồng'}`} className="max-h-32 min-h-12 flex-1 resize-none bg-transparent px-2 py-2 text-sm font-medium text-slate-800 caret-indigo-600 outline-none placeholder:text-slate-400 disabled:text-slate-400 dark:!bg-transparent dark:text-white dark:caret-indigo-400 dark:placeholder:text-slate-500" />
+          <motion.button whileTap={reduceMotion ? undefined : { scale: 0.92 }} type="submit" disabled={!message.trim() || sending || roomLockedForUser} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none dark:shadow-none dark:disabled:bg-slate-700 dark:disabled:text-slate-400"><Send className="h-4 w-4" /></motion.button>
         </div>
         <div className="mt-2 flex items-center justify-between px-1 text-[10px] font-semibold text-slate-400"><span>Enter để gửi · Shift + Enter để xuống dòng</span><span>{message.length}/1000</span></div>
       </form>
@@ -608,41 +608,41 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
           </div>
         </div>
         <div className="space-y-2">
-          {rooms.map((room) => editingRoomId === room.id ? <div key={room.id} className="rounded-2xl border border-white/10 bg-white p-3 text-slate-900">
-            <input value={roomDraft.name} onChange={(e) => setRoomDraft((current) => ({ ...current, name: e.target.value }))} maxLength={80} className="mb-2 w-full rounded-xl border border-sky-100 px-3 py-2 text-sm font-bold outline-none" />
-            <textarea value={roomDraft.description} onChange={(e) => setRoomDraft((current) => ({ ...current, description: e.target.value }))} maxLength={240} rows={2} placeholder="Mô tả phòng" className="mb-2 w-full resize-none rounded-xl border border-sky-100 px-3 py-2 text-xs font-semibold outline-none" />
+          {rooms.map((room) => editingRoomId === room.id ? <div key={room.id} className="rounded-2xl border border-white/10 bg-white p-3 text-slate-900 dark:bg-slate-800 dark:text-slate-100">
+            <input value={roomDraft.name} onChange={(e) => setRoomDraft((current) => ({ ...current, name: e.target.value }))} maxLength={80} className="mb-2 w-full rounded-xl border border-sky-100 px-3 py-2 text-sm font-bold outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-white" />
+            <textarea value={roomDraft.description} onChange={(e) => setRoomDraft((current) => ({ ...current, description: e.target.value }))} maxLength={240} rows={2} placeholder="Mô tả phòng" className="mb-2 w-full resize-none rounded-xl border border-sky-100 px-3 py-2 text-xs font-semibold outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-white" />
             <label className="mb-2 flex items-center gap-2 text-xs font-bold text-slate-600"><input type="checkbox" checked={roomDraft.isLocked} onChange={(e) => setRoomDraft((current) => ({ ...current, isLocked: e.target.checked }))} />Khóa phòng</label>
             <label className="mb-3 flex items-center gap-2 text-xs font-bold text-slate-600"><input type="checkbox" checked={roomDraft.aiEnabled} onChange={(e) => setRoomDraft((current) => ({ ...current, aiEnabled: e.target.checked }))} />Bật AI</label>
-            <div className="mb-3 rounded-2xl bg-white p-3">
+            <div className="mb-3 rounded-2xl bg-white p-3 dark:bg-slate-900">
               <div className="mb-2 flex items-center gap-2 text-xs font-black text-sky-700"><Bot className="h-3.5 w-3.5" />AI riêng của phòng</div>
-              <input value={roomDraft.aiBotName} onChange={(e) => setRoomDraft((current) => ({ ...current, aiBotName: e.target.value }))} maxLength={80} placeholder="Tên bot riêng" className="mb-2 w-full rounded-xl border border-sky-100 px-3 py-2 text-xs font-semibold outline-none" />
-              <select value={roomDraft.aiTone} onChange={(e) => setRoomDraft((current) => ({ ...current, aiTone: e.target.value }))} className="mb-2 w-full rounded-xl border border-sky-100 px-3 py-2 text-xs font-semibold outline-none">
+              <input value={roomDraft.aiBotName} onChange={(e) => setRoomDraft((current) => ({ ...current, aiBotName: e.target.value }))} maxLength={80} placeholder="Tên bot riêng" className="mb-2 w-full rounded-xl border border-sky-100 px-3 py-2 text-xs font-semibold outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-white" />
+              <select value={roomDraft.aiTone} onChange={(e) => setRoomDraft((current) => ({ ...current, aiTone: e.target.value }))} className="mb-2 w-full rounded-xl border border-sky-100 px-3 py-2 text-xs font-semibold outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-white">
                 <option value="default">Mặc định vui vẻ</option>
                 <option value="support">Hỗ trợ kỹ thuật</option>
                 <option value="fun">Vui nhộn</option>
                 <option value="serious">Nghiêm túc</option>
                 <option value="gaming">Game thủ</option>
               </select>
-              <textarea value={roomDraft.aiPrompt} onChange={(e) => setRoomDraft((current) => ({ ...current, aiPrompt: e.target.value }))} maxLength={1500} rows={4} placeholder="Prompt riêng. Để trống sẽ dùng tone bên trên." className="mb-2 w-full resize-none rounded-xl border border-sky-100 px-3 py-2 text-xs font-semibold outline-none" />
+              <textarea value={roomDraft.aiPrompt} onChange={(e) => setRoomDraft((current) => ({ ...current, aiPrompt: e.target.value }))} maxLength={1500} rows={4} placeholder="Prompt riêng. Để trống sẽ dùng tone bên trên." className="mb-2 w-full resize-none rounded-xl border border-sky-100 px-3 py-2 text-xs font-semibold outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-white" />
               <label className="mb-3 flex items-center gap-2 text-xs font-bold text-slate-600"><input type="checkbox" checked={roomDraft.aiAutoReply} onChange={(e) => setRoomDraft((current) => ({ ...current, aiAutoReply: e.target.checked }))} />AI tự trả lời mọi tin nhắn</label>
-              <div className="rounded-xl border border-violet-100 bg-violet-50 p-2.5">
+              <div className="rounded-xl border border-violet-100 bg-violet-50 p-2.5 dark:border-violet-800 dark:bg-violet-950/60">
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-[11px] font-black text-violet-700">Bộ nhớ dài hạn</span>
                   <div className="flex gap-1.5">
-                    <button type="button" onClick={() => loadRoomMemory(room.id)} disabled={memoryLoading} className="rounded-lg bg-white px-2 py-1 text-[10px] font-black text-violet-600 disabled:opacity-50">{memoryLoading ? 'Đang tải' : roomMemory ? 'Làm mới' : 'Xem'}</button>
-                    {roomMemory?.summary && <button type="button" onClick={() => clearRoomMemory(room.id)} className="rounded-lg bg-red-50 px-2 py-1 text-[10px] font-black text-red-600">Xóa</button>}
+                    <button type="button" onClick={() => loadRoomMemory(room.id)} disabled={memoryLoading} className="rounded-lg bg-white px-2 py-1 text-[10px] font-black text-violet-600 disabled:opacity-50 dark:bg-slate-800 dark:text-violet-300">{memoryLoading ? 'Đang tải' : roomMemory ? 'Làm mới' : 'Xem'}</button>
+                    {roomMemory?.summary && <button type="button" onClick={() => clearRoomMemory(room.id)} className="rounded-lg bg-red-50 px-2 py-1 text-[10px] font-black text-red-600 dark:bg-red-950 dark:text-red-300">Xóa</button>}
                   </div>
                 </div>
                 {roomMemory && <div className="mt-2">
-                  <p className="max-h-36 overflow-y-auto whitespace-pre-wrap rounded-lg bg-white p-2 text-[10px] leading-relaxed text-slate-600">{roomMemory.summary || 'AI chưa tạo bộ nhớ cho phòng này.'}</p>
+                  <p className="max-h-36 overflow-y-auto whitespace-pre-wrap rounded-lg bg-white p-2 text-[10px] leading-relaxed text-slate-600 dark:bg-slate-800 dark:text-slate-300">{roomMemory.summary || 'AI chưa tạo bộ nhớ cho phòng này.'}</p>
                   {roomMemory.updated_at && <p className="mt-1 text-[9px] font-bold text-violet-400">Cập nhật {new Date(roomMemory.updated_at).toLocaleString('vi-VN')}</p>}
                 </div>}
               </div>
             </div>
             <div className="flex gap-2">
               <button type="button" onClick={() => saveRoom(room.id)} className="flex-1 rounded-xl bg-sky-500 px-3 py-2 text-xs font-black text-white">Lưu</button>
-              <button type="button" onClick={() => setEditingRoomId(null)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-500">Hủy</button>
-              {room.id !== 1 && <button type="button" onClick={() => deleteRoom(room.id)} className="rounded-xl bg-red-50 px-3 py-2 text-red-600"><Trash2 className="h-3.5 w-3.5" /></button>}
+              <button type="button" onClick={() => setEditingRoomId(null)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-500 dark:bg-slate-700 dark:text-slate-200">Hủy</button>
+              {room.id !== 1 && <button type="button" onClick={() => deleteRoom(room.id)} className="rounded-xl bg-red-50 px-3 py-2 text-red-600 dark:bg-red-950 dark:text-red-300"><Trash2 className="h-3.5 w-3.5" /></button>}
             </div>
           </div> : <div key={room.id} className={`rounded-xl border transition ${room.id === activeRoomId ? 'border-indigo-400/30 bg-indigo-500/20 text-white' : 'border-transparent text-slate-400 hover:bg-white/[0.06] hover:text-white'}`}>
             <button type="button" onClick={() => setActiveRoomId(room.id)} className="w-full px-4 py-3 text-left">

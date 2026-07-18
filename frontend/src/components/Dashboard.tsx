@@ -642,24 +642,13 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
   const handleDownload = async (saveId: number) => {
     console.log('📥 handleDownload clicked, saveId:', saveId);
     try {
-      const response = await api.get(`/save/download/${saveId}`, { responseType: 'blob' });
-      const contentDisposition = response.headers['content-disposition'];
-      let fileName = `save_${saveId}.zip`;
-      if (contentDisposition) {
-        const fileNameMatch = contentDisposition.match(/filename="?(.+)"?/i);
-        if (fileNameMatch && fileNameMatch[1]) {
-          fileName = fileNameMatch[1];
-        }
-      }
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const response = await api.post(`/save/download/${saveId}/link`);
       const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', fileName);
+      link.href = response.data.downloadUrl;
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.URL.revokeObjectURL(url);
-      showToast('✅ Tải xuống thành công!', 'success');
+      showToast('✅ Đã tạo link tải xuống!', 'success');
     } catch (err: any) {
       console.error('❌ Download error:', {
         status: err.response?.status,
