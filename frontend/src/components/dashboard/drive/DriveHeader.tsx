@@ -12,7 +12,7 @@ type Props = {
 const DriveHeader: React.FC<Props> = ({ viewMode, trashMode, onSetViewMode, onToggleTrash }) => {
   const reduceMotion = useReducedMotion();
 
-  return <motion.div initial={reduceMotion ? false : { opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }} className="relative overflow-hidden rounded-[2rem] bg-slate-950 p-6 text-white shadow-2xl shadow-slate-300/50 sm:p-8">
+  return <motion.div initial={reduceMotion ? false : { opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }} className="relative overflow-hidden rounded-[2rem] bg-slate-950 p-6 text-white shadow-2xl shadow-slate-300/50 dark:shadow-black/30 sm:p-8">
     <motion.div animate={reduceMotion ? undefined : { x: [0, -24, 0], y: [0, 18, 0], scale: [1, 1.08, 1] }} transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }} className="pointer-events-none absolute -right-16 -top-24 h-72 w-72 rounded-full bg-indigo-500/30 blur-3xl" />
     <motion.div animate={reduceMotion ? undefined : { x: [0, 30, 0], y: [0, -12, 0], scale: [1, 1.12, 1] }} transition={{ duration: 15, repeat: Infinity, ease: 'easeInOut' }} className="pointer-events-none absolute -bottom-28 left-1/3 h-56 w-56 rounded-full bg-cyan-400/20 blur-3xl" />
     <div className="relative flex flex-col gap-7 xl:flex-row xl:items-end xl:justify-between">

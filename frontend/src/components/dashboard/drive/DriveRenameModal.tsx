@@ -31,11 +31,11 @@ const DriveRenameModal: React.FC<Props> = ({ open, itemType, value, loading = fa
       </div>
       <div className="space-y-4 p-6">
         <label className="block text-sm font-bold text-slate-900">Tên mới
-          <input autoFocus value={value} onChange={(event) => onChange(event.target.value)} disabled={loading} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:bg-slate-50" />
+          <input autoFocus value={value} onChange={(event) => onChange(event.target.value)} disabled={loading} className="mt-2 w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:bg-slate-50 dark:focus:ring-indigo-950" />
         </label>
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <button type="button" onClick={onClose} disabled={loading} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50 disabled:opacity-50">Hủy</button>
-          <button type="submit" disabled={loading || !value.trim()} className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-100 transition hover:bg-indigo-700 disabled:opacity-50">{loading ? 'Đang lưu...' : 'Lưu tên mới'}</button>
+          <button type="submit" disabled={loading || !value.trim()} className="rounded-xl bg-indigo-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-100 transition hover:bg-indigo-700 disabled:opacity-50 dark:shadow-none">{loading ? 'Đang lưu...' : 'Lưu tên mới'}</button>
         </div>
       </div>
     </form>

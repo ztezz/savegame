@@ -314,7 +314,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
 
     <div className="rounded-3xl border border-slate-200 bg-white p-3 shadow-sm">
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-6">
-        {visibleSections.map((section) => <button key={section.key} type="button" onClick={() => setActiveSection(section.key)} className={`rounded-2xl border p-4 text-left transition ${activeSection === section.key ? 'border-indigo-200 bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'border-slate-100 bg-slate-50 text-slate-700 hover:border-indigo-100 hover:bg-white'}`}>
+        {visibleSections.map((section) => <button key={section.key} type="button" onClick={() => setActiveSection(section.key)} className={`rounded-2xl border p-4 text-left transition ${activeSection === section.key ? 'border-indigo-200 bg-indigo-600 text-white shadow-lg shadow-indigo-100 dark:shadow-none' : 'border-slate-100 bg-slate-50 text-slate-700 hover:border-indigo-100 hover:bg-white'}`}>
           <div className="flex items-center gap-2">
             <section.icon className={`h-4 w-4 ${activeSection === section.key ? 'text-white' : 'text-indigo-600'}`} />
             <span className="text-xs font-black uppercase tracking-widest">{section.label}</span>
@@ -346,7 +346,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
             <span className="font-bold text-slate-900">Session timeout</span>
             <span className="mt-1 block text-xs text-slate-500">Tự đăng xuất sau số phút không hoạt động.</span>
             <div className="mt-3 flex items-center gap-2">
-              <input className="w-full rounded-xl border border-slate-200 px-3 py-2 font-bold text-slate-800 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:bg-slate-50" type="number" min="5" value={settings.security.sessionTimeoutMinutes} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,security:{...s.security,sessionTimeoutMinutes:parseInt(e.target.value||'0',10)}}))} />
+              <input className="w-full rounded-xl border border-slate-200 px-3 py-2 font-bold text-slate-800 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:bg-slate-50 dark:focus:ring-indigo-950" type="number" min="5" value={settings.security.sessionTimeoutMinutes} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,security:{...s.security,sessionTimeoutMinutes:parseInt(e.target.value||'0',10)}}))} />
               <span className="text-xs font-bold text-slate-400">phút</span>
             </div>
           </label>
@@ -386,7 +386,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
             </label>
             <label className="mt-4 block text-sm font-bold text-slate-900">Chu kỳ backend
               <div className="mt-2 flex items-center gap-2">
-                <input className="w-full rounded-xl border border-slate-200 px-3 py-2 font-bold outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:bg-slate-50" type="number" min="1" value={settings.sync.syncIntervalMinutes} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,sync:{...s.sync,syncIntervalMinutes:parseInt(e.target.value||'0',10)}}))} />
+                <input className="w-full rounded-xl border border-slate-200 px-3 py-2 font-bold outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:bg-slate-50 dark:focus:ring-indigo-950" type="number" min="1" value={settings.sync.syncIntervalMinutes} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,sync:{...s.sync,syncIntervalMinutes:parseInt(e.target.value||'0',10)}}))} />
                 <span className="text-xs font-bold text-slate-400">phút</span>
               </div>
             </label>
@@ -401,7 +401,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
               <input className="h-5 w-5 accent-indigo-600" type="checkbox" checked={autoSyncEnabled} onChange={(e)=>setAutoSyncEnabled(e.target.checked)} />
             </label>
             {autoSyncEnabled && <div className="mt-4 space-y-3">
-              <button type="button" onClick={handleSelectDirectory} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700"><FolderOpen className="h-4 w-4" />Chọn thư mục</button>
+              <button type="button" onClick={handleSelectDirectory} className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-black text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 dark:shadow-none"><FolderOpen className="h-4 w-4" />Chọn thư mục</button>
               <p className="rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-600">{directoryHandle ? directoryHandle.name : 'Chưa chọn thư mục'}</p>
               <div>
                 <div className="mb-2 flex items-center justify-between text-xs font-bold text-slate-500"><span>Chu kỳ trình duyệt</span><span>{syncInterval} phút</span></div>
@@ -416,7 +416,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><Server className="h-4 w-4 text-indigo-600" />Kỹ thuật</h3>
         <p className="mt-1 text-xs text-slate-500">Thông số tích hợp hệ thống.</p>
         <label className="mt-5 block text-sm font-bold text-slate-900">SMTP host
-          <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 font-semibold outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:bg-slate-50" value={settings.technical.smtpHost || ''} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,technical:{...s.technical,smtpHost:e.target.value}}))} placeholder="smtp.example.com" />
+          <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 font-semibold outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:bg-slate-50 dark:focus:ring-indigo-950" value={settings.technical.smtpHost || ''} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,technical:{...s.technical,smtpHost:e.target.value}}))} placeholder="smtp.example.com" />
         </label>
       </div>
     </div>
@@ -432,7 +432,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       </div>
       <label className="mt-5 block text-sm font-bold text-slate-900">Dung lượng Drive mặc định
         <div className="mt-2 flex items-center gap-2">
-          <input className="w-full rounded-xl border border-slate-200 px-3 py-2 font-bold outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:bg-slate-50" type="number" min="1" max="1048576" value={settings.drive?.defaultQuotaMb || 20480} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,drive:{...s.drive,defaultQuotaMb:Math.max(1, parseInt(e.target.value || '1', 10))}}))} />
+          <input className="w-full rounded-xl border border-slate-200 px-3 py-2 font-bold outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:bg-slate-50 dark:focus:ring-indigo-950" type="number" min="1" max="1048576" value={settings.drive?.defaultQuotaMb || 20480} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,drive:{...s.drive,defaultQuotaMb:Math.max(1, parseInt(e.target.value || '1', 10))}}))} />
           <span className="text-xs font-bold text-slate-400">MB</span>
         </div>
       </label>
@@ -482,13 +482,13 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           </div>
           <p className="mt-3 text-sm font-black">{agentFile ? agentFile.name : 'Kéo thả file CloudSave Agent vào đây'}</p>
           <p className="mt-1 text-xs">{agentFile ? `${formatFileSize(agentFile.size)} · Sẵn sàng tải lên` : 'Chỉ nhận một file Windows .exe'}</p>
-          {!agentUploading && <label htmlFor="agent-file-upload" className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-black text-indigo-600 shadow-sm ring-1 ring-slate-200 transition hover:bg-indigo-50"><FolderOpen className="h-4 w-4" />{agentFile ? 'Chọn file khác' : 'Chọn file'}</label>}
+          {!agentUploading && <label htmlFor="agent-file-upload" className="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-white px-4 py-2 text-xs font-black text-indigo-600 shadow-sm ring-1 ring-slate-200 transition hover:bg-indigo-50 dark:shadow-none dark:ring-slate-700"><FolderOpen className="h-4 w-4" />{agentFile ? 'Chọn file khác' : 'Chọn file'}</label>}
           {agentFile && !agentUploading && <button type="button" onClick={() => setAgentFile(null)} className="absolute right-3 top-3 rounded-lg p-2 text-slate-400 hover:bg-white hover:text-rose-500" aria-label="Bỏ file đã chọn"><X className="h-4 w-4" /></button>}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
           <label className="block text-sm font-bold text-slate-900">Phiên bản phát hành
-            <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50" placeholder="Ví dụ: 1.0.1" value={agentVersion} disabled={agentUploading} onChange={(event)=>setAgentVersion(event.target.value)} />
+            <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-3 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950" placeholder="Ví dụ: 1.0.1" value={agentVersion} disabled={agentUploading} onChange={(event)=>setAgentVersion(event.target.value)} />
           </label>
           <div className="flex flex-col gap-2 sm:flex-row">
             {agentUploading && <button type="button" onClick={cancelAgentUpload} className="rounded-xl border border-rose-200 px-4 py-3 text-sm font-black text-rose-600 transition hover:bg-rose-50">Hủy upload</button>}
@@ -551,7 +551,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         </div>
         <div className="mt-4 grid grid-cols-1 gap-3 border-t border-slate-100 pt-4 md:grid-cols-[1fr_auto_auto] md:items-end">
           <label className="block text-sm font-bold text-slate-900">Giữ lại số tin mới nhất
-            <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50" type="number" min="0" max="10000" value={chatKeepLatest} onChange={(e)=>setChatKeepLatest(Math.max(0, Math.min(parseInt(e.target.value || '0', 10), 10000)))} />
+            <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950" type="number" min="0" max="10000" value={chatKeepLatest} onChange={(e)=>setChatKeepLatest(Math.max(0, Math.min(parseInt(e.target.value || '0', 10), 10000)))} />
           </label>
           <button type="button" onClick={cleanupChat} disabled={chatManaging} className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-black text-white disabled:opacity-50">Dọn tin cũ</button>
           <button type="button" onClick={clearChat} disabled={chatManaging} className="rounded-xl bg-red-600 px-5 py-3 text-sm font-black text-white disabled:opacity-50">Xóa toàn bộ</button>
@@ -611,13 +611,13 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       <h3 className="text-sm font-black uppercase tracking-widest text-slate-800">Khóa chat người dùng</h3>
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1.2fr_160px_1fr_auto] lg:items-end">
         <label className="block text-sm font-bold text-slate-900">Người dùng
-          <select className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50" value={banUserId} onChange={(e)=>setBanUserId(e.target.value)}>
+          <select className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950" value={banUserId} onChange={(e)=>setBanUserId(e.target.value)}>
             <option value="">Chọn người dùng</option>
             {chatUsers.filter((user:any) => user.role !== 'Admin').map((user:any) => <option key={user.id} value={user.id}>{user.display_name || user.username} ({user.username})</option>)}
           </select>
         </label>
         <label className="block text-sm font-bold text-slate-900">Thời hạn
-          <select className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50" value={banDurationMinutes} onChange={(e)=>setBanDurationMinutes(parseInt(e.target.value, 10))}>
+          <select className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950" value={banDurationMinutes} onChange={(e)=>setBanDurationMinutes(parseInt(e.target.value, 10))}>
             <option value={15}>15 phút</option>
             <option value={60}>1 giờ</option>
             <option value={1440}>1 ngày</option>
@@ -626,7 +626,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           </select>
         </label>
         <label className="block text-sm font-bold text-slate-900">Lý do
-          <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50" value={banReason} onChange={(e)=>setBanReason(e.target.value)} placeholder="Spam, vi phạm nội quy..." />
+          <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950" value={banReason} onChange={(e)=>setBanReason(e.target.value)} placeholder="Spam, vi phạm nội quy..." />
         </label>
         <button type="button" onClick={banChatUser} disabled={!banUserId || chatManaging} className="rounded-xl bg-amber-600 px-5 py-3 text-sm font-black text-white disabled:opacity-50">Khóa chat</button>
       </div>
@@ -649,7 +649,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
         <p className="font-black text-slate-900">Sẵn sàng lưu thay đổi</p>
         <p className="text-xs text-slate-500">Các thay đổi chỉ áp dụng sau khi bấm lưu.</p>
       </div>
-      <button onClick={saveSettings} disabled={saving} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 disabled:opacity-50 sm:w-auto"><Save className="h-4 w-4" />{saving ? 'Đang lưu...' : 'Lưu cài đặt hệ thống'}</button>
+      <button onClick={saveSettings} disabled={saving} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 disabled:opacity-50 dark:shadow-none sm:w-auto"><Save className="h-4 w-4" />{saving ? 'Đang lưu...' : 'Lưu cài đặt hệ thống'}</button>
     </div>}
 
   </div>;

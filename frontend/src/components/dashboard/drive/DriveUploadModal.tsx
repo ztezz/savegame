@@ -61,7 +61,7 @@ const DriveUploadModal: React.FC<Props> = ({ open, uploading, dragging, progress
           <p className="mt-1 truncate text-sm font-bold text-slate-800">{selectedUploadFiles.length > 0 ? `${selectedUploadFiles.length} file${selectedUploadFiles[0]?.relativePath ? ` · ${selectedUploadFiles[0].relativePath}` : ''}` : 'Chưa chọn file nào'}</p>
         </div>
 
-        <input className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50" value={note} disabled={uploading} onChange={(e)=>onSetNote(e.target.value)} placeholder="Ghi chú file (không bắt buộc)" />
+        <input className="w-full border border-slate-200 rounded-xl px-3 py-3 text-sm outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950" value={note} disabled={uploading} onChange={(e)=>onSetNote(e.target.value)} placeholder="Ghi chú file (không bắt buộc)" />
 
         {uploading && <div className="space-y-2">
           <div className="h-2 bg-slate-100 rounded-full overflow-hidden">

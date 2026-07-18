@@ -58,7 +58,7 @@ const MediaPlayer: React.FC<Props> = ({ src, title, type }) => {
     </div>
     <input type="range" min="0" max={duration || 0} step="0.1" value={Math.min(currentTime, duration || 0)} onChange={(e) => seek(Number(e.target.value))} className="w-full accent-indigo-600" />
     <div className="mt-3 flex items-center gap-3">
-      <button type="button" onClick={togglePlay} className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-100">
+      <button type="button" onClick={togglePlay} className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-100 dark:shadow-none">
         {playing ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5 translate-x-0.5" />}
       </button>
       <button type="button" onClick={toggleMute} className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50">

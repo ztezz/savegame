@@ -26,7 +26,7 @@ const DriveFolderModal: React.FC<Props> = ({ open, folderName, breadcrumb, onCha
       </div>
       <div className="p-5 space-y-4">
         <label className="block text-sm font-bold text-slate-900">Tên thư mục
-          <input autoFocus className="mt-2 w-full border border-slate-200 rounded-xl px-3 py-3 text-sm outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50" value={folderName} onChange={(e)=>onChangeFolderName(e.target.value)} onKeyDown={(e)=>{ if (e.key === 'Enter' && folderName.trim()) onCreate(); }} placeholder="Ví dụ: Setup game, Tài liệu, Ảnh..." />
+          <input autoFocus className="mt-2 w-full border border-slate-200 rounded-xl px-3 py-3 text-sm outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950" value={folderName} onChange={(e)=>onChangeFolderName(e.target.value)} onKeyDown={(e)=>{ if (e.key === 'Enter' && folderName.trim()) onCreate(); }} placeholder="Ví dụ: Setup game, Tài liệu, Ảnh..." />
         </label>
         <div className="rounded-2xl bg-slate-50 p-4 text-xs text-slate-500">
           Vị trí: <span className="font-bold text-slate-700">{breadcrumb.length ? breadcrumb.map((folder) => folder.name).join(' / ') : 'Drive của tôi'}</span>

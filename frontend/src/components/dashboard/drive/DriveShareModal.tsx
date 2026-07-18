@@ -52,7 +52,7 @@ const DriveShareModal: React.FC<Props> = ({ file, open, shareUrl, expiresInHours
         </div>
 
         <label className="block text-sm font-bold text-slate-900">Thời hạn link
-          <select value={expiresInHours} onChange={(e) => onSetExpiresInHours(e.target.value)} className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50">
+          <select value={expiresInHours} onChange={(e) => onSetExpiresInHours(e.target.value)} className="mt-2 w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 dark:focus:ring-indigo-950">
             {expiryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
         </label>
@@ -70,7 +70,7 @@ const DriveShareModal: React.FC<Props> = ({ file, open, shareUrl, expiresInHours
             {file.share_token && <button type="button" onClick={onUnshare} disabled={saving} className="rounded-xl border border-red-100 px-4 py-3 text-sm font-black text-red-600 transition hover:bg-red-50 disabled:opacity-50">Tắt chia sẻ</button>}
             {shareUrl && <a href={shareUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-700 transition hover:bg-slate-50"><ExternalLink className="h-4 w-4" />Mở thử</a>}
           </div>
-          <button type="button" onClick={onCreateOrUpdate} disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-100 transition hover:bg-indigo-700 disabled:opacity-50"><Link className="h-4 w-4" />{saving ? 'Đang lưu...' : file.share_token ? 'Cập nhật link' : 'Tạo link'}</button>
+          <button type="button" onClick={onCreateOrUpdate} disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-black text-white shadow-lg shadow-indigo-100 transition hover:bg-indigo-700 disabled:opacity-50 dark:shadow-none"><Link className="h-4 w-4" />{saving ? 'Đang lưu...' : file.share_token ? 'Cập nhật link' : 'Tạo link'}</button>
         </div>
       </div>
     </div>

@@ -4,9 +4,10 @@ import multer from "multer";
 import * as path from "path";
 import * as fs from "fs";
 import crypto from "crypto";
+import jwt from "jsonwebtoken";
 import { pool, isUsingDatabase } from "../config/database.js";
 import { authenticateToken } from "../middleware/auth.js";
-import { DRIVE_QUOTA_BYTES, MAX_FILE_SIZE } from "../config/environment.js";
+import { DRIVE_QUOTA_BYTES, JWT_SECRET, MAX_FILE_SIZE, PUBLIC_API_ORIGIN } from "../config/environment.js";
 import { UPLOADS_DIR_PATH } from "../config/multer.js";
 import { streamFileDownload } from "../utils/download.js";
 import { assertUploadComplete, getTempUploadDir, removeUploadSession, uploadSessions, writeUploadChunk } from "../utils/uploads.js";
@@ -15,6 +16,12 @@ import { UploadSession } from "../database/types.js";
 export const driveRouter = Router();
 
 const DRIVE_DIR = path.join(UPLOADS_DIR_PATH, "drive");
+const DRIVE_DOWNLOAD_TOKEN_TTL = "5m";
+
+const createDriveDownloadUrl = (fileId: number) => {
+  const token = jwt.sign({ purpose: "drive-download", fileId }, JWT_SECRET, { expiresIn: DRIVE_DOWNLOAD_TOKEN_TTL });
+  return `${PUBLIC_API_ORIGIN}/api/drive/download-link/${encodeURIComponent(token)}`;
+};
 
 const formatSize = (bytes: number) => {
   if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)}GB`;
@@ -609,6 +616,50 @@ driveRouter.patch("/api/drive/folders/:id/move", authenticateToken, async (req: 
   } catch (err: any) {
     const status = err.message === "Folder not found" ? 404 : 400;
     res.status(status).json({ error: err.message || "Drive move failed" });
+  }
+});
+
+driveRouter.post("/api/drive/download/:id/link", authenticateToken, async (req: any, res) => {
+  const id = parseId(req.params.id);
+  if (!id) return res.status(400).json({ error: "Invalid file id" });
+  if (!isUsingDatabase()) return res.status(404).json({ error: "File not found" });
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT id FROM drive_files WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
+      [id, req.user.id]
+    );
+    if (!rows[0]) return res.status(404).json({ error: "File not found" });
+    return res.json({ downloadUrl: createDriveDownloadUrl(id), expiresInSeconds: 300 });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Drive download link failed" });
+  }
+});
+
+driveRouter.get("/api/drive/download-link/:token", async (req, res) => {
+  let fileId: number;
+  try {
+    const payload = jwt.verify(req.params.token, JWT_SECRET) as jwt.JwtPayload;
+    if (payload.purpose !== "drive-download" || !Number.isInteger(payload.fileId)) throw new Error("Invalid download token");
+    fileId = payload.fileId;
+  } catch {
+    return res.status(401).json({ error: "Download link is invalid or expired" });
+  }
+
+  if (!isUsingDatabase()) return res.status(404).json({ error: "File not found" });
+  try {
+    const { rows } = await pool.query(
+      `SELECT original_name, stored_name FROM drive_files WHERE id = $1 AND deleted_at IS NULL`,
+      [fileId]
+    );
+    const file = rows[0];
+    if (!file) return res.status(404).json({ error: "File not found" });
+
+    const filePath = path.join(DRIVE_DIR, file.stored_name);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Physical file not found" });
+    return streamFileDownload(res, filePath, file.original_name, { cacheControl: "private, no-store" });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || "Drive download failed" });
   }
 });
 

@@ -343,15 +343,12 @@ const DriveTab: React.FC = () => {
 
   const downloadFile = async (file: DriveFile) => {
     try {
-      const response = await api.get(`/drive/download/${file.id}`, { responseType: 'blob' });
-      const blobUrl = URL.createObjectURL(response.data);
+      const response = await api.post(`/drive/download/${file.id}/link`);
       const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = file.original_name;
+      link.href = response.data.downloadUrl;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(blobUrl);
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Tải file thất bại', 'error');
     }
@@ -592,7 +589,7 @@ const DriveTab: React.FC = () => {
   const renderActions = (type: 'file' | 'folder', item: DriveFile | DriveFolder) => {
     const name = type === 'file' ? (item as DriveFile).original_name : (item as DriveFolder).name;
     const id = item.id;
-    const iconButton = 'inline-flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:text-indigo-600 hover:shadow-md';
+    const iconButton = 'inline-flex h-8 w-8 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:text-indigo-600 hover:shadow-md dark:shadow-none dark:hover:shadow-none';
     if (trashMode) return <div className="flex items-center justify-end gap-1.5">
       <button type="button" title="Khôi phục" onClick={() => restoreOne(type, id)} className={`${iconButton} hover:text-emerald-600`}><RotateCcw className="w-4 h-4" /></button>
       <button type="button" title="Xóa vĩnh viễn" onClick={() => permanentDeleteOne(type, id)} className={`${iconButton} hover:text-red-600`}><Trash2 className="w-4 h-4" /></button>
