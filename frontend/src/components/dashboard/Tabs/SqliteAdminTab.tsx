@@ -39,16 +39,32 @@ export default function SqliteAdminTab() {
   const [sql, setSql] = useState('SELECT name, type, sql\nFROM sqlite_schema\nORDER BY type, name;');
   const [queryResult, setQueryResult] = useState<any>(null);
   const [activeView, setActiveView] = useState<'data' | 'sql'>('data');
+  const [databaseLoading, setDatabaseLoading] = useState(true);
+  const [databaseError, setDatabaseError] = useState('');
 
   const databaseParams = selectedDatabase ? { database: selectedDatabase } : {};
 
   const loadDatabases = async () => {
-    const response = await api.get('/admin/sqlite/databases');
-    setDatabases(response.data.databases || []);
-    setRoots(response.data.roots || []);
-    setNewDatabaseRoot((current) => current || response.data.roots?.[0]?.id || '');
-    if (!selectedDatabase && response.data.databases?.[0]) setSelectedDatabase(response.data.databases[0].id);
-    return response.data.databases || [];
+    setDatabaseLoading(true);
+    setDatabaseError('');
+    try {
+      const response = await api.get('/admin/sqlite/databases', { timeout: 15000 });
+      const nextDatabases = response.data.databases || [];
+      setDatabases(nextDatabases);
+      setRoots(response.data.roots || []);
+      setNewDatabaseRoot((current) => current || response.data.roots?.[0]?.id || '');
+      setSelectedDatabase((current) => current || nextDatabases[0]?.id || '');
+      if (nextDatabases.length === 0) setDatabaseError('Server chưa tìm thấy file SQLite hợp lệ.');
+      return nextDatabases;
+    } catch (error: any) {
+      const message = error.code === 'ECONNABORTED'
+        ? 'Quét SQLite quá thời gian. Hãy kiểm tra thư mục SQLITE_SCAN_PATHS trên server.'
+        : error.response?.data?.error || 'Không tải được danh sách SQLite từ server.';
+      setDatabaseError(message);
+      throw error;
+    } finally {
+      setDatabaseLoading(false);
+    }
   };
 
   const loadOverview = async (databaseId = selectedDatabase) => {
@@ -198,11 +214,14 @@ export default function SqliteAdminTab() {
   return <div className="admin-dark-surface col-span-12 space-y-5">
     <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-end">
       <label className="min-w-0 flex-1 text-[10px] font-black uppercase tracking-widest text-slate-500">Database trên server
-        <select value={selectedDatabase} onChange={(event) => setSelectedDatabase(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 font-mono text-xs font-bold normal-case tracking-normal text-slate-800 outline-none focus:border-emerald-400">
+        <select value={selectedDatabase} disabled={databaseLoading || databases.length === 0} onChange={(event) => setSelectedDatabase(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 font-mono text-xs font-bold normal-case tracking-normal text-slate-800 outline-none focus:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-60">
+          {databaseLoading && <option value="">Đang quét database...</option>}
+          {!databaseLoading && databases.length === 0 && <option value="">Không tìm thấy database</option>}
           {databases.map((item) => <option key={item.id} value={item.id}>{item.primary ? '[Chính] ' : ''}{item.name} · {item.tableCount} bảng · {formatBytes(item.bytes)}</option>)}
         </select>
+        {databaseError && <span className="mt-2 block normal-case tracking-normal text-rose-500">{databaseError}</span>}
       </label>
-      <button onClick={rescan} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-black text-slate-700 hover:border-emerald-300"><FolderSearch className="h-4 w-4 text-emerald-600" />Quét lại</button>
+      <button onClick={rescan} disabled={databaseLoading} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-black text-slate-700 hover:border-emerald-300 disabled:opacity-50"><FolderSearch className={`h-4 w-4 text-emerald-600 ${databaseLoading ? 'animate-pulse' : ''}`} />Quét lại</button>
       <button onClick={() => setCreateDialog(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white"><Plus className="h-4 w-4" />Tạo SQLite mới</button>
     </div>
 

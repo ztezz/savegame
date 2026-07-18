@@ -559,46 +559,46 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       </div>
     </div>}
 
-    {isAdmin && activeSection === 'ai' && <div className="rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm sm:p-6">
+    {isAdmin && activeSection === 'ai' && <div className="rounded-3xl border border-amber-200 bg-gradient-to-br from-amber-50 to-white p-5 shadow-sm dark:border-amber-900 dark:from-slate-900 dark:via-amber-950/35 dark:to-slate-950 sm:p-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><Bot className="h-4 w-4 text-amber-600" />AI tán gẫu 9router</h3>
-          <p className="mt-1 text-xs text-slate-500">Thêm bot vui tính vào phòng chat cộng đồng. API key được lưu trong cài đặt hệ thống và không hiển thị lại sau khi lưu. Sau khi test thành công, bấm Lưu cài đặt hệ thống để bot chat dùng cấu hình này.</p>
+          <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800 dark:text-amber-100"><Bot className="h-4 w-4 text-amber-600 dark:text-amber-400" />AI tán gẫu 9router</h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Thêm bot vui tính vào phòng chat cộng đồng. API key được lưu trong cài đặt hệ thống và không hiển thị lại sau khi lưu. Sau khi test thành công, bấm Lưu cài đặt hệ thống để bot chat dùng cấu hình này.</p>
         </div>
-        <span className={settings.ai?.enabled ? 'rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-black text-emerald-700' : 'rounded-full bg-slate-100 px-3 py-1 text-[11px] font-black text-slate-500'}>{settings.ai?.enabled ? 'Đang bật' : 'Đang tắt'}</span>
+        <span className={settings.ai?.enabled ? 'rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-black text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'rounded-full bg-slate-100 px-3 py-1 text-[11px] font-black text-slate-500 dark:bg-slate-800 dark:text-slate-300'}>{settings.ai?.enabled ? 'Đang bật' : 'Đang tắt'}</span>
       </div>
       <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-amber-100 bg-white p-4 text-sm">
+        <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-amber-100 bg-white p-4 text-sm dark:border-amber-900/70 dark:bg-slate-900/80">
           <span>
-            <span className="block font-bold text-slate-900">Bật AI trong phòng chat</span>
+            <span className="block font-bold text-slate-900 dark:text-slate-100">Bật AI trong phòng chat</span>
             <span className="mt-1 block text-xs text-slate-500">Bot sẽ tự trả lời sau mỗi tin nhắn mới nếu cấu hình hợp lệ.</span>
           </span>
           <input className="h-5 w-5 accent-amber-500" type="checkbox" checked={!!settings.ai?.enabled} onChange={(e)=>setSettings((s:any)=>({...s,ai:{...s.ai,enabled:e.target.checked}}))} />
         </label>
-        <label className="block rounded-2xl border border-amber-100 bg-white p-4 text-sm font-bold text-slate-900">Tên bot
-          <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-50" value={settings.ai?.botName || ''} onChange={(e)=>setSettings((s:any)=>({...s,ai:{...s.ai,botName:e.target.value}}))} placeholder="Mây Mặn" />
+        <label className="block rounded-2xl border border-amber-100 bg-white p-4 text-sm font-bold text-slate-900 dark:border-amber-900/70 dark:bg-slate-900/80 dark:text-slate-100">Tên bot
+          <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-50 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:ring-amber-950" value={settings.ai?.botName || ''} onChange={(e)=>setSettings((s:any)=>({...s,ai:{...s.ai,botName:e.target.value}}))} placeholder="Mây Mặn" />
         </label>
-        <label className="block rounded-2xl border border-amber-100 bg-white p-4 text-sm font-bold text-slate-900">9router API key
-          <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-50" type="password" value={settings.ai?.apiKey || ''} onChange={(e)=>setSettings((s:any)=>({...s,ai:{...s.ai,apiKey:e.target.value}}))} placeholder="sk-..." />
+        <label className="block rounded-2xl border border-amber-100 bg-white p-4 text-sm font-bold text-slate-900 dark:border-amber-900/70 dark:bg-slate-900/80 dark:text-slate-100">9router API key
+          <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-50 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:ring-amber-950" type="password" value={settings.ai?.apiKey || ''} onChange={(e)=>setSettings((s:any)=>({...s,ai:{...s.ai,apiKey:e.target.value}}))} placeholder="sk-..." />
           <span className="mt-2 block text-xs font-semibold text-slate-500">Nếu đang hiện ******** thì key cũ sẽ được giữ nguyên khi lưu.</span>
         </label>
-        <label className="block rounded-2xl border border-amber-100 bg-white p-4 text-sm font-bold text-slate-900">Model
-          <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-50" value={settings.ai?.model || ''} onChange={(e)=>setSettings((s:any)=>({...s,ai:{...s.ai,model:e.target.value}}))} placeholder="cx/gpt-5.5" />
+        <label className="block rounded-2xl border border-amber-100 bg-white p-4 text-sm font-bold text-slate-900 dark:border-amber-900/70 dark:bg-slate-900/80 dark:text-slate-100">Model
+          <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-50 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:ring-amber-950" value={settings.ai?.model || ''} onChange={(e)=>setSettings((s:any)=>({...s,ai:{...s.ai,model:e.target.value}}))} placeholder="cx/gpt-5.5" />
         </label>
-        <label className="block rounded-2xl border border-amber-100 bg-white p-4 text-sm font-bold text-slate-900">Base URL
-          <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-50" value={settings.ai?.baseUrl || ''} onChange={(e)=>setSettings((s:any)=>({...s,ai:{...s.ai,baseUrl:e.target.value}}))} placeholder="https://api.9router.com/v1" />
+        <label className="block rounded-2xl border border-amber-100 bg-white p-4 text-sm font-bold text-slate-900 dark:border-amber-900/70 dark:bg-slate-900/80 dark:text-slate-100">Base URL
+          <input className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-50 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:ring-amber-950" value={settings.ai?.baseUrl || ''} onChange={(e)=>setSettings((s:any)=>({...s,ai:{...s.ai,baseUrl:e.target.value}}))} placeholder="https://api.9router.com/v1" />
         </label>
-        <label className="block rounded-2xl border border-amber-100 bg-white p-4 text-sm font-bold text-slate-900">Độ hài hước
-          <select className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-50" value={settings.ai?.humorLevel || 'funny'} onChange={(e)=>setSettings((s:any)=>({...s,ai:{...s.ai,humorLevel:e.target.value}}))}>
+        <label className="block rounded-2xl border border-amber-100 bg-white p-4 text-sm font-bold text-slate-900 dark:border-amber-900/70 dark:bg-slate-900/80 dark:text-slate-100">Độ hài hước
+          <select className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none transition focus:border-amber-400 focus:ring-4 focus:ring-amber-50 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:ring-amber-950" value={settings.ai?.humorLevel || 'funny'} onChange={(e)=>setSettings((s:any)=>({...s,ai:{...s.ai,humorLevel:e.target.value}}))}>
             <option value="light">Vui nhẹ</option>
             <option value="funny">Hài hước</option>
             <option value="chaos">Lầy hơn chút</option>
           </select>
         </label>
       </div>
-      <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-amber-100 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-amber-100 bg-white p-4 dark:border-amber-900/70 dark:bg-slate-900/80 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm">
-          <p className="font-black text-slate-900">Kiểm tra model</p>
+          <p className="font-black text-slate-900 dark:text-slate-100">Kiểm tra model</p>
           <p className="text-xs text-slate-500">Nên bấm test sau khi nhập API key/model. Nếu test lỗi thì bot trong chat cũng sẽ không trả lời.</p>
           {aiTestResult && <p className={aiTestResult.success ? 'mt-2 text-xs font-semibold text-emerald-700' : 'mt-2 text-xs font-semibold text-red-600'}>{aiTestResult.success ? `${aiTestResult.reply} (${aiTestResult.latencyMs}ms)` : aiTestResult.error}</p>}
           {aiTestResult?.rawPreview && <pre className="mt-2 max-h-28 overflow-auto rounded-xl bg-slate-950 p-3 text-[10px] font-semibold text-amber-100">{aiTestResult.rawPreview}</pre>}

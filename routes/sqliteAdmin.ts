@@ -15,6 +15,7 @@ const SQLITE_EXTENSIONS = new Set([".sqlite", ".sqlite3", ".db"]);
 const SQLITE_HEADER = Buffer.from("SQLite format 3\0", "utf8");
 const MAX_SCAN_DEPTH = 5;
 const MAX_DATABASES = 250;
+const IGNORED_DIRECTORIES = new Set(["node_modules", ".git", "uploads", "dist", "build", ".wrangler", ".cache"]);
 const quoteIdentifier = (value: string) => `"${value.replace(/"/g, '""')}"`;
 const encodeId = (value: string) => Buffer.from(value, "utf8").toString("base64url");
 const decodeId = (value: unknown) => Buffer.from(String(value || ""), "base64url").toString("utf8");
@@ -108,6 +109,8 @@ function sendError(res: any, error: any) {
 
 function scanDatabases() {
   const found = new Set<string>();
+  if (isSQLiteFile(databasePath)) found.add(fs.realpathSync(databasePath));
+
   const visit = (directory: string, depth: number) => {
     if (depth > MAX_SCAN_DEPTH || found.size >= MAX_DATABASES) return;
     let entries: fs.Dirent[];
@@ -119,14 +122,13 @@ function scanDatabases() {
     for (const entry of entries) {
       if (found.size >= MAX_DATABASES) break;
       const entryPath = path.join(directory, entry.name);
-      if (entry.isDirectory() && !entry.isSymbolicLink()) visit(entryPath, depth + 1);
-      else if (entry.isFile() && !/-wal$|-shm$/i.test(entry.name) && (SQLITE_EXTENSIONS.has(path.extname(entry.name).toLowerCase()) || isSQLiteFile(entryPath)) && isSQLiteFile(entryPath)) {
+      if (entry.isDirectory() && !entry.isSymbolicLink() && !IGNORED_DIRECTORIES.has(entry.name.toLowerCase())) visit(entryPath, depth + 1);
+      else if (entry.isFile() && SQLITE_EXTENSIONS.has(path.extname(entry.name).toLowerCase()) && isSQLiteFile(entryPath)) {
         found.add(fs.realpathSync(entryPath));
       }
     }
   };
   for (const root of canonicalRoots()) visit(root, 0);
-  if (isSQLiteFile(databasePath)) found.add(fs.realpathSync(databasePath));
   return [...found].map((filePath) => {
     const stat = fs.statSync(filePath);
     let tableCount = 0;

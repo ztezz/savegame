@@ -453,8 +453,8 @@ settingsRouter.get('/api/system/audit-logs', authenticateToken, isAdmin, async (
       conditions.push(`a.resource LIKE $${p}`);
       params.push(`%${resource}%`); p++;
     }
-    if (dateFrom) { conditions.push(`datetime(a.created_at) >= datetime($${p})`); params.push(dateFrom); p++; }
-    if (dateTo)   { conditions.push(`datetime(a.created_at) <= datetime($${p})`); params.push(dateTo + 'T23:59:59'); p++; }
+    if (dateFrom) { conditions.push(`a.created_at >= datetime($${p})`); params.push(dateFrom); p++; }
+    if (dateTo)   { conditions.push(`a.created_at <= datetime($${p})`); params.push(dateTo + 'T23:59:59'); p++; }
     if (status === 'success') {
       conditions.push(`(json_extract(a.detail_json, '$.success') = 1 OR (CAST(json_extract(a.detail_json, '$.statusCode') AS INTEGER) BETWEEN 200 AND 399))`);
     } else if (status === 'error') {
@@ -493,58 +493,56 @@ settingsRouter.get('/api/system/audit-stats', authenticateToken, isAdmin, async 
     const days = Math.min(parseInt(String(req.query.days || '7'), 10), 90);
     const since = new Date(Date.now() - days * 86400000).toISOString();
 
-    // SQLite-compatible: json_extract instead of ->>, LIKE instead of ILIKE, no PG casts
-    const [totalRes, successRes, errorRes, rejectedRes, topUsersRes, topActionsRes, hourlyRes] = await Promise.all([
+    const [summaryRes, topUsersRes, topActionsRes] = await Promise.all([
       pool.query(
-        `SELECT COUNT(*) AS c FROM audit_logs WHERE datetime(created_at) >= datetime($1)`,
-        [since]
-      ),
-      pool.query(
-        `SELECT COUNT(*) AS c FROM audit_logs WHERE datetime(created_at) >= datetime($1)
-         AND (json_extract(detail_json, '$.success') = 1
-              OR (CAST(json_extract(detail_json, '$.statusCode') AS INTEGER) BETWEEN 200 AND 399))`,
-        [since]
-      ),
-      pool.query(
-        `SELECT COUNT(*) AS c FROM audit_logs WHERE datetime(created_at) >= datetime($1)
-         AND json_extract(detail_json, '$.success') = 0
-         AND CAST(json_extract(detail_json, '$.statusCode') AS INTEGER) NOT IN (401, 403)`,
-        [since]
-      ),
-      pool.query(
-        `SELECT COUNT(*) AS c FROM audit_logs WHERE datetime(created_at) >= datetime($1)
-         AND CAST(json_extract(detail_json, '$.statusCode') AS INTEGER) IN (401, 403)`,
+        `WITH recent AS (
+           SELECT
+             CASE WHEN json_valid(detail_json) THEN CAST(json_extract(detail_json, '$.statusCode') AS INTEGER) END AS status_code,
+             CASE WHEN json_valid(detail_json) THEN json_extract(detail_json, '$.success') END AS success
+           FROM audit_logs
+           WHERE created_at >= datetime($1)
+         )
+         SELECT
+           COUNT(*) AS total,
+           COALESCE(SUM(CASE
+             WHEN status_code IN (401, 403) THEN 0
+             WHEN success = 0 OR status_code >= 400 THEN 0
+             ELSE 1
+           END), 0) AS success_count,
+           COALESCE(SUM(CASE
+             WHEN status_code NOT IN (401, 403) AND (success = 0 OR status_code >= 400) THEN 1
+             ELSE 0
+           END), 0) AS error_count,
+           COALESCE(SUM(CASE WHEN status_code IN (401, 403) THEN 1 ELSE 0 END), 0) AS rejected_count
+         FROM recent`,
         [since]
       ),
       pool.query(
         `SELECT u.username, COUNT(*) AS cnt
          FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id
-         WHERE datetime(a.created_at) >= datetime($1) AND u.username IS NOT NULL
+         WHERE a.created_at >= datetime($1) AND u.username IS NOT NULL
          GROUP BY u.username ORDER BY cnt DESC LIMIT 5`,
         [since]
       ),
       pool.query(
-        `SELECT COALESCE(json_extract(detail_json, '$.method'), action) AS act, COUNT(*) AS cnt
-         FROM audit_logs WHERE datetime(created_at) >= datetime($1)
+        `SELECT
+           COALESCE(CASE WHEN json_valid(detail_json) THEN json_extract(detail_json, '$.method') END, action) AS act,
+           COUNT(*) AS cnt
+         FROM audit_logs WHERE created_at >= datetime($1)
          GROUP BY act ORDER BY cnt DESC LIMIT 8`,
-        [since]
-      ),
-      pool.query(
-        `SELECT strftime('%Y-%m-%d %H:00', created_at) AS hour, COUNT(*) AS cnt
-         FROM audit_logs WHERE datetime(created_at) >= datetime($1)
-         GROUP BY hour ORDER BY hour ASC`,
         [since]
       ),
     ]);
 
+    const summary = summaryRes.rows[0] || {};
     res.json({
-      total: parseInt(totalRes.rows[0].c, 10),
-      success: parseInt(successRes.rows[0].c, 10),
-      error: parseInt(errorRes.rows[0].c, 10),
-      rejected: parseInt(rejectedRes.rows[0].c, 10),
+      total: Number(summary.total || 0),
+      success: Number(summary.success_count || 0),
+      error: Number(summary.error_count || 0),
+      rejected: Number(summary.rejected_count || 0),
       topUsers: topUsersRes.rows,
       topActions: topActionsRes.rows,
-      hourly: hourlyRes.rows,
+      hourly: [],
       days,
     });
   } catch (err: any) {
@@ -562,8 +560,8 @@ settingsRouter.get('/api/system/audit-logs/export-csv', authenticateToken, isAdm
     const conditions: string[] = [];
     const params: any[] = [];
     let p = 1;
-    if (dateFrom) { conditions.push(`datetime(a.created_at) >= datetime($${p})`); params.push(dateFrom); p++; }
-    if (dateTo)   { conditions.push(`datetime(a.created_at) <= datetime($${p})`); params.push(dateTo + 'T23:59:59'); p++; }
+    if (dateFrom) { conditions.push(`a.created_at >= datetime($${p})`); params.push(dateFrom); p++; }
+    if (dateTo)   { conditions.push(`a.created_at <= datetime($${p})`); params.push(dateTo + 'T23:59:59'); p++; }
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const { rows } = await pool.query(
