@@ -806,62 +806,31 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="min-h-20 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-5 lg:px-8 py-4 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <button onClick={() => setMobileMenuOpen(true)} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-600 lg:hidden" aria-label="Mở menu"><Menu className="w-5 h-5" /></button>
-            <div className="flex flex-col lg:flex-row lg:items-center gap-4 min-w-0">
-            <div className="min-w-0">
-              <h2 className="text-lg font-black text-slate-900 dark:text-white truncate">{pageTitles[activeTab].title}</h2>
-              <p className="text-xs text-slate-500 mt-1 hidden sm:block">{pageTitles[activeTab].description}</p>
-            </div>
-            {activeTab === 'library' && (
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center bg-slate-50 rounded-lg pl-3 pr-1 py-1.5 border border-slate-200 min-w-0">
-                   <Search className="w-3.5 h-3.5 text-slate-400" />
-                   <input 
-                     type="text" 
-                      placeholder="Tìm bản lưu"
-                      aria-label="Tìm bản lưu"
-                     className="bg-transparent border-none focus:ring-0 text-xs px-2 w-40 sm:w-56 text-slate-700 font-medium outline-none" 
-                     value={searchTerm}
-                     onChange={(e) => setSearchTerm(e.target.value)}
-                   />
-                </div>
-                <select 
-                  className="text-xs bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none text-slate-700"
-                  value={filterCategory}
-                  onChange={(e) => setFilterCategory(e.target.value)}
-                >
-                  <option value="All">Tất cả thể loại</option>
-                  {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <select 
-                  className="text-xs bg-white border border-slate-200 rounded-lg px-3 py-2 outline-none text-slate-700"
-                  value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
-                >
-                  <option value="name">Xếp theo tên</option>
-                  <option value="category">Xếp theo thể loại</option>
-                </select>
+        <header className="shrink-0 border-b border-slate-200 bg-white px-4 py-4 dark:border-slate-800 dark:bg-slate-900 sm:px-5 lg:px-8">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <button onClick={() => setMobileMenuOpen(true)} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300 lg:hidden" aria-label="Mở menu"><Menu className="w-5 h-5" /></button>
+              <div className="min-w-0">
+                <h2 className="truncate text-lg font-black text-slate-900 dark:text-white">{pageTitles[activeTab].title}</h2>
+                <p className="mt-1 hidden text-xs text-slate-500 sm:block">{pageTitles[activeTab].description}</p>
               </div>
-            )}
             </div>
-          </div>
-          <div className="flex items-center justify-between xl:justify-end gap-4 lg:gap-6">
+
+            <div className="flex shrink-0 items-center justify-end gap-2 sm:gap-3 lg:gap-4">
             {(activeTab === 'library' || activeTab === 'dashboard') && (
               <>
-                <div className="text-right hidden sm:block">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Dung lượng bộ nhớ</p>
-                  <p className="text-sm font-mono text-slate-700 font-bold">
+                <div className="hidden min-w-[8.5rem] whitespace-nowrap text-right md:block">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Dung lượng bộ nhớ</p>
+                  <p className="text-sm font-bold font-mono text-slate-700 dark:text-slate-200">
                     {formatSize(games.reduce((acc, g) => acc + (g.latestSave?.fileSize || 0), 0))} đã dùng
                   </p>
                 </div>
-                <div className="w-px h-10 bg-slate-100 hidden sm:block"></div>
+                <div className="hidden h-10 w-px bg-slate-100 dark:bg-slate-800 md:block"></div>
               </>
             )}
             <button
               onClick={() => setDarkMode((value) => !value)}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               title={darkMode ? 'Tắt dark mode' : 'Bật dark mode'}
               aria-label={darkMode ? 'Tắt chế độ tối' : 'Bật chế độ tối'}
             >
@@ -870,27 +839,27 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
             {(activeTab === 'library' || activeTab === 'dashboard') && (
               <button 
                 onClick={handleOpenNew}
-                className="px-4 sm:px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-black shadow-lg shadow-indigo-100 transition flex items-center gap-2 whitespace-nowrap"
+                className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg bg-indigo-600 px-3 py-2.5 text-xs font-black text-white shadow-lg shadow-indigo-100 transition hover:bg-indigo-700 dark:shadow-none sm:px-5"
               >
                 <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">Đẩy bản lưu mới</span>
-                <span className="sm:hidden">Tải lên</span>
+                <span className="hidden md:inline">Đẩy bản lưu mới</span>
+                <span className="md:hidden">Tải lên</span>
               </button>
             )}
             
             {/* User Profile Button */}
-            <div className="relative">
+            <div className="relative shrink-0">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 aria-expanded={showUserMenu}
                 aria-haspopup="menu"
-                className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors group"
+                className="group flex items-center gap-2 rounded-lg px-1.5 py-2 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 sm:px-3"
               >
                 <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
                   {currentUser?.username?.charAt(0).toUpperCase() || 'U'}
                 </div>
-                <div className="hidden sm:block text-left">
-                  <p className="text-xs font-bold text-slate-900 leading-tight">{currentUser?.username || 'User'}</p>
+                <div className="hidden min-w-[4.5rem] text-left lg:block">
+                  <p className="truncate text-xs font-bold leading-tight text-slate-900 dark:text-white">{currentUser?.username || 'User'}</p>
                   <p className="text-[10px] text-slate-500 leading-tight">{currentUser?.role || 'User'}</p>
                 </div>
               </button>
@@ -936,6 +905,39 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
               )}
             </div>
           </div>
+          </div>
+
+          {activeTab === 'library' && (
+            <div className="mt-4 grid grid-cols-1 gap-2 border-t border-slate-100 pt-4 dark:border-slate-800 sm:grid-cols-2 lg:grid-cols-[minmax(16rem,1fr)_13rem_12rem]">
+              <div className="flex min-w-0 items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+                <Search className="h-4 w-4 shrink-0 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Tìm theo tên bản lưu..."
+                  aria-label="Tìm bản lưu"
+                  className="min-w-0 flex-1 border-none bg-transparent px-2 text-sm font-medium text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-100"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <select
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+              >
+                <option value="All">Tất cả thể loại</option>
+                {categories.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold text-slate-700 outline-none dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 sm:col-span-2 lg:col-span-1"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+              >
+                <option value="name">Xếp theo tên</option>
+                <option value="category">Xếp theo thể loại</option>
+              </select>
+            </div>
+          )}
         </header>
 
         <div className="flex-1 grid grid-cols-12 gap-4 overflow-y-auto p-4 sm:gap-6 sm:p-6 xl:gap-8 xl:p-8">
