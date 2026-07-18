@@ -432,25 +432,35 @@ settingsRouter.get('/api/system/audit-logs', authenticateToken, isAdmin, async (
     const action = req.query.action ? String(req.query.action) : null;
     const username = req.query.username ? String(req.query.username).trim() : null;
     const resource = req.query.resource ? String(req.query.resource).trim() : null;
-    const status = req.query.status ? String(req.query.status) : null; // 'success' | 'error' | 'rejected'
+    const status = req.query.status ? String(req.query.status) : null;
     const dateFrom = req.query.dateFrom ? String(req.query.dateFrom) : null;
     const dateTo = req.query.dateTo ? String(req.query.dateTo) : null;
 
+    // SQLite-compatible conditions (json_extract, LIKE, no PG casts)
     const conditions: string[] = [];
     const params: any[] = [];
     let p = 1;
 
-    if (action) { conditions.push(`(a.action = $${p} OR (a.detail_json->>'method') = $${p})`); params.push(action); p++; }
-    if (username) { conditions.push(`u.username ILIKE $${p}`); params.push(`%${username}%`); p++; }
-    if (resource) { conditions.push(`a.resource ILIKE $${p}`); params.push(`%${resource}%`); p++; }
-    if (dateFrom) { conditions.push(`a.created_at >= $${p}`); params.push(dateFrom); p++; }
-    if (dateTo) { conditions.push(`a.created_at <= $${p}`); params.push(dateTo + 'T23:59:59'); p++; }
+    if (action) {
+      conditions.push(`(a.action = $${p} OR json_extract(a.detail_json, '$.method') = $${p})`);
+      params.push(action); p++;
+    }
+    if (username) {
+      conditions.push(`u.username LIKE $${p}`);
+      params.push(`%${username}%`); p++;
+    }
+    if (resource) {
+      conditions.push(`a.resource LIKE $${p}`);
+      params.push(`%${resource}%`); p++;
+    }
+    if (dateFrom) { conditions.push(`datetime(a.created_at) >= datetime($${p})`); params.push(dateFrom); p++; }
+    if (dateTo)   { conditions.push(`datetime(a.created_at) <= datetime($${p})`); params.push(dateTo + 'T23:59:59'); p++; }
     if (status === 'success') {
-      conditions.push(`((a.detail_json->>'success')::boolean = true OR (CAST(a.detail_json->>'statusCode' AS INTEGER) BETWEEN 200 AND 399))`);
+      conditions.push(`(json_extract(a.detail_json, '$.success') = 1 OR (CAST(json_extract(a.detail_json, '$.statusCode') AS INTEGER) BETWEEN 200 AND 399))`);
     } else if (status === 'error') {
-      conditions.push(`((a.detail_json->>'success')::boolean = false AND (CAST(a.detail_json->>'statusCode' AS INTEGER) NOT IN (401, 403)))`);
+      conditions.push(`(json_extract(a.detail_json, '$.success') = 0 AND CAST(json_extract(a.detail_json, '$.statusCode') AS INTEGER) NOT IN (401, 403))`);
     } else if (status === 'rejected') {
-      conditions.push(`(CAST(a.detail_json->>'statusCode' AS INTEGER) IN (401, 403))`);
+      conditions.push(`CAST(json_extract(a.detail_json, '$.statusCode') AS INTEGER) IN (401, 403)`);
     }
 
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -462,7 +472,7 @@ settingsRouter.get('/api/system/audit-logs', authenticateToken, isAdmin, async (
     const total = parseInt(countRes.rows[0].total, 10);
 
     const dataRes = await pool.query(
-      `SELECT a.id, a.action, a.resource, a.detail_json, a.created_at, u.username, u.role as user_role
+      `SELECT a.id, a.action, a.resource, a.detail_json, a.created_at, u.username, u.role AS user_role
        FROM audit_logs a
        LEFT JOIN users u ON u.id = a.user_id
        ${where}
@@ -483,21 +493,46 @@ settingsRouter.get('/api/system/audit-stats', authenticateToken, isAdmin, async 
     const days = Math.min(parseInt(String(req.query.days || '7'), 10), 90);
     const since = new Date(Date.now() - days * 86400000).toISOString();
 
+    // SQLite-compatible: json_extract instead of ->>, LIKE instead of ILIKE, no PG casts
     const [totalRes, successRes, errorRes, rejectedRes, topUsersRes, topActionsRes, hourlyRes] = await Promise.all([
-      pool.query(`SELECT COUNT(*) AS c FROM audit_logs WHERE created_at >= $1`, [since]),
-      pool.query(`SELECT COUNT(*) AS c FROM audit_logs WHERE created_at >= $1 AND ((detail_json->>'success')::boolean = true OR (CAST(detail_json->>'statusCode' AS INTEGER) BETWEEN 200 AND 399))`, [since]),
-      pool.query(`SELECT COUNT(*) AS c FROM audit_logs WHERE created_at >= $1 AND (detail_json->>'success')::boolean = false AND (CAST(detail_json->>'statusCode' AS INTEGER) NOT IN (401,403))`, [since]),
-      pool.query(`SELECT COUNT(*) AS c FROM audit_logs WHERE created_at >= $1 AND (CAST(detail_json->>'statusCode' AS INTEGER) IN (401,403))`, [since]),
       pool.query(
-        `SELECT u.username, COUNT(*) AS cnt FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id WHERE a.created_at >= $1 AND u.username IS NOT NULL GROUP BY u.username ORDER BY cnt DESC LIMIT 5`,
+        `SELECT COUNT(*) AS c FROM audit_logs WHERE datetime(created_at) >= datetime($1)`,
         [since]
       ),
       pool.query(
-        `SELECT COALESCE(detail_json->>'method', action) AS act, COUNT(*) AS cnt FROM audit_logs WHERE created_at >= $1 GROUP BY act ORDER BY cnt DESC LIMIT 8`,
+        `SELECT COUNT(*) AS c FROM audit_logs WHERE datetime(created_at) >= datetime($1)
+         AND (json_extract(detail_json, '$.success') = 1
+              OR (CAST(json_extract(detail_json, '$.statusCode') AS INTEGER) BETWEEN 200 AND 399))`,
         [since]
       ),
       pool.query(
-        `SELECT strftime('%Y-%m-%d %H:00', created_at) AS hour, COUNT(*) AS cnt FROM audit_logs WHERE created_at >= $1 GROUP BY hour ORDER BY hour ASC`,
+        `SELECT COUNT(*) AS c FROM audit_logs WHERE datetime(created_at) >= datetime($1)
+         AND json_extract(detail_json, '$.success') = 0
+         AND CAST(json_extract(detail_json, '$.statusCode') AS INTEGER) NOT IN (401, 403)`,
+        [since]
+      ),
+      pool.query(
+        `SELECT COUNT(*) AS c FROM audit_logs WHERE datetime(created_at) >= datetime($1)
+         AND CAST(json_extract(detail_json, '$.statusCode') AS INTEGER) IN (401, 403)`,
+        [since]
+      ),
+      pool.query(
+        `SELECT u.username, COUNT(*) AS cnt
+         FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id
+         WHERE datetime(a.created_at) >= datetime($1) AND u.username IS NOT NULL
+         GROUP BY u.username ORDER BY cnt DESC LIMIT 5`,
+        [since]
+      ),
+      pool.query(
+        `SELECT COALESCE(json_extract(detail_json, '$.method'), action) AS act, COUNT(*) AS cnt
+         FROM audit_logs WHERE datetime(created_at) >= datetime($1)
+         GROUP BY act ORDER BY cnt DESC LIMIT 8`,
+        [since]
+      ),
+      pool.query(
+        `SELECT strftime('%Y-%m-%d %H:00', created_at) AS hour, COUNT(*) AS cnt
+         FROM audit_logs WHERE datetime(created_at) >= datetime($1)
+         GROUP BY hour ORDER BY hour ASC`,
         [since]
       ),
     ]);
@@ -527,8 +562,8 @@ settingsRouter.get('/api/system/audit-logs/export-csv', authenticateToken, isAdm
     const conditions: string[] = [];
     const params: any[] = [];
     let p = 1;
-    if (dateFrom) { conditions.push(`a.created_at >= $${p}`); params.push(dateFrom); p++; }
-    if (dateTo) { conditions.push(`a.created_at <= $${p}`); params.push(dateTo + 'T23:59:59'); p++; }
+    if (dateFrom) { conditions.push(`datetime(a.created_at) >= datetime($${p})`); params.push(dateFrom); p++; }
+    if (dateTo)   { conditions.push(`datetime(a.created_at) <= datetime($${p})`); params.push(dateTo + 'T23:59:59'); p++; }
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
     const { rows } = await pool.query(
@@ -539,13 +574,13 @@ settingsRouter.get('/api/system/audit-logs/export-csv', authenticateToken, isAdm
     );
 
     const headers = ['ID', 'Người dùng', 'Hành động', 'Tài nguyên', 'Trạng thái', 'IP', 'Thời gian'];
-    const csvRows = rows.map(r => {
+    const csvRows = rows.map((r: any) => {
       const d = r.detail_json || {};
       const code = d.statusCode ? Number(d.statusCode) : 0;
-      const ok = d.success ?? (code > 0 ? code < 400 : true);
-      const status = !ok ? (code === 401 || code === 403 ? 'Bị từ chối' : 'Lỗi') : 'Thành công';
-      return [r.id, r.username || 'hệ thống', d.method || r.action, r.resource, status, d.ip || '', r.created_at]
-        .map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',');
+      const ok = d.success != null ? d.success === true || d.success === 'true' : (code > 0 ? code < 400 : true);
+      const st = !ok ? (code === 401 || code === 403 ? 'Bị từ chối' : 'Lỗi') : 'Thành công';
+      return [r.id, r.username || 'hệ thống', d.method || r.action, r.resource, st, d.ip || '', r.created_at]
+        .map((v: any) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',');
     });
 
     const csv = [headers.join(','), ...csvRows].join('\n');
