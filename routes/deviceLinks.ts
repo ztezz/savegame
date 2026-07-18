@@ -8,6 +8,11 @@ export const deviceLinksRouter = Router();
 
 const LINK_TTL_MINUTES = 10;
 
+function formatUtcTimestamp(value: unknown): string | null {
+  if (typeof value !== "string" || !value) return null;
+  return value.includes("T") ? (value.endsWith("Z") ? value : `${value}Z`) : `${value.replace(" ", "T")}Z`;
+}
+
 function generateToken(): string {
   return crypto.randomBytes(24).toString("hex");
 }
@@ -109,7 +114,8 @@ deviceLinksRouter.get("/api/device-links/:token", async (req, res) => {
 
   try {
     const { rows } = await pool.query(
-      `SELECT id, device_name, status, expires_at, approved_at
+      `SELECT id, device_name, status, expires_at, approved_at,
+              CASE WHEN expires_at <= CURRENT_TIMESTAMP THEN 1 ELSE 0 END AS is_expired
        FROM device_link_sessions
        WHERE token = $1`,
       [token]
@@ -120,9 +126,7 @@ deviceLinksRouter.get("/api/device-links/:token", async (req, res) => {
     }
 
     const row = rows[0];
-    const now = new Date();
-    const expiresAt = new Date(row.expires_at);
-    const isExpired = row.status !== "approved" && expiresAt.getTime() <= now.getTime();
+    const isExpired = row.status !== "approved" && Number(row.is_expired) === 1;
 
     if (isExpired && row.status !== "expired") {
       await pool.query(
@@ -135,8 +139,8 @@ deviceLinksRouter.get("/api/device-links/:token", async (req, res) => {
     return res.json({
       device_name: row.device_name,
       status: row.status,
-      expires_at: row.expires_at,
-      approved_at: row.approved_at,
+      expires_at: formatUtcTimestamp(row.expires_at),
+      approved_at: formatUtcTimestamp(row.approved_at),
     });
   } catch (err) {
     console.error("❌ Get device link session error:", err);
@@ -156,7 +160,8 @@ deviceLinksRouter.post("/api/device-links/:token/confirm", authenticateToken, as
 
   try {
     const { rows } = await pool.query(
-      `SELECT id, device_name, api_key, status, expires_at
+      `SELECT id, device_name, api_key, status, expires_at,
+              CASE WHEN expires_at <= CURRENT_TIMESTAMP THEN 1 ELSE 0 END AS is_expired
        FROM device_link_sessions
        WHERE token = $1`,
       [token]
@@ -167,8 +172,7 @@ deviceLinksRouter.post("/api/device-links/:token/confirm", authenticateToken, as
     }
 
     const session = rows[0];
-    const now = new Date();
-    const isExpired = new Date(session.expires_at).getTime() <= now.getTime();
+    const isExpired = Number(session.is_expired) === 1;
 
     if (session.status === "approved") {
       return res.json({ success: true, already_confirmed: true });

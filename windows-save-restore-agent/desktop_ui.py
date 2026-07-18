@@ -615,6 +615,10 @@ class DesktopAgentApp:
             self.open_verification_url()
             return
 
+        if event_type == "_refresh_link":
+            self.refresh_link_flow()
+            return
+
         if event_type == "_tray_exit":
             self.quit_app()
             return
@@ -759,7 +763,7 @@ class DesktopAgentApp:
 
     def open_verification_url(self) -> None:
         if not self.verification_url:
-            self.append_activity("URL đăng nhập chưa có.")
+            self.refresh_link_flow()
             return
         if not self.is_valid_verification_url(self.verification_url):
             self.append_activity("URL đăng nhập không hợp lệ và đã bị chặn.")
@@ -767,6 +771,13 @@ class DesktopAgentApp:
             return
         webbrowser.open(self.verification_url)
         self.append_activity("Đã mở trang đăng nhập trình duyệt theo cách thủ công.")
+
+    def refresh_link_flow(self) -> None:
+        self.cancel_auto_hide()
+        self.verification_url = ""
+        self.link_hint_var.set("Đang yêu cầu một phiên đăng nhập mới...")
+        self.append_activity("Đang tạo lại phiên liên kết thiết bị.")
+        self.agent.refresh_link_flow()
 
     @staticmethod
     def is_valid_verification_url(url: str) -> bool:

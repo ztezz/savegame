@@ -476,6 +476,7 @@ class RestoreAgent:
         self.display_name = socket.gethostname().strip()[:255] or self.device_id
         self.link_started = False
         self.link_expires_at = 0.0
+        self.link_refresh_requested = threading.Event()
         self.authenticated_once = False
 
         self.session = requests.Session()
@@ -506,8 +507,8 @@ class RestoreAgent:
         except Exception:
             logging.exception("UI event handler failed for %s", event_type)
 
-    def start_link_flow(self) -> None:
-        if self.link_started and time.monotonic() < self.link_expires_at:
+    def start_link_flow(self, force: bool = False) -> None:
+        if not force and self.link_started and time.monotonic() < self.link_expires_at:
             return
         self.link_started = False
         try:
@@ -546,6 +547,9 @@ class RestoreAgent:
         except Exception as exc:
             logging.warning("Could not start link flow: %s", exc)
             self.emit("warning", message=f"Could not start login flow: {exc}")
+
+    def refresh_link_flow(self) -> None:
+        self.link_refresh_requested.set()
 
     def _request(self, method: str, path: str, **kwargs: Any) -> requests.Response:
         if not path.startswith("/") or path.startswith("//"):
@@ -1173,6 +1177,9 @@ class RestoreAgent:
         failures = 0
         try:
             while not self.stop_event.is_set():
+                if self.link_refresh_requested.is_set():
+                    self.link_refresh_requested.clear()
+                    self.start_link_flow(force=True)
                 self.check_for_update()
                 ack_ok = self.retry_acks()
                 heartbeat_ok = self.heartbeat()

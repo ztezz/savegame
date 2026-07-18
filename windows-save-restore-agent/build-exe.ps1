@@ -42,7 +42,9 @@ Write-Host "  .venv OK"
 # 3. Install deps + PyInstaller (use python -m pip to avoid permission issue)
 Step "Installing dependencies"
 & $PythonExe -m pip install --quiet --upgrade pip 2>$null
+if ($LASTEXITCODE -ne 0) { throw "Could not upgrade pip (exit code $LASTEXITCODE)." }
 & $PythonExe -m pip install --quiet -r (Join-Path $ScriptRoot "requirements.txt")
+if ($LASTEXITCODE -ne 0) { throw "Could not install dependencies (exit code $LASTEXITCODE)." }
 Write-Host "  Done"
 
 # 4. Build
@@ -67,6 +69,9 @@ if (Test-Path $iconPath) {
     $buildArgs += $iconAbsPath
 }
 & $PythonExe @buildArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "PyInstaller failed (exit code $LASTEXITCODE). Close Cloudsave.exe if it is running, then build again."
+}
 
 # 5. Verify
 $exePath = Join-Path $DistDir "$OutputName.exe"
