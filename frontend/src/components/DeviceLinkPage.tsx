@@ -46,6 +46,14 @@ export default function DeviceLinkPage({ linkToken, token, onLogin, onDone }: De
       setStatus('approved');
       setMessage('Device linked successfully. Agent can connect now.');
     } catch (err: any) {
+      const responseStatus = err.response?.status;
+      if (responseStatus === 401 || responseStatus === 403) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.dispatchEvent(new Event('auth:logout'));
+        setMessage('Phiên đăng nhập không còn hợp lệ. Vui lòng đăng nhập lại để xác nhận thiết bị.');
+        return;
+      }
       setMessage(err.response?.data?.error || 'Link confirmation failed');
       if (err.response?.status === 410) {
         setStatus('expired');

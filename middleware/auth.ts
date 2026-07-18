@@ -58,7 +58,10 @@ export const authenticateToken = async (req: any, res: any, next: any) => {
   jwt.verify(token, JWT_SECRET, async (err: any, user: any) => {
     if (err) {
       if (!isNoisyPollPath) console.log('❌ Token verification failed:', err.message);
-      return res.sendStatus(403);
+      return res.status(401).json({
+        error: err.name === 'TokenExpiredError' ? 'Login session expired' : 'Invalid login session',
+        code: err.name === 'TokenExpiredError' ? 'TOKEN_EXPIRED' : 'TOKEN_INVALID',
+      });
     }
     if (!isNoisyPollPath) console.log('✅ Token verified - User:', user);
     

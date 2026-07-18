@@ -47,7 +47,11 @@ export default function App() {
     api.get('/users/me').then(({ data }) => {
       localStorage.setItem('user', JSON.stringify(data));
       setUser(data);
-    }).catch(() => undefined);
+    }).catch((error) => {
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        handleLogout();
+      }
+    });
   }, [token]);
 
   const handleLeaveDeviceLink = () => {
