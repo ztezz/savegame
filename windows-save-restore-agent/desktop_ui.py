@@ -1121,8 +1121,23 @@ class DesktopAgentApp:
             self.append_activity("Đã chặn URL đăng nhập không thuộc allowlist.")
             self.show_toast("Liên kết bị chặn", "URL không thuộc miền CloudSave hợp lệ.", tone="danger")
             return
-        webbrowser.open(self.verification_url)
-        self.append_activity("Đã mở liên kết đăng nhập trong trình duyệt.")
+        try:
+            if os.name == "nt":
+                os.startfile(self.verification_url)
+                opened = True
+            else:
+                opened = webbrowser.open(self.verification_url)
+        except OSError as exc:
+            logging.warning("Windows could not open the login URL: %s", exc)
+            opened = webbrowser.open(self.verification_url)
+
+        if opened:
+            self.append_activity("Đã mở liên kết đăng nhập trong trình duyệt.")
+            return
+
+        self._set_clipboard(self.verification_url)
+        self.append_activity("Không thể mở trình duyệt; đã sao chép liên kết đăng nhập.")
+        self.show_toast("Không mở được trình duyệt", "Link đăng nhập đã được sao chép. Hãy dán vào trình duyệt.", tone="warning")
 
     def copy_verification_url(self) -> None:
         if self.verification_url and self.is_valid_verification_url(self.verification_url):

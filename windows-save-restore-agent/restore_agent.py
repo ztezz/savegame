@@ -8,6 +8,7 @@ import re
 import secrets
 import shutil
 import socket
+import stat
 import sys
 import tempfile
 import threading
@@ -541,7 +542,14 @@ class RestoreAgent:
                 verification_url,
             )
 
-            opened = webbrowser.open(verification_url)
+            try:
+                if os.name == "nt":
+                    os.startfile(verification_url)
+                    opened = True
+                else:
+                    opened = webbrowser.open(verification_url)
+            except OSError:
+                opened = webbrowser.open(verification_url)
             if not opened:
                 logging.warning("Could not auto-open browser. Open URL manually: %s", verification_url)
         except Exception as exc:
@@ -742,6 +750,37 @@ class RestoreAgent:
     def _move_directory(self, source: Path, destination: Path) -> None:
         durable_replace(source, destination)
 
+    def _merge_existing_files(self, source: Path, destination: Path,
+                              lease: Optional[LeaseKeeper] = None) -> None:
+        destination_entries = {entry.name.casefold(): entry for entry in destination.iterdir()}
+        for source_entry in source.iterdir():
+            if lease:
+                lease.ensure_owned()
+            if self.stop_event.is_set():
+                raise InterruptedError("Restore cancelled while preserving existing files")
+            if self._is_reparse(source_entry):
+                raise ValueError(f"Refusing to preserve a reparse point: {source_entry}")
+
+            mode = source_entry.stat(follow_symlinks=False).st_mode
+            destination_entry = destination_entries.get(source_entry.name.casefold())
+            if stat.S_ISDIR(mode):
+                if destination_entry is None:
+                    destination_entry = destination / source_entry.name
+                    destination_entry.mkdir()
+                    destination_entries[source_entry.name.casefold()] = destination_entry
+                elif not destination_entry.is_dir() or self._is_reparse(destination_entry):
+                    raise ValueError(f"Restore file/directory conflict: {source_entry.name}")
+                self._merge_existing_files(source_entry, destination_entry, lease)
+                shutil.copystat(source_entry, destination_entry, follow_symlinks=False)
+            elif stat.S_ISREG(mode):
+                if destination_entry is None:
+                    shutil.copy2(source_entry, destination / source_entry.name)
+                elif not destination_entry.is_file() or self._is_reparse(destination_entry):
+                    raise ValueError(f"Restore file/directory conflict: {source_entry.name}")
+                # The restored artifact wins when both trees contain the same file.
+            else:
+                raise ValueError(f"Refusing to preserve a special file: {source_entry}")
+
     def _transaction_path(self, target: Path) -> Path:
         return target.parent / f".{target.name}.restore-transaction.json"
 
@@ -894,6 +933,8 @@ class RestoreAgent:
                 if free < artifact_size:
                     raise OSError(f"Insufficient staging space: need {artifact_size} bytes, have {free}")
                 shutil.copy2(archive_path, staging / original_filename)
+            if target_dir.exists():
+                self._merge_existing_files(target_dir, staging, lease)
             if lease:
                 lease.ensure_owned()
             if self.stop_event.is_set():

@@ -89,18 +89,61 @@ class RestoreAgentSecurityTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "compression ratio"):
                 self.agent._extract_zip(archive, root / "output")
 
-    def test_restore_replaces_directory_instead_of_merging(self) -> None:
+    def test_restore_overlays_files_without_removing_unrelated_files(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             target = root / "game-save"
             target.mkdir()
             (target / "stale.dat").write_bytes(b"old")
-            archive = self.make_zip(root, {"current.dat": b"new"})
+            (target / "same.dat").write_bytes(b"old version")
+            archive = self.make_zip(root, {"current.dat": b"new", "same.dat": b"new version"})
 
             self.agent.apply_restore(archive, str(target), None)
 
             self.assertEqual((target / "current.dat").read_bytes(), b"new")
-            self.assertFalse((target / "stale.dat").exists())
+            self.assertEqual((target / "same.dat").read_bytes(), b"new version")
+            self.assertEqual((target / "stale.dat").read_bytes(), b"old")
+
+    def test_single_file_restore_preserves_other_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "game-save"
+            target.mkdir()
+            (target / "keep.dat").write_bytes(b"keep")
+            (target / "save.dat").write_bytes(b"old")
+            artifact = root / "download.bin"
+            artifact.write_bytes(b"new")
+
+            self.agent.apply_restore(artifact, str(target), "save.dat")
+
+            self.assertEqual((target / "save.dat").read_bytes(), b"new")
+            self.assertEqual((target / "keep.dat").read_bytes(), b"keep")
+
+    def test_restore_preserves_nested_existing_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "game-save"
+            (target / "profile").mkdir(parents=True)
+            (target / "profile" / "keep.dat").write_bytes(b"keep")
+            archive = self.make_zip(root, {"profile/new.dat": b"new"})
+
+            self.agent.apply_restore(archive, str(target), None)
+
+            self.assertEqual((target / "profile" / "new.dat").read_bytes(), b"new")
+            self.assertEqual((target / "profile" / "keep.dat").read_bytes(), b"keep")
+
+    def test_restore_rejects_file_directory_conflict_without_changing_target(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "game-save"
+            target.mkdir()
+            (target / "profile").write_bytes(b"existing file")
+            archive = self.make_zip(root, {"profile/save.dat": b"new"})
+
+            with self.assertRaisesRegex(ValueError, "file/directory conflict"):
+                self.agent.apply_restore(archive, str(target), None)
+
+            self.assertEqual((target / "profile").read_bytes(), b"existing file")
 
     def test_restore_rolls_back_when_staging_commit_fails(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

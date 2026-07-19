@@ -137,5 +137,5 @@ Runtime state is written to `%LOCALAPPDATA%\CloudSave`:
 2. Agent polls `GET /api/task` with `device_id`
 3. Backend atomically claims one pending task using a recoverable lease
 4. Agent downloads, verifies and stages the artifact on the target volume
-5. Agent atomically replaces the save directory and rolls back if commit fails
+5. Agent overlays restored files, preserves unrelated files, and rolls back if commit fails
 6. Agent journals and retries `POST /api/done` until the backend acknowledges it
