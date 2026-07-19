@@ -27,12 +27,27 @@ const bindValue = (value: any) => {
 };
 
 function configuredRoots() {
+  const roots = new Set<string>([path.dirname(databasePath)]);
+
+  const explicit = String(process.env.SQLITE_EXPLICIT_PATHS || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => path.dirname(path.resolve(item)));
+  for (const p of explicit) {
+    roots.add(p);
+  }
+
   const configured = String(process.env.SQLITE_SCAN_PATHS || "")
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean)
     .map((item) => path.resolve(item));
-  return [...new Set([path.dirname(databasePath), ...configured])];
+  for (const p of configured) {
+    roots.add(p);
+  }
+
+  return [...roots];
 }
 
 function canonicalRoots() {
@@ -109,26 +124,44 @@ function sendError(res: any, error: any) {
 
 function scanDatabases() {
   const found = new Set<string>();
-  if (isSQLiteFile(databasePath)) found.add(fs.realpathSync(databasePath));
 
-  const visit = (directory: string, depth: number) => {
-    if (depth > MAX_SCAN_DEPTH || found.size >= MAX_DATABASES) return;
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(directory, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (found.size >= MAX_DATABASES) break;
-      const entryPath = path.join(directory, entry.name);
-      if (entry.isDirectory() && !entry.isSymbolicLink() && !IGNORED_DIRECTORIES.has(entry.name.toLowerCase())) visit(entryPath, depth + 1);
-      else if (entry.isFile() && SQLITE_EXTENSIONS.has(path.extname(entry.name).toLowerCase()) && isSQLiteFile(entryPath)) {
-        found.add(fs.realpathSync(entryPath));
+  if (process.env.SQLITE_EXPLICIT_PATHS) {
+    const files = String(process.env.SQLITE_EXPLICIT_PATHS)
+      .split(",")
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .map((item) => path.resolve(item));
+    for (const file of files) {
+      if (fs.existsSync(file) && isSQLiteFile(file)) {
+        found.add(fs.realpathSync(file));
       }
     }
-  };
-  for (const root of canonicalRoots()) visit(root, 0);
+    if (isSQLiteFile(databasePath)) {
+      found.add(fs.realpathSync(databasePath));
+    }
+  } else {
+    if (isSQLiteFile(databasePath)) found.add(fs.realpathSync(databasePath));
+
+    const visit = (directory: string, depth: number) => {
+      if (depth > MAX_SCAN_DEPTH || found.size >= MAX_DATABASES) return;
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(directory, { withFileTypes: true });
+      } catch {
+        return;
+      }
+      for (const entry of entries) {
+        if (found.size >= MAX_DATABASES) break;
+        const entryPath = path.join(directory, entry.name);
+        if (entry.isDirectory() && !entry.isSymbolicLink() && !IGNORED_DIRECTORIES.has(entry.name.toLowerCase())) visit(entryPath, depth + 1);
+        else if (entry.isFile() && SQLITE_EXTENSIONS.has(path.extname(entry.name).toLowerCase()) && isSQLiteFile(entryPath)) {
+          found.add(fs.realpathSync(entryPath));
+        }
+      }
+    };
+    for (const root of canonicalRoots()) visit(root, 0);
+  }
+
   return [...found].map((filePath) => {
     const stat = fs.statSync(filePath);
     let tableCount = 0;
