@@ -146,10 +146,14 @@ function getActionKey(method: string, path: string, statusCode: number): string 
   const isSuccess = statusCode >= 200 && statusCode < 300;
 
   if (cleanPath.startsWith("/api/auth/")) {
-    if (cleanPath.includes("/login")) return isSuccess ? "AUTH_LOGIN_SUCCESS" : "AUTH_LOGIN_FAILED";
-    if (cleanPath.includes("/change-password")) return isSuccess ? "AUTH_CHANGE_PASSWORD" : "AUTH_CHANGE_PASSWORD_FAILED";
+    if (cleanPath.includes("/login")) return "Đăng nhập";
+    if (cleanPath.includes("/change-password")) return "Đổi mật khẩu";
   }
-  if (cleanPath.startsWith("/api/admin/sqlite/")) return "SQL";
+  if (cleanPath.startsWith("/api/admin/sqlite/")) return "SQLite";
+
+  if (method === "POST") return "Tạo mới";
+  if (method === "PUT" || method === "PATCH") return "Cập nhật";
+  if (method === "DELETE") return "Xóa";
 
   return method;
 }
@@ -172,16 +176,14 @@ export function auditApiRequestMiddleware(req: any, res: any, next: any) {
   res.on("finish", () => {
     if (res.statusCode < 100) return;
 
-    const detail: AuditDetail = {
-      ip: getClientIp(req),
-      success: res.statusCode < 400,
-      description: getActionDescription(method, resource, res.statusCode)
-    };
+    // Lưu {} trống hoàn toàn để giảm tải tối đa cho cơ sở dữ liệu
+    const detail = {};
 
     const actionKey = getActionKey(method, resource, res.statusCode);
+    const description = getActionDescription(method, resource, res.statusCode);
     const userId = req.user?.id ?? null;
 
-    void writeAudit(userId, actionKey, resource, detail).catch((err: any) => {
+    void writeAudit(userId, actionKey, description, detail).catch((err: any) => {
       console.error("Failed to write audit log:", err?.message || err);
     });
   });
