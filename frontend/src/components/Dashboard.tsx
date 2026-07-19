@@ -445,11 +445,10 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
   }, []);
 
   useEffect(() => {
-    // Lazy load sync logs and activation after main content renders
+    // Lazy load general dashboard data after main content renders
     const timer = setTimeout(() => {
       fetchSyncLogs();
       fetchDevices();
-      fetchActivationFiles();
       fetchRestoreStatuses();
       fetchAgentOnlineStatus();
     }, 800);
@@ -471,6 +470,10 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
       setActivationFiles(res.data);
     } catch {}
   };
+
+  useEffect(() => {
+    if (activeTab === 'activation') fetchActivationFiles();
+  }, [activeTab]);
 
   const fetchSyncLogs = async () => {
     try {
