@@ -6,6 +6,7 @@ import DriveSharePage from './components/DriveSharePage';
 import ToastContainer from './components/ToastContainer';
 import { ToastProvider } from './context/ToastContext';
 import api from './utils/api';
+import { clearAuthSession, getTokenExpiresAt, isTokenExpired } from './utils/authSession';
 
 const getStoredUser = () => {
   try {
@@ -16,8 +17,18 @@ const getStoredUser = () => {
   }
 };
 
+const getStoredToken = () => {
+  const token = localStorage.getItem('token');
+  if (!token) return null;
+  if (isTokenExpired(token)) {
+    clearAuthSession();
+    return null;
+  }
+  return token;
+};
+
 export default function App() {
-  const [token, setToken] = useState<string | null>(localStorage.getItem('token'));
+  const [token, setToken] = useState<string | null>(getStoredToken);
   const [user, setUser] = useState<any>(getStoredUser);
   const [deviceLinkToken, setDeviceLinkToken] = useState<string | null>(
     new URLSearchParams(window.location.search).get('device_link')
@@ -44,6 +55,12 @@ export default function App() {
 
   useEffect(() => {
     if (!token) return;
+    const expiresAt = getTokenExpiresAt(token);
+    if (!expiresAt) {
+      handleLogout();
+      return;
+    }
+    const expiryTimer = window.setTimeout(handleLogout, Math.max(0, expiresAt - Date.now()));
     api.get('/users/me').then(({ data }) => {
       localStorage.setItem('user', JSON.stringify(data));
       setUser(data);
@@ -52,6 +69,7 @@ export default function App() {
         handleLogout();
       }
     });
+    return () => window.clearTimeout(expiryTimer);
   }, [token]);
 
   const handleLeaveDeviceLink = () => {

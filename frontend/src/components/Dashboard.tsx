@@ -806,7 +806,7 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="shrink-0 border-b border-slate-200 bg-white px-4 py-4 dark:border-slate-800 dark:bg-slate-900 sm:px-5 lg:px-8">
+        {activeTab !== 'community' && <header className="shrink-0 border-b border-slate-200 bg-white px-4 py-4 dark:border-slate-800 dark:bg-slate-900 sm:px-5 lg:px-8">
           <div className="flex items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
               <button onClick={() => setMobileMenuOpen(true)} className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300 lg:hidden" aria-label="Mở menu"><Menu className="w-5 h-5" /></button>
@@ -938,9 +938,9 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
               </select>
             </div>
           )}
-        </header>
+        </header>}
 
-        <div className="flex-1 grid grid-cols-12 gap-4 overflow-y-auto p-4 sm:gap-6 sm:p-6 xl:gap-8 xl:p-8">
+        <div className={`flex-1 grid grid-cols-12 overflow-y-auto ${activeTab === 'community' ? 'gap-0 p-3 sm:p-4' : 'gap-4 p-4 sm:gap-6 sm:p-6 xl:gap-8 xl:p-8'}`}>
           {activeTab === 'dashboard' && (
             <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải...</div>}>
               <OverviewTab 
@@ -1005,7 +1005,7 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
 
           {activeTab === 'community' && (
             <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải chat...</div>}>
-              <CommunityChatTab currentUser={currentUser} />
+              <CommunityChatTab currentUser={currentUser} onOpenMenu={() => setMobileMenuOpen(true)} />
             </Suspense>
           )}
 

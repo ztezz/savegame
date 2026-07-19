@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowDown, Bot, ChevronDown, Copy, Hash, Lock, Pin, Radio, Search, Send, Shield, Smile, Sparkles, X } from 'lucide-react';
+import { ArrowDown, Bot, ChevronDown, Copy, Hash, Lock, Menu, Pin, Radio, Search, Send, Shield, Smile, Sparkles, X } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import api, { API_BASE_URL } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
@@ -46,9 +46,10 @@ interface ChatRoom {
 
 interface CommunityChatTabProps {
   currentUser: any;
+  onOpenMenu: () => void;
 }
 
-const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
+const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpenMenu }) => {
   const { showToast } = useToast();
   const reduceMotion = useReducedMotion();
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
@@ -63,6 +64,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [chatSearch, setChatSearch] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [aiTyping, setAiTyping] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState('');
@@ -383,12 +385,16 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
     }
   };
 
-  return <motion.div initial={reduceMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="admin-dark-surface col-span-12 min-h-[calc(100vh-9rem)] px-1 sm:px-0">
-    <div className="flex min-h-[680px] flex-col overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white shadow-2xl shadow-slate-200/60 xl:h-[calc(100vh-9rem)]">
+  return <motion.div initial={reduceMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="admin-dark-surface relative col-span-12 h-full min-h-0 overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-indigo-50 via-slate-100 to-emerald-50 p-1.5 dark:from-slate-950 dark:via-indigo-950/70 dark:to-emerald-950/60 sm:p-2">
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-70 dark:opacity-55" style={{ backgroundImage: 'radial-gradient(circle at 12% 18%, rgba(99,102,241,.3), transparent 24%), radial-gradient(circle at 88% 82%, rgba(16,185,129,.22), transparent 25%), radial-gradient(rgba(100,116,139,.2) 1px, transparent 1px)', backgroundSize: 'auto, auto, 20px 20px' }} />
+    <div aria-hidden="true" className="pointer-events-none absolute -left-12 top-1/3 h-40 w-40 rounded-full border border-indigo-300/40 dark:border-indigo-500/20" />
+    <div aria-hidden="true" className="pointer-events-none absolute -right-16 bottom-1/4 h-56 w-56 rounded-full border border-emerald-300/40 dark:border-emerald-500/20" />
+    <div className="relative z-10 flex h-full min-h-[680px] flex-col overflow-hidden rounded-[2rem] border border-white/70 bg-white shadow-2xl shadow-indigo-200/50 dark:border-slate-700/80 dark:shadow-black/40">
       <div className="relative overflow-hidden border-b border-white/10 bg-slate-950 p-5 text-white sm:p-6">
         <div className="pointer-events-none absolute -right-12 -top-20 h-48 w-48 rounded-full bg-indigo-500/30 blur-3xl" />
         <div className="relative flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
+          <button type="button" onClick={onOpenMenu} aria-label="Mở menu" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/10 text-slate-200 lg:hidden"><Menu className="h-5 w-5" /></button>
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/10 shadow-inner shadow-white/5"><Hash className="h-5 w-5 text-indigo-300" /></div>
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
@@ -403,21 +409,24 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
             <p className="mt-1 truncate text-xs text-slate-400">{activeRoom?.description || 'Không gian trò chuyện của cộng đồng CloudSave.'}</p>
           </div>
         </div>
-        <div className="hidden items-center gap-2 text-[10px] font-black sm:flex">
-          {activeRoom?.ai_enabled !== false && <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.07] px-3 py-1.5 text-indigo-200"><Sparkles className="h-3 w-3" />{activeRoom?.ai_auto_reply ? 'AI tự động' : 'AI sẵn sàng'}</span>}
-          {activeRoom?.is_locked && <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/20 bg-amber-400/10 px-3 py-1.5 text-amber-200"><Lock className="h-3 w-3" />Đã khóa</span>}
+        <div className="flex items-center gap-2 text-[10px] font-black">
+          <div className="hidden items-center gap-2 sm:flex">
+            {activeRoom?.ai_enabled !== false && <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.07] px-3 py-1.5 text-indigo-200"><Sparkles className="h-3 w-3" />{activeRoom?.ai_auto_reply ? 'AI tự động' : 'AI sẵn sàng'}</span>}
+            {activeRoom?.is_locked && <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/20 bg-amber-400/10 px-3 py-1.5 text-amber-200"><Lock className="h-3 w-3" />Đã khóa</span>}
+          </div>
+          <button type="button" onClick={() => { setSearchOpen((open) => !open); if (searchOpen) setChatSearch(''); }} aria-label={searchOpen ? 'Đóng tìm kiếm' : 'Tìm trong phòng chat'} aria-expanded={searchOpen} className={`flex h-10 w-10 items-center justify-center rounded-xl border transition ${searchOpen ? 'border-indigo-400 bg-indigo-500 text-white' : 'border-white/10 bg-white/[0.07] text-slate-300 hover:bg-white/15 hover:text-white'}`}>{searchOpen ? <X className="h-4 w-4" /> : <Search className="h-4 w-4" />}</button>
         </div>
         </div>
       </div>
 
-      <div className="border-b border-slate-100 bg-white px-4 py-3">
+      {searchOpen && <div className="border-b border-slate-100 bg-white px-4 py-3">
         <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-sm transition focus-within:border-indigo-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-100/60 dark:focus-within:bg-slate-800 dark:focus-within:ring-indigo-950">
           <Search className="h-4 w-4 text-slate-400" />
-          <input value={chatSearch} onChange={(e) => setChatSearch(e.target.value)} placeholder="Tìm trong phòng chat..." className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-100 dark:caret-indigo-400" />
+          <input autoFocus value={chatSearch} onChange={(e) => setChatSearch(e.target.value)} placeholder="Tìm trong phòng chat..." className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-100 dark:caret-indigo-400" />
           {chatSearch && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300">{visibleMessages.length}</span>}
           {chatSearch && <button type="button" aria-label="Xóa tìm kiếm" onClick={() => setChatSearch('')} className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"><X className="h-3.5 w-3.5" /></button>}
         </div>
-      </div>
+      </div>}
 
       {pinnedMessages.length > 0 && <div className="border-b border-amber-100 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/50">
         <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-amber-700 dark:text-amber-300"><Pin className="h-3.5 w-3.5" />Tin ghim</div>
@@ -440,7 +449,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
           const reply = findReply(item.reply_to_id);
           const showDay = !previous || new Date(previous.created_at).toDateString() !== new Date(item.created_at).toDateString();
           return <React.Fragment key={item.id}>
-            {showDay && <div className="sticky top-2 z-10 flex justify-center"><span className="rounded-full bg-white/80 px-3 py-1 text-[11px] font-black text-sky-700 shadow-sm backdrop-blur">{formatDay(item.created_at)}</span></div>}
+            {showDay && <div className="flex justify-center py-2"><span className="rounded-full border border-white/80 bg-white px-3 py-1 text-[11px] font-black text-sky-700 shadow-sm dark:border-slate-600 dark:bg-slate-800 dark:text-sky-300">{formatDay(item.created_at)}</span></div>}
             <motion.div initial={reduceMotion ? false : { opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.25 }} className={`flex items-end gap-2 ${mine ? 'justify-end' : 'justify-start'}`}>
             {!mine && <div className={`mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[10px] font-black text-white shadow-sm ${isAi ? 'bg-gradient-to-br from-violet-500 to-indigo-600' : 'bg-slate-800'}`}>{isAi ? <Bot className="h-4 w-4" /> : avatarLabel(item)}</div>}
             <div className={`relative max-w-[88%] px-4 py-3 shadow-sm sm:max-w-[72%] ${mine ? 'rounded-2xl rounded-br-md border border-emerald-200/80 bg-emerald-100 text-slate-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-50' : isAi ? 'rounded-2xl rounded-bl-md border border-violet-100 bg-violet-50 text-slate-800 dark:border-violet-800 dark:bg-violet-950/90 dark:text-violet-100' : 'rounded-2xl rounded-bl-md border border-white/80 bg-white text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100'}`}>

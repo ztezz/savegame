@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getValidToken, logoutExpiredSession } from './authSession';
 
 export const API_ORIGIN = import.meta.env.VITE_API_URL || 'https://api.luugame.fun';
 export const API_BASE_URL = `${API_ORIGIN}/api`;
@@ -10,7 +11,9 @@ const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const storedToken = localStorage.getItem('token');
+  const token = getValidToken();
+  if (storedToken && !token) return Promise.reject(new axios.CanceledError('Phiên đăng nhập đã hết hạn'));
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -29,9 +32,7 @@ api.interceptors.response.use(
       method: error.config?.method?.toUpperCase()
     });
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.dispatchEvent(new Event('auth:logout'));
+      logoutExpiredSession();
     }
     return Promise.reject(error);
   }
@@ -45,7 +46,11 @@ export const uploadWithProgress = async (
 ): Promise<any> => {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    const token = localStorage.getItem('token');
+    const token = getValidToken();
+    if (!token) {
+      reject(new Error('Phiên đăng nhập đã hết hạn'));
+      return;
+    }
     const baseURL = UPLOAD_BASE_URL;
     
     const fullUrl = `${baseURL}${url}`;
@@ -147,6 +152,7 @@ export const uploadWithProgress = async (
           resolve({ success: true });
         }
       } else {
+        if (xhr.status === 401) logoutExpiredSession();
         console.error(`❌ Upload failed: ${xhr.status} - ${xhr.responseText}`);
         reject(new Error(`Upload failed with status ${xhr.status}: ${xhr.responseText}`));
       }
@@ -215,15 +221,21 @@ export const uploadLargeFile = async (
   onProgress: (progress: number, stats?: { uploadedBytes: number; totalBytes: number; bytesPerSecond: number; etaSeconds: number | null; phase: 'uploading' | 'finalizing' }) => void,
   signal?: AbortSignal,
 ): Promise<any> => {
-  const token = localStorage.getItem('token');
+  const token = getValidToken();
   if (!token) throw new Error('Phiên đăng nhập đã hết hạn');
 
   const headers = { Authorization: `Bearer ${token}` };
-  const initResponse = await axios.post(`${UPLOAD_BASE_URL}${basePath}/init`, {
-    fileName: file.name,
-    fileSize: file.size,
-    ...metadata,
-  }, { headers, timeout: 30000 });
+  let initResponse;
+  try {
+    initResponse = await axios.post(`${UPLOAD_BASE_URL}${basePath}/init`, {
+      fileName: file.name,
+      fileSize: file.size,
+      ...metadata,
+    }, { headers, timeout: 30000 });
+  } catch (error: any) {
+    if (error.response?.status === 401) logoutExpiredSession();
+    throw error;
+  }
   const sessionId = String(initResponse.data.sessionId);
   const chunkSize = Number(initResponse.data.chunkSize);
   const totalChunks = Math.ceil(file.size / chunkSize);
@@ -271,7 +283,10 @@ export const uploadLargeFile = async (
             report('uploading');
           };
           const finish = (callback: () => void) => { signal?.removeEventListener('abort', abort); callback(); };
-          xhr.onload = () => finish(() => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`HTTP ${xhr.status}`)));
+          xhr.onload = () => finish(() => {
+            if (xhr.status === 401) logoutExpiredSession();
+            xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`HTTP ${xhr.status}`));
+          });
           xhr.onerror = () => finish(() => reject(new Error('Lỗi mạng')));
           xhr.ontimeout = () => finish(() => reject(new Error('Quá thời gian')));
           xhr.onabort = () => finish(() => reject(new Error('Upload đã hủy')));
@@ -296,7 +311,10 @@ export const uploadLargeFile = async (
     await Promise.all(Array.from({ length: Math.min(3, totalChunks) }, () => worker()));
     if (signal?.aborted) throw new Error('Upload đã hủy');
     report('finalizing');
-    const response = await axios.post(`${UPLOAD_BASE_URL}${basePath}/finalize`, { sessionId }, { headers, timeout: 120000 });
+    const response = await axios.post(`${UPLOAD_BASE_URL}${basePath}/finalize`, { sessionId }, { headers, timeout: 120000 }).catch((error) => {
+      if (error.response?.status === 401) logoutExpiredSession();
+      throw error;
+    });
     onProgress(100, { uploadedBytes: file.size, totalBytes: file.size, bytesPerSecond: 0, etaSeconds: 0, phase: 'finalizing' });
     return response.data;
   } catch (error) {
@@ -312,7 +330,11 @@ export const downloadWithProgress = async (
 ): Promise<void> => {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    const token = localStorage.getItem('token');
+    const token = getValidToken();
+    if (!token) {
+      reject(new Error('Phiên đăng nhập đã hết hạn'));
+      return;
+    }
     const baseURL = API_BASE_URL;
     
     const fullUrl = `${baseURL}${url}`;
@@ -346,6 +368,7 @@ export const downloadWithProgress = async (
         console.log(`✅ Download completed: ${fileName}`);
         resolve();
       } else {
+        if (xhr.status === 401) logoutExpiredSession();
         reject(new Error(`HTTP ${xhr.status}`));
       }
     });
