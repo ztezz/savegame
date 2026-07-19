@@ -25,9 +25,15 @@ console.log(`Database target: SQLite ${databasePath}`);
 
 const JSON_COLUMNS = new Set(["value_json", "detail_json", "reactions_json"]);
 const BOOLEAN_COLUMNS = new Set(["is_locked", "ai_enabled", "ai_auto_reply", "is_online", "online", "known"]);
+const configuredTransactionTimeoutMs = Number(process.env.SQLITE_TRANSACTION_TIMEOUT_MS || 10_000);
+const TRANSACTION_TIMEOUT_MS = Number.isFinite(configuredTransactionTimeoutMs)
+  ? Math.max(100, Math.min(300_000, Math.floor(configuredTransactionTimeoutMs)))
+  : 10_000;
 let transactionOwner: SQLiteClient | null = null;
 let transactionFinished: Promise<void> | null = null;
 let finishTransaction: (() => void) | null = null;
+let transactionQueue: Promise<void> = Promise.resolve();
+let transactionTimeout: NodeJS.Timeout | null = null;
 
 async function waitForTransaction(client?: SQLiteClient) {
   while (transactionOwner && transactionOwner !== client && transactionFinished) {
@@ -36,16 +42,40 @@ async function waitForTransaction(client?: SQLiteClient) {
 }
 
 async function beginTransaction(client: SQLiteClient) {
-  await waitForTransaction(client);
-  transactionOwner = client;
-  transactionFinished = new Promise<void>((resolve) => {
-    finishTransaction = resolve;
+  if (transactionOwner === client) throw new Error("Nested transactions are not supported");
+
+  let releaseQueue!: () => void;
+  const previousTransaction = transactionQueue;
+  transactionQueue = new Promise<void>((resolve) => {
+    releaseQueue = resolve;
   });
-  database.exec("BEGIN IMMEDIATE");
+  await previousTransaction;
+
+  try {
+    database.exec("BEGIN IMMEDIATE");
+    transactionOwner = client;
+    transactionFinished = transactionQueue;
+    finishTransaction = releaseQueue;
+    client.markTransactionStarted();
+    transactionTimeout = setTimeout(() => {
+      if (transactionOwner !== client) return;
+      console.error(`SQLite transaction exceeded ${TRANSACTION_TIMEOUT_MS}ms; rolling back automatically`);
+      client.markTransactionTimedOut();
+      endTransaction(client, "ROLLBACK");
+    }, TRANSACTION_TIMEOUT_MS);
+    transactionTimeout.unref();
+  } catch (error) {
+    releaseQueue();
+    throw error;
+  }
 }
 
 function endTransaction(client: SQLiteClient, command: "COMMIT" | "ROLLBACK") {
   if (transactionOwner !== client) return;
+  if (transactionTimeout) {
+    clearTimeout(transactionTimeout);
+    transactionTimeout = null;
+  }
   try {
     if (database.inTransaction) database.exec(command);
   } finally {
@@ -102,8 +132,24 @@ function normalizeError(error: any) {
 }
 
 class SQLiteClient {
+  private transactionTimedOut = false;
+  private released = false;
+
+  markTransactionStarted() {
+    this.transactionTimedOut = false;
+  }
+
+  markTransactionTimedOut() {
+    this.transactionTimedOut = true;
+  }
+
   async query<T = any>(sql: string, params: any[] = []): Promise<DatabaseResult<T>> {
     const command = sql.trim().replace(/;$/, "").toUpperCase();
+    if (this.released) throw new Error("SQLite client has already been released");
+    if (this.transactionTimedOut) {
+      if (command === "ROLLBACK") return { rows: [], rowCount: 0 };
+      throw new Error("SQLite transaction timed out and was rolled back");
+    }
     if (command === "BEGIN") {
       await beginTransaction(this);
       return { rows: [], rowCount: 0 };
@@ -134,7 +180,10 @@ class SQLiteClient {
     }
   }
 
-  release() {}
+  release() {
+    if (transactionOwner === this) endTransaction(this, "ROLLBACK");
+    this.released = true;
+  }
 }
 
 class SQLitePool extends SQLiteClient {

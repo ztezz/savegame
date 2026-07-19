@@ -442,7 +442,7 @@ class SingleInstance:
 
 
 def show_single_instance_notice() -> None:
-    message = "CloudSave Desktop Agent da dang chay. Hay mo tu tray icon hien co."
+    message = "CloudSave Desktop Agent đang chạy. Hãy mở từ biểu tượng khay hệ thống hiện có."
     try:
         ctypes.windll.user32.MessageBoxW(None, message, "CloudSave Desktop Agent", 0x00000040)
     except Exception:

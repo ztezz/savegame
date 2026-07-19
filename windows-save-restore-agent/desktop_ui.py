@@ -60,6 +60,7 @@ except Exception:
 
 AgentEventHandler = Callable[[str, Dict[str, Any]], None]
 AgentFactory = Callable[[AgentEventHandler, threading.Event], Any]
+HOME_URL = "https://luugame.fun"
 
 
 def _rounded_polygon(canvas: Any, x1: float, y1: float, x2: float, y2: float,
@@ -491,10 +492,12 @@ class DesktopAgentApp:
         footer.grid(row=5, column=0, sticky="ew")
         tk.Label(footer, text="Khóa luôn được che trên màn hình", bg=self.BG, fg=self.DIM,
                  font=("Segoe UI", 8)).pack(side="left")
-        self.tray_button = self.make_button(footer, "Ẩn xuống tray", self.hide_to_tray, compact=True, quiet=True)
+        self.tray_button = self.make_button(footer, "Ẩn xuống khay", self.hide_to_tray, compact=True, quiet=True)
         self.tray_button.pack(side="right")
         self.copy_key_button = self.make_button(footer, "Sao chép API key", self.copy_api_key, compact=True)
         self.copy_key_button.pack(side="right", padx=(0, 7))
+        self.home_button = self.make_button(footer, "Mở trang chủ", self.open_homepage, compact=True, quiet=True)
+        self.home_button.pack(side="right", padx=(0, 7))
 
         grip_size = int(18 * chrome_scale)
         self.resize_grip = tk.Canvas(self.root, width=grip_size, height=grip_size, bg=self.BG, bd=0,
@@ -952,7 +955,7 @@ class DesktopAgentApp:
             return
         if event_type == "_tray_failed":
             self.tray_ready, self.tray_failed = False, True
-            self.append_activity(f"Không thể khởi động tray: {self._bounded(payload.get('error'))}")
+            self.append_activity(f"Không thể khởi động khay hệ thống: {self._bounded(payload.get('error'))}")
             return
         if event_type == "_tray_stopped":
             self.tray_ready = False
@@ -962,6 +965,9 @@ class DesktopAgentApp:
             return
         if event_type == "_tray_open_verification":
             self.open_verification_url()
+            return
+        if event_type == "_tray_open_homepage":
+            self.open_homepage()
             return
         if event_type == "_refresh_link":
             self.refresh_link_flow()
@@ -1016,7 +1022,7 @@ class DesktopAgentApp:
             self._set_link_waiting(False)
             self.set_status("RELAY ĐÃ KẾT NỐI", "Agent đang theo dõi tác vụ khôi phục trong nền.", "success")
             self.append_activity("Xác thực thành công; relay đang hoạt động.")
-            self.show_toast("CloudSave hoạt động", "Thiết bị đã kết nối và đang chạy trong tray.", tone="success")
+            self.show_toast("CloudSave hoạt động", "Thiết bị đã kết nối và đang chạy trong khay hệ thống.", tone="success")
             self.cancel_auto_hide()
             self.auto_hide_after_id = self.root.after(900, self.auto_hide_authenticated)
             return
@@ -1053,13 +1059,13 @@ class DesktopAgentApp:
             game = self._bounded(payload.get("game_name", "Game không xác định"), 80)
             error = self._bounded(payload.get("error", "Lỗi không xác định"), 240)
             self.is_syncing = False
-            self.set_status("RELAY GẶP LỖI", f"Không thể khôi phục {game}. Xem activity stream.", "danger")
+            self.set_status("RELAY GẶP LỖI", f"Không thể khôi phục {game}. Xem dòng hoạt động.", "danger")
             self.append_activity(f"Khôi phục thất bại: {game}: {error}")
             self.show_toast("Đồng bộ thất bại", f"{game}: {error}", tone="danger")
             return
         if event_type == "warning":
             self._set_link_waiting(False)
-            self.append_activity(f"Cảnh báo: {self._bounded(payload.get('message', 'Unknown warning'), 240)}")
+            self.append_activity(f"Cảnh báo: {self._bounded(payload.get('message', 'Cảnh báo không xác định'), 240)}")
 
     def set_status(self, title: str, message: str, tone: str) -> None:
         self.status_title_var.set(title)
@@ -1089,7 +1095,7 @@ class DesktopAgentApp:
         content = self.log_text.get("1.0", "end-1c")
         if content:
             self._set_clipboard(content)
-            self.show_toast("Đã sao chép", "Activity stream đã được sao chép.", tone="info")
+            self.show_toast("Đã sao chép", "Dòng hoạt động đã được sao chép.", tone="info")
 
     def copy_api_key(self) -> None:
         if not self.api_key:
@@ -1143,12 +1149,33 @@ class DesktopAgentApp:
 
         self._set_clipboard(self.verification_url)
         self.append_activity("Không thể mở trình duyệt; đã sao chép liên kết đăng nhập.")
-        self.show_toast("Không mở được trình duyệt", "Link đăng nhập đã được sao chép. Hãy dán vào trình duyệt.", tone="warning")
+        self.show_toast("Không mở được trình duyệt", "Liên kết đăng nhập đã được sao chép. Hãy dán vào trình duyệt.", tone="warning")
 
     def copy_verification_url(self) -> None:
         if self.verification_url and self.is_valid_verification_url(self.verification_url):
             self._set_clipboard(self.verification_url)
             self.show_toast("Đã sao chép", "Liên kết đăng nhập đã được sao chép.", tone="info")
+
+    def open_homepage(self) -> None:
+        try:
+            parsed = urlsplit(HOME_URL)
+            if (parsed.scheme != "https" or parsed.hostname != "luugame.fun" or parsed.path not in ("", "/")
+                    or parsed.query or parsed.fragment or parsed.username or parsed.password or parsed.port not in (None, 443)):
+                raise ValueError("URL trang chủ không hợp lệ")
+            if os.name == "nt":
+                os.startfile(HOME_URL)
+                opened = True
+            else:
+                opened = webbrowser.open(HOME_URL)
+        except (OSError, ValueError) as exc:
+            logging.warning("Could not open homepage: %s", exc)
+            opened = webbrowser.open(HOME_URL)
+
+        if opened:
+            self.append_activity("Đã mở trang chủ CloudSave trong trình duyệt.")
+            return
+        self._set_clipboard(HOME_URL)
+        self.show_toast("Không mở được trang chủ", "Địa chỉ trang chủ đã được sao chép.", tone="warning")
 
     def refresh_link_flow(self) -> None:
         if self.link_refresh_pending:
@@ -1273,7 +1300,7 @@ class DesktopAgentApp:
         if self.closing:
             return
         if not self.tray_ready:
-            reason = "tray chưa sẵn sàng" if not self.tray_failed else "tray không khởi động được"
+            reason = "khay hệ thống chưa sẵn sàng" if not self.tray_failed else "khay hệ thống không khởi động được"
             self.append_activity(f"Không thể ẩn cửa sổ vì {reason}.")
             return
         self.cancel_auto_hide()
@@ -1287,7 +1314,7 @@ class DesktopAgentApp:
         self.root.withdraw()
         if not silent:
             self.append_activity("Cửa sổ đã ẩn xuống khay hệ thống.")
-            self.show_toast("Chạy trong tray", "CloudSave vẫn hoạt động trong nền.", tone="info")
+            self.show_toast("Đang chạy nền", "CloudSave vẫn hoạt động trong khay hệ thống.", tone="info")
 
     def build_tray_image(self) -> Any:
         icon_path = self.base_dir / "icon.ico"
@@ -1310,15 +1337,16 @@ class DesktopAgentApp:
     def start_tray_icon(self) -> None:
         if pystray is None:
             self.tray_failed = True
-            self.append_activity("pystray không khả dụng; cửa sổ sẽ luôn hiển thị.")
+            self.append_activity("Khay hệ thống không khả dụng; cửa sổ sẽ luôn hiển thị.")
             return
         tray_image = self.build_tray_image()
         if tray_image is None:
             self.tray_failed = True
-            self.append_activity("Không thể tạo hình ảnh tray; cửa sổ sẽ luôn hiển thị.")
+            self.append_activity("Không thể tạo biểu tượng khay hệ thống; cửa sổ sẽ luôn hiển thị.")
             return
         menu = pystray.Menu(
             pystray.MenuItem("Mở CloudSave", lambda icon, item: self.enqueue_event("_tray_show", {})),
+            pystray.MenuItem("Mở trang chủ", lambda icon, item: self.enqueue_event("_tray_open_homepage", {})),
             pystray.MenuItem("Mở trang đăng nhập", lambda icon, item: self.enqueue_event("_tray_open_verification", {})),
             pystray.MenuItem("Thoát", lambda icon, item: self.enqueue_event("_tray_exit", {})),
         )
@@ -1329,7 +1357,7 @@ class DesktopAgentApp:
             self.tray_failed = True
             self.tray_image.close()
             self.tray_image = None
-            self.append_activity(f"Không thể tạo tray: {self._bounded(exc)}")
+            self.append_activity(f"Không thể tạo khay hệ thống: {self._bounded(exc)}")
             logging.exception("Could not create tray icon")
             return
         self.tray_thread = threading.Thread(target=self.run_tray_icon, name="cloudsave-tray", daemon=False)
@@ -1360,7 +1388,7 @@ class DesktopAgentApp:
         toast.overrideredirect(True)
         toast.attributes("-topmost", True)
         toast.configure(bg=self.CARD)
-        frame = tk.Frame(toast, bg=self.CARD, padx=13, pady=11, highlightthickness=1, highlightbackground=self.EDGE)
+        frame = tk.Frame(toast, bg=self.CARD, padx=15, pady=12, highlightthickness=1, highlightbackground=self.EDGE)
         frame.pack(fill="both", expand=True)
         tk.Frame(frame, bg=stripe, width=4).pack(side="left", fill="y", padx=(0, 11))
         body = tk.Frame(frame, bg=self.CARD)
@@ -1368,12 +1396,12 @@ class DesktopAgentApp:
         tk.Label(body, text=self._bounded(title, 48), bg=self.CARD, fg=stripe,
                  font=("Segoe UI Semibold", 10)).pack(anchor="w")
         tk.Label(body, text=self._bounded(message, 180), bg=self.CARD, fg=self.TEXT, font=("Segoe UI", 9),
-                 wraplength=270, justify="left").pack(anchor="w", pady=(4, 0))
+                 wraplength=390, justify="left").pack(anchor="w", pady=(4, 0))
         toast.update_idletasks()
         left, top, right, bottom = self._work_area()
         dpi_scale = max(float(self.root.tk.call("tk", "scaling")) / (96.0 / 72.0), 1.0)
-        width = min(max(int(330 * dpi_scale), frame.winfo_reqwidth() + int(8 * dpi_scale)),
-                    int((right - left) * 0.42))
+        width = min(max(int(430 * dpi_scale), frame.winfo_reqwidth() + int(8 * dpi_scale)),
+                    int((right - left) * 0.55))
         height = max(int(78 * dpi_scale), frame.winfo_reqheight() + int(2 * dpi_scale))
         offset = len(self.toast_windows) * (height + 9)
         x = max(left, right - width - 16)
