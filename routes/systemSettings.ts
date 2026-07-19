@@ -492,15 +492,18 @@ settingsRouter.get('/api/system/audit-stats', authenticateToken, isAdmin, async 
   try {
     const days = Math.min(parseInt(String(req.query.days || '7'), 10), 90);
     const since = new Date(Date.now() - days * 86400000).toISOString();
+    const sampleLimit = 50000;
 
     const [summaryRes, topUsersRes, topActionsRes] = await Promise.all([
       pool.query(
         `WITH recent AS (
            SELECT
-             CASE WHEN json_valid(detail_json) THEN CAST(json_extract(detail_json, '$.statusCode') AS INTEGER) END AS status_code,
-             CASE WHEN json_valid(detail_json) THEN json_extract(detail_json, '$.success') END AS success
+              CASE WHEN json_valid(detail_json) THEN CAST(json_extract(detail_json, '$.statusCode') AS INTEGER) END AS status_code,
+              CASE WHEN json_valid(detail_json) THEN json_extract(detail_json, '$.success') END AS success
            FROM audit_logs
            WHERE created_at >= datetime($1)
+           ORDER BY created_at DESC
+           LIMIT $2
          )
          SELECT
            COUNT(*) AS total,
@@ -515,22 +518,34 @@ settingsRouter.get('/api/system/audit-stats', authenticateToken, isAdmin, async 
            END), 0) AS error_count,
            COALESCE(SUM(CASE WHEN status_code IN (401, 403) THEN 1 ELSE 0 END), 0) AS rejected_count
          FROM recent`,
-        [since]
+        [since, sampleLimit]
       ),
       pool.query(
-        `SELECT u.username, COUNT(*) AS cnt
-         FROM audit_logs a LEFT JOIN users u ON u.id = a.user_id
-         WHERE a.created_at >= datetime($1) AND u.username IS NOT NULL
+        `WITH recent AS (
+           SELECT user_id FROM audit_logs
+           WHERE created_at >= datetime($1)
+           ORDER BY created_at DESC
+           LIMIT $2
+         )
+         SELECT u.username, COUNT(*) AS cnt
+         FROM recent a LEFT JOIN users u ON u.id = a.user_id
+         WHERE u.username IS NOT NULL
          GROUP BY u.username ORDER BY cnt DESC LIMIT 5`,
-        [since]
+        [since, sampleLimit]
       ),
       pool.query(
-        `SELECT
+        `WITH recent AS (
+           SELECT detail_json, action FROM audit_logs
+           WHERE created_at >= datetime($1)
+           ORDER BY created_at DESC
+           LIMIT $2
+         )
+         SELECT
            COALESCE(CASE WHEN json_valid(detail_json) THEN json_extract(detail_json, '$.method') END, action) AS act,
            COUNT(*) AS cnt
-         FROM audit_logs WHERE created_at >= datetime($1)
+         FROM recent
          GROUP BY act ORDER BY cnt DESC LIMIT 8`,
-        [since]
+        [since, sampleLimit]
       ),
     ]);
 

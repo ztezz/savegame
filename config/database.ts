@@ -16,6 +16,11 @@ database.pragma("foreign_keys = ON");
 database.pragma("busy_timeout = 5000");
 database.pragma("synchronous = NORMAL");
 
+// Keep reads responsive while a write transaction is open on the main connection.
+const readDatabase = new Database(databasePath, { readonly: true, fileMustExist: true });
+readDatabase.pragma("query_only = ON");
+readDatabase.pragma("busy_timeout = 5000");
+
 console.log(`Database target: SQLite ${databasePath}`);
 
 const JSON_COLUMNS = new Set(["value_json", "detail_json", "reactions_json"]);
@@ -108,12 +113,15 @@ class SQLiteClient {
       return { rows: [], rowCount: 0 };
     }
 
-    await waitForTransaction(this);
-
     const prepared = prepareQuery(sql, params);
+    const returnsRows = /^\s*(SELECT|WITH|PRAGMA|EXPLAIN)\b/i.test(prepared.sql) || /\bRETURNING\b/i.test(prepared.sql);
+    const isReadOnly = /^\s*(SELECT|WITH|EXPLAIN)\b/i.test(prepared.sql) && !/\b(INSERT|UPDATE|DELETE|REPLACE)\b/i.test(prepared.sql);
+
+    if (transactionOwner && transactionOwner !== this && !isReadOnly) await waitForTransaction(this);
+
     try {
-      const statement = database.prepare(prepared.sql);
-      const returnsRows = /^\s*(SELECT|WITH|PRAGMA|EXPLAIN)\b/i.test(prepared.sql) || /\bRETURNING\b/i.test(prepared.sql);
+      const connection = transactionOwner && transactionOwner !== this && isReadOnly ? readDatabase : database;
+      const statement = connection.prepare(prepared.sql);
       if (returnsRows) {
         const rows = statement.all(...prepared.params).map(normalizeRow) as T[];
         return { rows, rowCount: rows.length };
@@ -131,7 +139,6 @@ class SQLiteClient {
 
 class SQLitePool extends SQLiteClient {
   async query<T = any>(sql: string, params: any[] = []) {
-    await waitForTransaction();
     return super.query<T>(sql, params);
   }
 
@@ -140,6 +147,7 @@ class SQLitePool extends SQLiteClient {
   }
 
   async end() {
+    readDatabase.close();
     database.close();
   }
 

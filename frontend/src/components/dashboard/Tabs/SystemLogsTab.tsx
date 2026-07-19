@@ -221,7 +221,10 @@ const SystemLogsTab: React.FC<SystemLogsTabProps> = ({ currentUser }) => {
   }, [isAdmin, statsDays]);
 
   useEffect(() => { loadLogs(); }, [loadLogs]);
-  useEffect(() => { loadStats(); }, [loadStats]);
+  useEffect(() => {
+    const timer = window.setTimeout(loadStats, 500);
+    return () => window.clearTimeout(timer);
+  }, [loadStats]);
 
   // Auto-refresh
   useEffect(() => {
