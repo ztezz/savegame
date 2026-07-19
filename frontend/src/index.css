@@ -35,9 +35,9 @@
   }
 
   .dark .community-chat-pattern {
-    background-color: rgb(15 23 42) !important;
-    background-image: radial-gradient(circle at 15% 20%, rgb(99 102 241 / 0.12), transparent 28%), radial-gradient(circle at 85% 75%, rgb(14 165 233 / 0.1), transparent 28%), url('/pattern.svg') !important;
-    background-blend-mode: normal, normal, overlay !important;
+    background-color: rgb(20 58 51) !important;
+    background-image: linear-gradient(135deg, rgb(22 78 67 / 0.92), rgb(15 45 48 / 0.92)), url('/pattern.svg') !important;
+    background-blend-mode: normal, soft-light !important;
   }
 
   .dark .admin-dark-surface .bg-slate-50,

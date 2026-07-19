@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useRef, useState } from 'react';
-import { Shield, RefreshCw, Monitor, Server, UploadCloud, Download, CheckCircle2, AlertCircle, Save, FolderOpen, HardDrive, MessageCircle, SlidersHorizontal, Bot, File, Gauge, Loader2, Timer, X } from 'lucide-react';
+import { Shield, RefreshCw, Monitor, Server, UploadCloud, Download, CheckCircle2, AlertCircle, Save, FolderOpen, HardDrive, MessageCircle, SlidersHorizontal, Bot, File, Gauge, Loader2, Timer, X, Hash, Lock, Pencil, Plus, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import api from '../../../utils/api';
 import { API_ORIGIN, uploadLargeFile } from '../../../utils/api';
@@ -40,6 +40,21 @@ interface AgentUploadStats {
   phase: 'uploading' | 'finalizing';
 }
 
+interface ChatRoom {
+  id: number;
+  name: string;
+  description?: string | null;
+  is_locked?: boolean;
+  ai_enabled?: boolean;
+  ai_bot_name?: string | null;
+  ai_tone?: string | null;
+  ai_prompt?: string | null;
+  ai_auto_reply?: boolean;
+  message_count?: number;
+}
+
+const emptyRoomDraft = { name: '', description: '', isLocked: false, aiEnabled: true, aiBotName: '', aiTone: 'default', aiPrompt: '', aiAutoReply: true };
+
 const formatUploadSpeed = (bytesPerSecond: number) => {
   if (!bytesPerSecond) return 'Đang đo...';
   return bytesPerSecond < 1024 * 1024
@@ -75,6 +90,12 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
   const [chatManaging, setChatManaging] = useState(false);
   const [chatBans, setChatBans] = useState<any[]>([]);
   const [chatUsers, setChatUsers] = useState<any[]>([]);
+  const [chatRooms, setChatRooms] = useState<ChatRoom[]>([]);
+  const [editingRoomId, setEditingRoomId] = useState<number | null>(null);
+  const [roomDraft, setRoomDraft] = useState(emptyRoomDraft);
+  const [roomSaving, setRoomSaving] = useState(false);
+  const [roomMemory, setRoomMemory] = useState<{ summary: string; last_message_id: number; updated_at: string | null } | null>(null);
+  const [memoryLoading, setMemoryLoading] = useState(false);
   const [banUserId, setBanUserId] = useState('');
   const [banDurationMinutes, setBanDurationMinutes] = useState(60);
   const [banReason, setBanReason] = useState('');
@@ -101,6 +122,8 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
           setChatBans(bans.data || []);
           const users = await api.get('/users');
           setChatUsers(users.data || []);
+          const rooms = await api.get('/community/rooms');
+          setChatRooms(rooms.data || []);
         } catch {
           showToast('Không tải được dữ liệu quản trị', 'warning');
         }
@@ -212,6 +235,95 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     setChatStats(chat.data);
     const bans = await api.get('/community/bans');
     setChatBans(bans.data || []);
+  };
+
+  const refreshChatRooms = async () => {
+    const res = await api.get('/community/rooms');
+    setChatRooms(res.data || []);
+  };
+
+  const startCreateRoom = () => {
+    setEditingRoomId(0);
+    setRoomDraft(emptyRoomDraft);
+    setRoomMemory(null);
+  };
+
+  const startEditRoom = (room: ChatRoom) => {
+    setEditingRoomId(room.id);
+    setRoomDraft({
+      name: room.name,
+      description: room.description || '',
+      isLocked: !!room.is_locked,
+      aiEnabled: room.ai_enabled !== false,
+      aiBotName: room.ai_bot_name || '',
+      aiTone: room.ai_tone || 'default',
+      aiPrompt: room.ai_prompt || '',
+      aiAutoReply: room.ai_auto_reply !== false,
+    });
+    setRoomMemory(null);
+  };
+
+  const saveRoom = async () => {
+    const name = roomDraft.name.trim();
+    if (!name || editingRoomId === null) return;
+    setRoomSaving(true);
+    const payload = {
+      name,
+      description: roomDraft.description.trim() || null,
+      isLocked: roomDraft.isLocked,
+      aiEnabled: roomDraft.aiEnabled,
+      aiBotName: roomDraft.aiBotName.trim() || null,
+      aiTone: roomDraft.aiTone,
+      aiPrompt: roomDraft.aiPrompt.trim() || null,
+      aiAutoReply: roomDraft.aiAutoReply,
+    };
+    try {
+      if (editingRoomId === 0) await api.post('/community/rooms', payload);
+      else await api.patch(`/community/rooms/${editingRoomId}`, payload);
+      await refreshChatRooms();
+      setEditingRoomId(null);
+      setRoomMemory(null);
+      showToast(editingRoomId === 0 ? 'Đã tạo phòng chat' : 'Đã cập nhật phòng chat', 'success');
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Không lưu được phòng chat', 'error');
+    } finally {
+      setRoomSaving(false);
+    }
+  };
+
+  const deleteRoom = async (room: ChatRoom) => {
+    if (!window.confirm(`Xóa phòng chat "${room.name}"?`)) return;
+    try {
+      await api.delete(`/community/rooms/${room.id}`);
+      await refreshChatRooms();
+      if (editingRoomId === room.id) setEditingRoomId(null);
+      showToast('Đã xóa phòng chat', 'success');
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Không xóa được phòng chat', 'error');
+    }
+  };
+
+  const loadRoomMemory = async (roomId: number) => {
+    setMemoryLoading(true);
+    try {
+      const res = await api.get(`/community/rooms/${roomId}/memory`);
+      setRoomMemory(res.data);
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Không tải được bộ nhớ AI', 'error');
+    } finally {
+      setMemoryLoading(false);
+    }
+  };
+
+  const clearRoomMemory = async (roomId: number) => {
+    if (!window.confirm('Xóa toàn bộ bộ nhớ dài hạn của AI trong phòng này?')) return;
+    try {
+      await api.delete(`/community/rooms/${roomId}/memory`);
+      setRoomMemory({ summary: '', last_message_id: 0, updated_at: null });
+      showToast('Đã xóa bộ nhớ AI', 'success');
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Không xóa được bộ nhớ AI', 'error');
+    }
   };
 
   const banChatUser = async () => {
@@ -392,7 +504,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
             </label>
           </div>
 
-          <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4">
+          <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-4 dark:border-indigo-900/70 dark:bg-indigo-950/30">
             <label className="flex items-center justify-between gap-4 text-sm">
               <span>
                 <span className="block font-bold text-slate-900">Auto sync trình duyệt</span>
@@ -607,7 +719,81 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       </div>
     </div>}
 
-    {isAdmin && activeSection === 'chat' && <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+    {isAdmin && activeSection === 'chat' && <div className="space-y-4">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><Hash className="h-4 w-4 text-indigo-600" />Phòng chat cộng đồng</h3>
+            <p className="mt-1 text-xs text-slate-500">Tạo phòng và cấu hình quyền truy cập, AI riêng cho từng phòng.</p>
+          </div>
+          <button type="button" onClick={startCreateRoom} className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-black text-white transition hover:bg-indigo-700"><Plus className="h-4 w-4" />Thêm phòng</button>
+        </div>
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+          <div className="space-y-2">
+            {chatRooms.map((room) => <div key={room.id} className={`flex items-center gap-3 rounded-2xl border p-3 transition ${editingRoomId === room.id ? 'border-indigo-300 bg-indigo-50/60 dark:border-indigo-800 dark:bg-indigo-950/30' : 'border-slate-200 bg-slate-50'}`}>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-sm dark:bg-slate-900 dark:text-indigo-300"><Hash className="h-4 w-4" /></div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2"><p className="truncate text-sm font-black text-slate-900">{room.name}</p>{room.is_locked && <Lock className="h-3.5 w-3.5 text-amber-500" />}</div>
+                <p className="truncate text-xs text-slate-500">{room.message_count || 0} tin nhắn{room.ai_enabled === false ? ' · AI tắt' : room.ai_auto_reply ? ' · AI tự động' : ' · AI khi gọi'}</p>
+              </div>
+              <button type="button" onClick={() => startEditRoom(room)} aria-label={`Thiết lập ${room.name}`} className="rounded-xl p-2 text-slate-400 transition hover:bg-white hover:text-indigo-600 dark:hover:bg-slate-800"><Pencil className="h-4 w-4" /></button>
+            </div>)}
+            {chatRooms.length === 0 && <p className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm text-slate-500">Chưa có phòng chat.</p>}
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+            {editingRoomId === null ? <div className="flex min-h-48 flex-col items-center justify-center text-center">
+              <Hash className="h-8 w-8 text-slate-300" />
+              <p className="mt-3 text-sm font-black text-slate-700">Chọn một phòng để thiết lập</p>
+              <p className="mt-1 text-xs text-slate-500">Hoặc bấm Thêm phòng để tạo kênh cộng đồng mới.</p>
+            </div> : <div className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <h4 className="font-black text-slate-900">{editingRoomId === 0 ? 'Thêm phòng chat' : 'Thiết lập phòng chat'}</h4>
+                <button type="button" onClick={() => { setEditingRoomId(null); setRoomMemory(null); }} className="rounded-lg p-1.5 text-slate-400 hover:bg-white dark:hover:bg-slate-800" aria-label="Đóng thiết lập"><X className="h-4 w-4" /></button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block text-xs font-black text-slate-700">Tên phòng
+                  <input value={roomDraft.name} onChange={(e) => setRoomDraft((current) => ({ ...current, name: e.target.value }))} maxLength={80} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-bold outline-none focus:border-indigo-400" placeholder="Ví dụ: Hỗ trợ game" />
+                </label>
+                <label className="block text-xs font-black text-slate-700">Tên bot riêng
+                  <input value={roomDraft.aiBotName} onChange={(e) => setRoomDraft((current) => ({ ...current, aiBotName: e.target.value }))} maxLength={80} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-bold outline-none focus:border-indigo-400" placeholder="Để trống dùng mặc định" />
+                </label>
+              </div>
+              <label className="block text-xs font-black text-slate-700">Mô tả
+                <textarea value={roomDraft.description} onChange={(e) => setRoomDraft((current) => ({ ...current, description: e.target.value }))} maxLength={240} rows={2} className="mt-2 w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold outline-none focus:border-indigo-400" placeholder="Mô tả ngắn về nội dung phòng" />
+              </label>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold text-slate-700"><input className="h-4 w-4 accent-indigo-600" type="checkbox" checked={roomDraft.isLocked} onChange={(e) => setRoomDraft((current) => ({ ...current, isLocked: e.target.checked }))} />Khóa phòng</label>
+                <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold text-slate-700"><input className="h-4 w-4 accent-indigo-600" type="checkbox" checked={roomDraft.aiEnabled} onChange={(e) => setRoomDraft((current) => ({ ...current, aiEnabled: e.target.checked }))} />Bật AI</label>
+                <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white p-3 text-xs font-bold text-slate-700"><input className="h-4 w-4 accent-indigo-600" type="checkbox" checked={roomDraft.aiAutoReply} onChange={(e) => setRoomDraft((current) => ({ ...current, aiAutoReply: e.target.checked }))} />AI tự trả lời</label>
+              </div>
+              {roomDraft.aiEnabled && <div className="rounded-2xl border border-violet-100 bg-violet-50/60 p-4 dark:border-violet-900 dark:bg-violet-950/30">
+                <div className="grid gap-3 sm:grid-cols-[180px_1fr]">
+                  <label className="block text-xs font-black text-slate-700">Giọng điệu
+                    <select value={roomDraft.aiTone} onChange={(e) => setRoomDraft((current) => ({ ...current, aiTone: e.target.value }))} className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold outline-none">
+                      <option value="default">Mặc định vui vẻ</option><option value="support">Hỗ trợ kỹ thuật</option><option value="fun">Vui nhộn</option><option value="serious">Nghiêm túc</option><option value="gaming">Game thủ</option>
+                    </select>
+                  </label>
+                  <label className="block text-xs font-black text-slate-700">Prompt riêng
+                    <textarea value={roomDraft.aiPrompt} onChange={(e) => setRoomDraft((current) => ({ ...current, aiPrompt: e.target.value }))} maxLength={1500} rows={3} className="mt-2 w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold outline-none" placeholder="Để trống sẽ dùng giọng điệu đã chọn" />
+                  </label>
+                </div>
+                {editingRoomId > 0 && <div className="mt-3 rounded-xl border border-violet-100 bg-white p-3 dark:border-violet-900 dark:bg-slate-900">
+                  <div className="flex items-center justify-between gap-2"><span className="text-xs font-black text-violet-700 dark:text-violet-300">Bộ nhớ dài hạn AI</span><div className="flex gap-2"><button type="button" onClick={() => loadRoomMemory(editingRoomId)} disabled={memoryLoading} className="rounded-lg bg-violet-50 px-3 py-1.5 text-[10px] font-black text-violet-600 disabled:opacity-50 dark:bg-violet-950 dark:text-violet-300">{memoryLoading ? 'Đang tải' : roomMemory ? 'Làm mới' : 'Xem'}</button>{roomMemory?.summary && <button type="button" onClick={() => clearRoomMemory(editingRoomId)} className="rounded-lg bg-red-50 px-3 py-1.5 text-[10px] font-black text-red-600 dark:bg-red-950 dark:text-red-300">Xóa</button>}</div></div>
+                  {roomMemory && <div className="mt-2"><p className="max-h-36 overflow-y-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">{roomMemory.summary || 'AI chưa tạo bộ nhớ cho phòng này.'}</p>{roomMemory.updated_at && <p className="mt-1 text-[10px] font-bold text-violet-400">Cập nhật {new Date(roomMemory.updated_at).toLocaleString('vi-VN')}</p>}</div>}
+                </div>}
+              </div>}
+              <div className="flex flex-col-reverse gap-2 border-t border-slate-200 pt-4 sm:flex-row sm:justify-between">
+                {editingRoomId > 1 ? <button type="button" onClick={() => { const room = chatRooms.find((item) => item.id === editingRoomId); if (room) void deleteRoom(room); }} className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 px-4 py-2.5 text-xs font-black text-red-600 transition hover:bg-red-50 dark:border-red-900 dark:hover:bg-red-950"><Trash2 className="h-4 w-4" />Xóa phòng</button> : <span />}
+                <button type="button" onClick={saveRoom} disabled={!roomDraft.name.trim() || roomSaving} className="rounded-xl bg-indigo-600 px-5 py-2.5 text-xs font-black text-white transition hover:bg-indigo-700 disabled:opacity-50">{roomSaving ? 'Đang lưu...' : editingRoomId === 0 ? 'Tạo phòng' : 'Lưu thiết lập'}</button>
+              </div>
+            </div>}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
       <h3 className="text-sm font-black uppercase tracking-widest text-slate-800">Khóa chat người dùng</h3>
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1.2fr_160px_1fr_auto] lg:items-end">
         <label className="block text-sm font-bold text-slate-900">Người dùng
@@ -641,6 +827,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
             <button type="button" onClick={() => unbanChatUser(ban.user_id)} disabled={chatManaging} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold disabled:opacity-50">Mở khóa</button>
           </div>)}
         </div>}
+      </div>
       </div>
     </div>}
 

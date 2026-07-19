@@ -1,16 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowDown, Bot, Copy, Hash, Lock, Pencil, Pin, Plus, Radio, Search, Send, Shield, Smile, Sparkles, Trash2, Users, X } from 'lucide-react';
+import { ArrowDown, Bot, ChevronDown, Copy, Hash, Lock, Pin, Radio, Search, Send, Shield, Smile, Sparkles, X } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import api, { API_BASE_URL } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
 
 const chatPattern = {
-  backgroundColor: '#f8fafc',
-  backgroundImage: "radial-gradient(circle at 15% 20%, rgba(99, 102, 241, 0.07), transparent 28%), radial-gradient(circle at 85% 75%, rgba(14, 165, 233, 0.07), transparent 28%), url('/pattern.svg')",
-  backgroundSize: 'auto, auto, 460px auto',
+  backgroundColor: '#b7dca9',
+  backgroundImage: "linear-gradient(135deg, rgba(226, 232, 132, 0.55), rgba(74, 171, 135, 0.3)), url('/pattern.svg')",
+  backgroundSize: 'auto, 440px auto',
   backgroundPosition: 'center, center, top left',
-  backgroundRepeat: 'no-repeat, no-repeat, repeat',
-  backgroundBlendMode: 'normal, normal, soft-light',
+  backgroundRepeat: 'no-repeat, repeat',
+  backgroundBlendMode: 'normal, soft-light',
 };
 
 interface ChatMessage {
@@ -55,15 +55,10 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
   const [activeRoomId, setActiveRoomId] = useState(1);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [message, setMessage] = useState('');
-  const [newRoomName, setNewRoomName] = useState('');
-  const [newRoomDescription, setNewRoomDescription] = useState('');
-  const [editingRoomId, setEditingRoomId] = useState<number | null>(null);
-  const [roomDraft, setRoomDraft] = useState({ name: '', description: '', isLocked: false, aiEnabled: true, aiBotName: '', aiTone: 'default', aiPrompt: '', aiAutoReply: true });
   const [unreadByRoom, setUnreadByRoom] = useState<Record<number, number>>({});
   const [typingUsers, setTypingUsers] = useState<Record<number, Record<number, string>>>({});
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [creatingRoom, setCreatingRoom] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
@@ -71,8 +66,6 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
   const [aiTyping, setAiTyping] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState('');
-  const [roomMemory, setRoomMemory] = useState<{ summary: string; last_message_id: number; updated_at: string | null } | null>(null);
-  const [memoryLoading, setMemoryLoading] = useState(false);
   const listRef = useRef<HTMLDivElement | null>(null);
   const lastMessageIdRef = useRef(0);
   const activeRoomIdRef = useRef(activeRoomId);
@@ -342,98 +335,6 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
 
   const avatarLabel = (item: ChatMessage) => (item.display_name || item.username || '?').slice(0, 1).toUpperCase();
 
-  const createRoom = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const name = newRoomName.trim();
-    if (!name || creatingRoom) return;
-    setCreatingRoom(true);
-    try {
-      const res = await api.post('/community/rooms', { name, description: newRoomDescription.trim() || null });
-      setRooms((current) => [...current, res.data]);
-      setActiveRoomId(res.data.id);
-      setNewRoomName('');
-      setNewRoomDescription('');
-      showToast('Đã tạo phòng chat', 'success');
-    } catch (err: any) {
-      showToast(err.response?.data?.error || 'Tạo phòng chat thất bại', 'error');
-    } finally {
-      setCreatingRoom(false);
-    }
-  };
-
-  const startEditRoom = (room: ChatRoom) => {
-    setEditingRoomId(room.id);
-    setRoomDraft({
-      name: room.name,
-      description: room.description || '',
-      isLocked: !!room.is_locked,
-      aiEnabled: room.ai_enabled !== false,
-      aiBotName: room.ai_bot_name || '',
-      aiTone: room.ai_tone || 'default',
-      aiPrompt: room.ai_prompt || '',
-      aiAutoReply: room.ai_auto_reply !== false,
-    });
-    setRoomMemory(null);
-  };
-
-  const loadRoomMemory = async (roomId: number) => {
-    setMemoryLoading(true);
-    try {
-      const res = await api.get(`/community/rooms/${roomId}/memory`);
-      setRoomMemory(res.data);
-    } catch (err: any) {
-      showToast(err.response?.data?.error || 'Không tải được bộ nhớ AI', 'error');
-    } finally {
-      setMemoryLoading(false);
-    }
-  };
-
-  const clearRoomMemory = async (roomId: number) => {
-    if (!window.confirm('Xóa toàn bộ bộ nhớ dài hạn của AI trong phòng này?')) return;
-    try {
-      await api.delete(`/community/rooms/${roomId}/memory`);
-      setRoomMemory({ summary: '', last_message_id: 0, updated_at: null });
-      showToast('Đã xóa bộ nhớ AI', 'success');
-    } catch (err: any) {
-      showToast(err.response?.data?.error || 'Không xóa được bộ nhớ AI', 'error');
-    }
-  };
-
-  const saveRoom = async (roomId: number) => {
-    const name = roomDraft.name.trim();
-    if (!name) return;
-    try {
-      const res = await api.patch(`/community/rooms/${roomId}`, {
-        name,
-        description: roomDraft.description.trim() || null,
-        isLocked: roomDraft.isLocked,
-        aiEnabled: roomDraft.aiEnabled,
-        aiBotName: roomDraft.aiBotName.trim() || null,
-        aiTone: roomDraft.aiTone,
-        aiPrompt: roomDraft.aiPrompt.trim() || null,
-        aiAutoReply: roomDraft.aiAutoReply,
-      });
-      setRooms((current) => current.map((room) => room.id === roomId ? { ...room, ...res.data } : room));
-      setEditingRoomId(null);
-      showToast('Đã cập nhật phòng chat', 'success');
-    } catch (err: any) {
-      showToast(err.response?.data?.error || 'Cập nhật phòng chat thất bại', 'error');
-    }
-  };
-
-  const deleteRoom = async (roomId: number) => {
-    if (!window.confirm('Xóa phòng chat này? Tin nhắn sẽ không hiển thị nữa.')) return;
-    try {
-      await api.delete(`/community/rooms/${roomId}`);
-      const nextRooms = rooms.filter((room) => room.id !== roomId);
-      setRooms(nextRooms);
-      if (activeRoomId === roomId) setActiveRoomId(nextRooms[0]?.id || 1);
-      showToast('Đã xóa phòng chat', 'success');
-    } catch (err: any) {
-      showToast(err.response?.data?.error || 'Xóa phòng chat thất bại', 'error');
-    }
-  };
-
   const startEdit = (item: ChatMessage) => {
     setEditingMessageId(item.id);
     setEditingText(item.message);
@@ -482,15 +383,23 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
     }
   };
 
-  return <motion.div initial={reduceMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="admin-dark-surface col-span-12 grid min-h-[calc(100vh-9rem)] grid-cols-1 gap-4 px-1 sm:px-0 xl:grid-cols-[280px_minmax(0,1fr)]">
-    <div className="order-1 flex min-h-[680px] flex-col overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white shadow-2xl shadow-slate-200/60 xl:order-2 xl:h-[calc(100vh-9rem)]">
+  return <motion.div initial={reduceMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="admin-dark-surface col-span-12 min-h-[calc(100vh-9rem)] px-1 sm:px-0">
+    <div className="flex min-h-[680px] flex-col overflow-hidden rounded-[2rem] border border-slate-200/80 bg-white shadow-2xl shadow-slate-200/60 xl:h-[calc(100vh-9rem)]">
       <div className="relative overflow-hidden border-b border-white/10 bg-slate-950 p-5 text-white sm:p-6">
         <div className="pointer-events-none absolute -right-12 -top-20 h-48 w-48 rounded-full bg-indigo-500/30 blur-3xl" />
         <div className="relative flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-white/10 shadow-inner shadow-white/5"><Hash className="h-5 w-5 text-indigo-300" /></div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2"><h3 className="truncate text-lg font-black tracking-tight">{activeRoom?.name || 'Phòng chat cộng đồng'}</h3><span className="inline-flex items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-emerald-300"><Radio className="h-2.5 w-2.5" />Live</span></div>
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="relative min-w-0">
+                <select aria-label="Chọn phòng chat" value={activeRoomId} onChange={(event) => setActiveRoomId(Number(event.target.value))} className="max-w-[55vw] appearance-none truncate rounded-xl border border-white/10 bg-white/[0.08] py-2 pl-3 pr-9 text-sm font-black text-white outline-none transition hover:bg-white/[0.13] focus:border-indigo-400 sm:max-w-sm sm:text-base">
+                  {rooms.map((room) => <option key={room.id} value={room.id} className="bg-slate-900 text-white">#{room.name}{unreadByRoom[room.id] ? ` (${unreadByRoom[room.id]} mới)` : ''}</option>)}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-300" />
+              </div>
+              <span className="hidden items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-emerald-300 sm:inline-flex"><Radio className="h-2.5 w-2.5" />Live</span>
+            </div>
             <p className="mt-1 truncate text-xs text-slate-400">{activeRoom?.description || 'Không gian trò chuyện của cộng đồng CloudSave.'}</p>
           </div>
         </div>
@@ -498,10 +407,6 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
           {activeRoom?.ai_enabled !== false && <span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.07] px-3 py-1.5 text-indigo-200"><Sparkles className="h-3 w-3" />{activeRoom?.ai_auto_reply ? 'AI tự động' : 'AI sẵn sàng'}</span>}
           {activeRoom?.is_locked && <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/20 bg-amber-400/10 px-3 py-1.5 text-amber-200"><Lock className="h-3 w-3" />Đã khóa</span>}
         </div>
-        </div>
-
-        <div className="relative mt-4 flex gap-2 overflow-x-auto pb-1 xl:hidden">
-          {rooms.map((room) => <button key={room.id} type="button" onClick={() => setActiveRoomId(room.id)} className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-black transition ${room.id === activeRoomId ? 'border-white bg-white text-slate-950 shadow-lg dark:border-indigo-400 dark:bg-indigo-500 dark:text-white dark:shadow-none' : 'border-white/10 bg-white/[0.06] text-slate-300'}`}><span className="flex items-center gap-1.5"><Hash className="h-3 w-3" />{room.name}{!!unreadByRoom[room.id] && <span className="rounded-full bg-rose-500 px-1.5 py-0.5 text-[9px] text-white">{unreadByRoom[room.id]}</span>}</span></button>)}
         </div>
       </div>
 
@@ -538,12 +443,12 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
             {showDay && <div className="sticky top-2 z-10 flex justify-center"><span className="rounded-full bg-white/80 px-3 py-1 text-[11px] font-black text-sky-700 shadow-sm backdrop-blur">{formatDay(item.created_at)}</span></div>}
             <motion.div initial={reduceMotion ? false : { opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.25 }} className={`flex items-end gap-2 ${mine ? 'justify-end' : 'justify-start'}`}>
             {!mine && <div className={`mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[10px] font-black text-white shadow-sm ${isAi ? 'bg-gradient-to-br from-violet-500 to-indigo-600' : 'bg-slate-800'}`}>{isAi ? <Bot className="h-4 w-4" /> : avatarLabel(item)}</div>}
-            <div className={`relative max-w-[88%] px-4 py-3 shadow-sm sm:max-w-[72%] ${mine ? 'rounded-2xl rounded-br-md bg-indigo-600 text-white shadow-indigo-100 dark:shadow-none' : isAi ? 'rounded-2xl rounded-bl-md border border-violet-100 bg-violet-50 text-slate-800 dark:border-violet-800 dark:bg-violet-950/70 dark:text-violet-100' : 'rounded-2xl rounded-bl-md border border-slate-200/70 bg-white text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100'}`}>
+            <div className={`relative max-w-[88%] px-4 py-3 shadow-sm sm:max-w-[72%] ${mine ? 'rounded-2xl rounded-br-md border border-emerald-200/80 bg-emerald-100 text-slate-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-50' : isAi ? 'rounded-2xl rounded-bl-md border border-violet-100 bg-violet-50 text-slate-800 dark:border-violet-800 dark:bg-violet-950/90 dark:text-violet-100' : 'rounded-2xl rounded-bl-md border border-white/80 bg-white text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100'}`}>
               <div className="flex items-center justify-between gap-3 mb-1">
-                <span className={`text-xs font-black ${mine ? 'text-indigo-100' : isAi ? 'text-violet-700 dark:text-violet-300' : 'text-slate-700 dark:text-slate-200'}`}>{item.display_name || item.username}{item.role === 'Admin' && <Shield className="inline w-3 h-3 ml-1" />}{isAi && <span className="ml-1 rounded-full bg-violet-200 px-1.5 py-0.5 text-[9px] text-violet-800 dark:bg-violet-900 dark:text-violet-200">AI</span>}</span>
-                <span className={`text-[10px] ${mine ? 'text-indigo-100' : 'text-slate-400'}`}>{item.pinned_at && <Pin className="mr-1 inline h-3 w-3" />}{new Date(item.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
+                <span className={`text-xs font-black ${mine ? 'text-emerald-800 dark:text-emerald-200' : isAi ? 'text-violet-700 dark:text-violet-300' : 'text-slate-700 dark:text-slate-200'}`}>{item.display_name || item.username}{item.role === 'Admin' && <Shield className="inline w-3 h-3 ml-1" />}{isAi && <span className="ml-1 rounded-full bg-violet-200 px-1.5 py-0.5 text-[9px] text-violet-800 dark:bg-violet-900 dark:text-violet-200">AI</span>}</span>
+                <span className={`text-[10px] ${mine ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>{item.pinned_at && <Pin className="mr-1 inline h-3 w-3" />}{new Date(item.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
               </div>
-              {reply && <div className={`mb-2 rounded-xl border-l-4 px-3 py-2 text-xs ${mine ? 'border-white/70 bg-white/10 text-sky-50' : 'border-sky-300 bg-sky-50 text-slate-600 dark:border-sky-700 dark:bg-slate-900/70 dark:text-slate-300'}`}>
+              {reply && <div className={`mb-2 rounded-xl border-l-4 px-3 py-2 text-xs ${mine ? 'border-emerald-500 bg-white/45 text-slate-600 dark:bg-black/20 dark:text-emerald-100' : 'border-sky-300 bg-sky-50 text-slate-600 dark:border-sky-700 dark:bg-slate-900/70 dark:text-slate-300'}`}>
                 <p className="font-black">{reply.display_name || reply.username}</p>
                 <p className="line-clamp-2">{reply.message}</p>
               </div>}
@@ -554,16 +459,16 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
                   <button type="button" onClick={() => { setEditingMessageId(null); setEditingText(''); }} className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-black text-slate-600 dark:bg-slate-700 dark:text-slate-200">Hủy</button>
                 </div>
               </div> : <p className="text-sm whitespace-pre-wrap break-words leading-6">{item.message}</p>}
-              {item.edited_at && <p className={`mt-1 text-[10px] font-semibold ${mine ? 'text-sky-100' : 'text-slate-400'}`}>đã sửa</p>}
+              {item.edited_at && <p className={`mt-1 text-[10px] font-semibold ${mine ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>đã sửa</p>}
               {item.reactions_json && Object.keys(item.reactions_json).length > 0 && <div className="mt-2 flex flex-wrap gap-1">
-                {Object.entries(item.reactions_json as Record<string, string[]>).map(([emoji, users]) => <button key={emoji} type="button" onClick={() => toggleReaction(item.id, emoji)} className={`rounded-full px-2 py-0.5 text-xs font-bold ${mine ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200'}`}>{emoji} {users.length}</button>)}
+                {Object.entries(item.reactions_json as Record<string, string[]>).map(([emoji, users]) => <button key={emoji} type="button" onClick={() => toggleReaction(item.id, emoji)} className={`rounded-full px-2 py-0.5 text-xs font-bold ${mine ? 'bg-white/60 text-emerald-800 dark:bg-white/10 dark:text-emerald-100' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200'}`}>{emoji} {users.length}</button>)}
               </div>}
               <div className="mt-2 flex flex-wrap gap-1">
-                <button type="button" onClick={() => setReplyTo(item)} className={`text-[10px] font-black ${mine ? 'text-sky-100 hover:text-white' : 'text-sky-600'}`}>Trả lời</button>
-                {((mine && !isAi) || isAdmin) && <button type="button" onClick={() => startEdit(item)} className={`text-[10px] font-black ${mine ? 'text-sky-100 hover:text-white' : 'text-slate-500'}`}>Sửa</button>}
-                {isAdmin && <button type="button" onClick={() => togglePin(item)} className={`inline-flex items-center gap-1 text-[10px] font-black ${mine ? 'text-sky-100 hover:text-white' : 'text-amber-600'}`}><Pin className="h-3 w-3" />{item.pinned_at ? 'Bỏ ghim' : 'Ghim'}</button>}
-                <button type="button" onClick={() => copyMessage(item.message)} className={`inline-flex items-center gap-1 text-[10px] font-black ${mine ? 'text-sky-100 hover:text-white' : 'text-slate-500'}`}><Copy className="h-3 w-3" />Copy</button>
-                {['👍', '😂', '❤️'].map((emoji) => <button key={emoji} type="button" onClick={() => toggleReaction(item.id, emoji)} className={`text-[11px] ${mine ? 'hover:bg-white/10' : 'hover:bg-slate-100 dark:hover:bg-slate-700'} rounded-full px-1`}>{emoji}</button>)}
+                <button type="button" onClick={() => setReplyTo(item)} className={`text-[10px] font-black ${mine ? 'text-emerald-700 hover:text-emerald-900 dark:text-emerald-300' : 'text-sky-600'}`}>Trả lời</button>
+                {((mine && !isAi) || isAdmin) && <button type="button" onClick={() => startEdit(item)} className={`text-[10px] font-black ${mine ? 'text-emerald-700 hover:text-emerald-900 dark:text-emerald-300' : 'text-slate-500'}`}>Sửa</button>}
+                {isAdmin && <button type="button" onClick={() => togglePin(item)} className={`inline-flex items-center gap-1 text-[10px] font-black ${mine ? 'text-emerald-700 hover:text-emerald-900 dark:text-emerald-300' : 'text-amber-600'}`}><Pin className="h-3 w-3" />{item.pinned_at ? 'Bỏ ghim' : 'Ghim'}</button>}
+                <button type="button" onClick={() => copyMessage(item.message)} className={`inline-flex items-center gap-1 text-[10px] font-black ${mine ? 'text-emerald-700 hover:text-emerald-900 dark:text-emerald-300' : 'text-slate-500'}`}><Copy className="h-3 w-3" />Copy</button>
+                {['👍', '😂', '❤️'].map((emoji) => <button key={emoji} type="button" onClick={() => toggleReaction(item.id, emoji)} className={`text-[11px] ${mine ? 'hover:bg-white/50 dark:hover:bg-white/10' : 'hover:bg-slate-100 dark:hover:bg-slate-700'} rounded-full px-1`}>{emoji}</button>)}
               </div>
             </div>
             </motion.div>
@@ -597,78 +502,6 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser }) => {
         <div className="mt-2 flex items-center justify-between px-1 text-[10px] font-semibold text-slate-400"><span>Enter để gửi · Shift + Enter để xuống dòng</span><span>{message.length}/1000</span></div>
       </form>
     </div>
-
-    <aside className="order-2 space-y-4 xl:order-1 xl:max-h-[calc(100vh-9rem)] xl:overflow-y-auto xl:pr-1">
-      <div className="rounded-[1.75rem] border border-slate-200/80 bg-slate-950 p-5 text-white shadow-xl shadow-slate-200">
-        <div className="mb-4 flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-indigo-300"><Users className="h-5 w-5" /></div>
-          <div>
-            <h4 className="font-black text-white">Kênh cộng đồng</h4>
-            <p className="text-xs font-semibold text-slate-400">{rooms.length} kênh đang hoạt động</p>
-          </div>
-        </div>
-        <div className="space-y-2">
-          {rooms.map((room) => editingRoomId === room.id ? <div key={room.id} className="rounded-2xl border border-white/10 bg-white p-3 text-slate-900 dark:bg-slate-800 dark:text-slate-100">
-            <input value={roomDraft.name} onChange={(e) => setRoomDraft((current) => ({ ...current, name: e.target.value }))} maxLength={80} className="mb-2 w-full rounded-xl border border-sky-100 px-3 py-2 text-sm font-bold outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-white" />
-            <textarea value={roomDraft.description} onChange={(e) => setRoomDraft((current) => ({ ...current, description: e.target.value }))} maxLength={240} rows={2} placeholder="Mô tả phòng" className="mb-2 w-full resize-none rounded-xl border border-sky-100 px-3 py-2 text-xs font-semibold outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-white" />
-            <label className="mb-2 flex items-center gap-2 text-xs font-bold text-slate-600"><input type="checkbox" checked={roomDraft.isLocked} onChange={(e) => setRoomDraft((current) => ({ ...current, isLocked: e.target.checked }))} />Khóa phòng</label>
-            <label className="mb-3 flex items-center gap-2 text-xs font-bold text-slate-600"><input type="checkbox" checked={roomDraft.aiEnabled} onChange={(e) => setRoomDraft((current) => ({ ...current, aiEnabled: e.target.checked }))} />Bật AI</label>
-            <div className="mb-3 rounded-2xl bg-white p-3 dark:bg-slate-900">
-              <div className="mb-2 flex items-center gap-2 text-xs font-black text-sky-700"><Bot className="h-3.5 w-3.5" />AI riêng của phòng</div>
-              <input value={roomDraft.aiBotName} onChange={(e) => setRoomDraft((current) => ({ ...current, aiBotName: e.target.value }))} maxLength={80} placeholder="Tên bot riêng" className="mb-2 w-full rounded-xl border border-sky-100 px-3 py-2 text-xs font-semibold outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-white" />
-              <select value={roomDraft.aiTone} onChange={(e) => setRoomDraft((current) => ({ ...current, aiTone: e.target.value }))} className="mb-2 w-full rounded-xl border border-sky-100 px-3 py-2 text-xs font-semibold outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-white">
-                <option value="default">Mặc định vui vẻ</option>
-                <option value="support">Hỗ trợ kỹ thuật</option>
-                <option value="fun">Vui nhộn</option>
-                <option value="serious">Nghiêm túc</option>
-                <option value="gaming">Game thủ</option>
-              </select>
-              <textarea value={roomDraft.aiPrompt} onChange={(e) => setRoomDraft((current) => ({ ...current, aiPrompt: e.target.value }))} maxLength={1500} rows={4} placeholder="Prompt riêng. Để trống sẽ dùng tone bên trên." className="mb-2 w-full resize-none rounded-xl border border-sky-100 px-3 py-2 text-xs font-semibold outline-none dark:border-slate-600 dark:bg-slate-800 dark:text-white" />
-              <label className="mb-3 flex items-center gap-2 text-xs font-bold text-slate-600"><input type="checkbox" checked={roomDraft.aiAutoReply} onChange={(e) => setRoomDraft((current) => ({ ...current, aiAutoReply: e.target.checked }))} />AI tự trả lời mọi tin nhắn</label>
-              <div className="rounded-xl border border-violet-100 bg-violet-50 p-2.5 dark:border-violet-800 dark:bg-violet-950/60">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-black text-violet-700">Bộ nhớ dài hạn</span>
-                  <div className="flex gap-1.5">
-                    <button type="button" onClick={() => loadRoomMemory(room.id)} disabled={memoryLoading} className="rounded-lg bg-white px-2 py-1 text-[10px] font-black text-violet-600 disabled:opacity-50 dark:bg-slate-800 dark:text-violet-300">{memoryLoading ? 'Đang tải' : roomMemory ? 'Làm mới' : 'Xem'}</button>
-                    {roomMemory?.summary && <button type="button" onClick={() => clearRoomMemory(room.id)} className="rounded-lg bg-red-50 px-2 py-1 text-[10px] font-black text-red-600 dark:bg-red-950 dark:text-red-300">Xóa</button>}
-                  </div>
-                </div>
-                {roomMemory && <div className="mt-2">
-                  <p className="max-h-36 overflow-y-auto whitespace-pre-wrap rounded-lg bg-white p-2 text-[10px] leading-relaxed text-slate-600 dark:bg-slate-800 dark:text-slate-300">{roomMemory.summary || 'AI chưa tạo bộ nhớ cho phòng này.'}</p>
-                  {roomMemory.updated_at && <p className="mt-1 text-[9px] font-bold text-violet-400">Cập nhật {new Date(roomMemory.updated_at).toLocaleString('vi-VN')}</p>}
-                </div>}
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button type="button" onClick={() => saveRoom(room.id)} className="flex-1 rounded-xl bg-sky-500 px-3 py-2 text-xs font-black text-white">Lưu</button>
-              <button type="button" onClick={() => setEditingRoomId(null)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-500 dark:bg-slate-700 dark:text-slate-200">Hủy</button>
-              {room.id !== 1 && <button type="button" onClick={() => deleteRoom(room.id)} className="rounded-xl bg-red-50 px-3 py-2 text-red-600 dark:bg-red-950 dark:text-red-300"><Trash2 className="h-3.5 w-3.5" /></button>}
-            </div>
-          </div> : <div key={room.id} className={`rounded-xl border transition ${room.id === activeRoomId ? 'border-indigo-400/30 bg-indigo-500/20 text-white' : 'border-transparent text-slate-400 hover:bg-white/[0.06] hover:text-white'}`}>
-            <button type="button" onClick={() => setActiveRoomId(room.id)} className="w-full px-4 py-3 text-left">
-              <div className="flex items-center justify-between gap-2">
-                <span className="flex min-w-0 items-center gap-2 truncate text-sm font-black"><Hash className="h-3.5 w-3.5 shrink-0" />{room.name}</span>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black ${unreadByRoom[room.id] ? 'bg-rose-500 text-white' : room.id === activeRoomId ? 'bg-white/10 text-indigo-200' : 'bg-white/5 text-slate-500'}`}>{unreadByRoom[room.id] || room.message_count || 0}</span>
-              </div>
-              {room.description && <p className={`mt-1 line-clamp-2 pl-5 text-xs ${room.id === activeRoomId ? 'text-indigo-200/70' : 'text-slate-500'}`}>{room.description}</p>}
-              <div className={`mt-2 flex items-center gap-2 pl-5 text-[10px] font-black ${room.id === activeRoomId ? 'text-indigo-200/70' : 'text-slate-600'}`}>
-                {room.is_locked && <span className="inline-flex items-center gap-1"><Lock className="h-3 w-3" />Khóa</span>}
-                {room.ai_enabled === false && <span className="inline-flex items-center gap-1"><Bot className="h-3 w-3" />AI tắt</span>}
-                {room.ai_auto_reply && <span className="inline-flex items-center gap-1"><Bot className="h-3 w-3" />Auto</span>}
-              </div>
-            </button>
-            {isAdmin && <div className="flex justify-end px-3 pb-3"><button type="button" aria-label={`Chỉnh sửa ${room.name}`} onClick={() => startEditRoom(room)} className="rounded-lg bg-white/10 p-1.5 text-slate-300 hover:bg-white/20 hover:text-white"><Pencil className="h-3.5 w-3.5" /></button></div>}
-          </div>)}
-        </div>
-        {isAdmin && <form onSubmit={createRoom} className="mt-4 space-y-2">
-          <div className="flex gap-2">
-             <input value={newRoomName} onChange={(e) => setNewRoomName(e.target.value)} maxLength={80} placeholder="Tên kênh mới" className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2 text-sm font-semibold text-white outline-none placeholder:text-slate-500 focus:border-indigo-400" />
-             <button type="submit" disabled={!newRoomName.trim() || creatingRoom} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-500 text-white shadow-sm disabled:opacity-50"><Plus className="h-4 w-4" /></button>
-          </div>
-          <textarea value={newRoomDescription} onChange={(e) => setNewRoomDescription(e.target.value)} maxLength={240} rows={2} placeholder="Mô tả ngắn" className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.07] px-3 py-2 text-xs font-semibold text-white outline-none placeholder:text-slate-500 focus:border-indigo-400" />
-        </form>}
-      </div>
-    </aside>
   </motion.div>;
 };
 

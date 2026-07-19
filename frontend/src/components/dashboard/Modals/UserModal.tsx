@@ -163,7 +163,7 @@ const UserModal: React.FC<UserModalProps> = ({
               <button 
                 type="submit"
                 form="user-account-form"
-                className="flex-1 px-4 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs transition-all shadow-xl shadow-indigo-100 uppercase tracking-widest"
+                className="flex-1 px-4 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black text-xs transition-all shadow-xl shadow-indigo-100 dark:shadow-none uppercase tracking-widest"
               >
                 Xác nhận
               </button>
