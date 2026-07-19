@@ -98,49 +98,18 @@ async function isKnownDeviceForUser(userId: number, deviceId: string): Promise<b
 }
 
 async function writeSyncLog(userId: number, deviceName: string | null, status: string, message: string) {
-  if (!isUsingDatabase()) return;
-
-  try {
-    await pool.query(
-      'INSERT INTO sync_logs (user_id, device_name, status, message) VALUES ($1, $2, $3, $4)',
-      [userId, deviceName, status, message]
-    );
-  } catch (err) {
-    console.error('⚠️ Failed to write sync log:', err);
-  }
+  // Bỏ qua hoàn toàn việc ghi sync log để giải phóng I/O và tối ưu hiệu suất tối đa
+  return;
 }
 
 syncRouter.get("/api/sync/logs", authenticateToken, async (req: any, res) => {
-  if (isUsingDatabase()) {
-    try {
-      const { rows } = await pool.query(
-        'SELECT * FROM sync_logs WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50',
-        [req.user.id]
-      );
-      res.json(rows);
-    } catch (err) {
-      res.status(500).json({ error: "Database error" });
-    }
-  } else {
-    res.json([]);
-  }
+  // Luôn trả về mảng rỗng để frontend hiển thị sạch sẽ và không tải cơ sở dữ liệu
+  res.json([]);
 });
 
 syncRouter.post("/api/sync/log", authenticateToken, async (req: any, res) => {
-  const { deviceName, status, message } = req.body;
-  if (isUsingDatabase()) {
-    try {
-      await pool.query(
-        'INSERT INTO sync_logs (user_id, device_name, status, message) VALUES ($1, $2, $3, $4)',
-        [req.user.id, deviceName, status, message]
-      );
-      res.json({ success: true });
-    } catch (err) {
-      res.status(500).json({ error: "Database error" });
-    }
-  } else {
-    res.json({ success: true });
-  }
+  // Trả về thành công lập tức mà không thực hiện ghi đĩa
+  res.json({ success: true });
 });
 
 syncRouter.get("/api/sync/devices", authenticateToken, async (req: any, res) => {
