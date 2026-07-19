@@ -48,21 +48,47 @@ function getClientIp(req: any): string | null {
 }
 
 function shouldSkipPath(path: string): boolean {
-  return path === "/api/health"
-    || path === "/api/system/audit-logs"
-    || path === "/api/sync/restore-status"
-    || path === "/api/sync/agent-online"
-    || path === "/api/task";
+  const cleanPath = path.toLowerCase();
+  return cleanPath === "/api/health"
+    || cleanPath === "/api/system/audit-logs"
+    || cleanPath === "/api/system/audit-stats"
+    || cleanPath === "/api/sync/restore-status"
+    || cleanPath === "/api/sync/agent-online"
+    || cleanPath === "/api/sync/heartbeat"
+    || cleanPath === "/api/task"
+    || cleanPath.startsWith("/api/task/")
+    || cleanPath === "/api/community/events"
+    || cleanPath === "/api/community/active-users"
+    || cleanPath.startsWith("/api/community/events/");
 }
 
 function isUploadPath(path: string): boolean {
-  return path === "/api/activation/upload"
-    || path.startsWith("/api/activation/upload/")
-    || path === "/api/drive/upload"
-    || path.startsWith("/api/drive/upload/")
-    || path === "/api/save/upload"
-    || path.startsWith("/api/save/upload/")
-    || path === "/api/system/agent/windows";
+  const cleanPath = path.toLowerCase();
+  return cleanPath === "/api/activation/upload"
+    || cleanPath.startsWith("/api/activation/upload/")
+    || cleanPath === "/api/drive/upload"
+    || cleanPath.startsWith("/api/drive/upload/")
+    || cleanPath === "/api/save/upload"
+    || cleanPath.startsWith("/api/save/upload/")
+    || cleanPath === "/api/system/agent/windows";
+}
+
+function isDataSyncPath(path: string): boolean {
+  const cleanPath = path.toLowerCase();
+  return cleanPath.startsWith("/api/sync/")
+    || cleanPath.startsWith("/api/saves/")
+    || cleanPath.startsWith("/api/games/")
+    || cleanPath.startsWith("/api/device-links/")
+    || cleanPath.startsWith("/api/community/");
+}
+
+function isImportantSettingPath(path: string): boolean {
+  const cleanPath = path.toLowerCase();
+  return cleanPath.startsWith("/api/auth/")
+    || cleanPath.startsWith("/api/users/")
+    || cleanPath.startsWith("/api/system/")
+    || cleanPath.startsWith("/api/activation/")
+    || cleanPath.startsWith("/api/admin/sqlite/");
 }
 
 export async function writeAudit(
@@ -79,7 +105,14 @@ export async function writeAudit(
 }
 
 export function auditApiRequestMiddleware(req: any, res: any, next: any) {
-  if (!req.path?.startsWith("/api/") || req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS" || shouldSkipPath(req.path)) {
+  if (
+    !req.path?.startsWith("/api/") ||
+    req.method === "GET" ||
+    req.method === "HEAD" ||
+    req.method === "OPTIONS" ||
+    shouldSkipPath(req.path) ||
+    !isImportantSettingPath(req.path)
+  ) {
     return next();
   }
 
@@ -101,7 +134,7 @@ export function auditApiRequestMiddleware(req: any, res: any, next: any) {
       contentLength: Number(req.headers?.["content-length"] || 0) || null,
     };
 
-    if (method !== "GET" && method !== "HEAD" && !isUploadPath(resource)) {
+    if (method !== "GET" && method !== "HEAD" && !isUploadPath(resource) && !isDataSyncPath(resource)) {
       detail.body = sanitizeForAudit(req.body || {});
     }
 
