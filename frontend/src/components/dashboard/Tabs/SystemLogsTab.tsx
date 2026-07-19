@@ -605,8 +605,7 @@ const SystemLogsTab: React.FC<SystemLogsTabProps> = ({ currentUser }) => {
               return (
                 <div
                   key={log.id}
-                  className={`group cursor-pointer px-5 py-4 transition hover:bg-slate-50/80 ${isExpanded ? 'bg-indigo-50/30' : ''}`}
-                  onClick={() => setExpandedId(isExpanded ? null : log.id)}
+                  className="px-5 py-4 transition hover:bg-slate-50/80"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex items-start gap-3 min-w-0">
@@ -622,17 +621,12 @@ const SystemLogsTab: React.FC<SystemLogsTabProps> = ({ currentUser }) => {
                             {status.label}
                           </span>
                           <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-indigo-700">
-                            {describeAction(log.action, detail)}
+                            {log.action}
                           </span>
-                          {detail.method && (
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-mono font-black text-slate-600">
-                              {detail.method}
-                            </span>
-                          )}
                         </div>
 
                         {/* Resource */}
-                        <p className="text-sm font-black text-slate-900 truncate">{describeResource(log.resource)}</p>
+                        <p className="text-sm font-black text-slate-900 truncate">{log.resource}</p>
 
                         {/* Meta */}
                         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
@@ -644,42 +638,6 @@ const SystemLogsTab: React.FC<SystemLogsTabProps> = ({ currentUser }) => {
                             {relativeTime}
                           </span>
                         </div>
-
-                        {/* Chips */}
-                        {chips.length > 0 && (
-                          <div className="mt-2 flex flex-wrap gap-1.5">
-                            {chips.map((chip, i) => (
-                              <span key={i} className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600">
-                                {chip}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Expanded: raw detail */}
-                        {isExpanded && (
-                          <div className="mt-3 rounded-xl bg-slate-900 p-4 overflow-x-auto">
-                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Chi tiết thô</p>
-                            <div className="space-y-1">
-                              <p className="text-[10px] font-mono text-slate-300"><span className="text-slate-500">ID:</span> {log.id}</p>
-                              <p className="text-[10px] font-mono text-slate-300"><span className="text-slate-500">Action:</span> {log.action}</p>
-                              <p className="text-[10px] font-mono text-slate-300"><span className="text-slate-500">Resource:</span> {log.resource}</p>
-                              <p className="text-[10px] font-mono text-slate-300"><span className="text-slate-500">Time:</span> {new Date(log.created_at).toLocaleString('vi-VN')}</p>
-                              <p className="text-[10px] font-mono text-slate-300"><span className="text-slate-500">User:</span> {log.username || 'system'} {log.user_role ? `(${log.user_role})` : ''}</p>
-                              {Object.keys(detail).length > 0 && (
-                                <>
-                                  <p className="text-[10px] font-mono text-slate-500 mt-2">— detail —</p>
-                                  {Object.entries(detail).map(([k, v]) => (
-                                    <p key={k} className="text-[10px] font-mono text-slate-300">
-                                      <span className="text-indigo-400">{k}:</span>{' '}
-                                      <span className="text-emerald-300">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
-                                    </p>
-                                  ))}
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
 
