@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useRef, useState } from 'react';
-import { Shield, RefreshCw, Monitor, Server, UploadCloud, Download, CheckCircle2, AlertCircle, Save, FolderOpen, HardDrive, MessageCircle, SlidersHorizontal, Bot, File, Gauge, Loader2, Timer, X, Hash, Lock, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Shield, RefreshCw, Monitor, Server, UploadCloud, Download, CheckCircle2, AlertCircle, Save, FolderOpen, HardDrive, MessageCircle, SlidersHorizontal, Bot, File, Gauge, Loader2, Timer, X, Hash, Lock, Pencil, Plus, Trash2, Moon, Sun } from 'lucide-react';
 import { motion } from 'motion/react';
 import api from '../../../utils/api';
 import { API_ORIGIN, uploadLargeFile } from '../../../utils/api';
@@ -13,6 +13,9 @@ interface SettingsTabProps {
   syncInterval: number;
   setSyncInterval: (interval: number) => void;
   currentUser: any;
+  darkMode: boolean;
+  themeMode: 'light' | 'dark' | 'auto';
+  setThemeMode: (mode: 'light' | 'dark' | 'auto') => void;
 }
 
 const defaultSettings = {
@@ -69,7 +72,7 @@ const formatUploadEta = (seconds: number | null) => {
 };
 
 const SettingsTab: React.FC<SettingsTabProps> = ({
-  autoSyncEnabled, setAutoSyncEnabled, directoryHandle, handleSelectDirectory, syncInterval, setSyncInterval, currentUser
+  autoSyncEnabled, setAutoSyncEnabled, directoryHandle, handleSelectDirectory, syncInterval, setSyncInterval, currentUser, darkMode, themeMode, setThemeMode
 }) => {
   const { showToast } = useToast();
   const isAdmin = currentUser?.role?.toLowerCase() === 'admin' || currentUser?.username === 'admin';
@@ -468,6 +471,15 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><Monitor className="h-4 w-4 text-indigo-600" />Giao diện</h3>
         <p className="mt-1 text-xs text-slate-500">Tùy chỉnh trải nghiệm hiển thị cho dashboard.</p>
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-2">
+          <p className="px-2 pb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Chế độ màu</p>
+          <div className="grid grid-cols-3 gap-2">
+            <button type="button" onClick={() => setThemeMode('light')} aria-pressed={themeMode === 'light'} className={`flex items-center justify-center gap-2 rounded-xl px-2 py-3 text-xs font-black transition ${themeMode === 'light' ? 'bg-white text-amber-600 shadow-sm ring-1 ring-slate-200 dark:bg-slate-700 dark:text-amber-300 dark:ring-slate-600' : 'text-slate-500 hover:bg-white dark:hover:bg-slate-800'}`}><Sun className="h-4 w-4" />Sáng</button>
+            <button type="button" onClick={() => setThemeMode('dark')} aria-pressed={themeMode === 'dark'} className={`flex items-center justify-center gap-2 rounded-xl px-2 py-3 text-xs font-black transition ${themeMode === 'dark' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:bg-white dark:hover:bg-slate-800'}`}><Moon className="h-4 w-4" />Tối</button>
+            <button type="button" onClick={() => setThemeMode('auto')} aria-pressed={themeMode === 'auto'} className={`flex items-center justify-center gap-2 rounded-xl px-2 py-3 text-xs font-black transition ${themeMode === 'auto' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-500 hover:bg-white dark:hover:bg-slate-800'}`}><Timer className="h-4 w-4" />Tự động</button>
+          </div>
+          {themeMode === 'auto' && <p className="px-2 pt-2 text-[10px] font-bold text-slate-500">Sáng 06:00-17:59 · Tối 18:00-05:59 · Hiện tại: {darkMode ? 'Tối' : 'Sáng'}</p>}
+        </div>
         <label className="mt-5 flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm">
           <span>
             <span className="block font-bold text-slate-900">Chế độ compact</span>

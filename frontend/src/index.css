@@ -180,4 +180,46 @@
   .sidebar-scrollbar::-webkit-scrollbar-corner {
     background: transparent;
   }
+
+  .chat-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(5 150 105 / 0.72) transparent;
+    scrollbar-gutter: stable;
+  }
+
+  .chat-scrollbar::-webkit-scrollbar {
+    width: 9px;
+  }
+
+  .chat-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+    margin-block: 8px;
+  }
+
+  .chat-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgb(16 185 129 / 0.82), rgb(5 150 105 / 0.7));
+    background-clip: padding-box;
+    border: 2px solid transparent;
+    border-radius: 999px;
+    min-height: 48px;
+  }
+
+  .chat-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgb(52 211 153), rgb(16 185 129));
+    background-clip: padding-box;
+  }
+
+  .dark .chat-scrollbar {
+    scrollbar-color: rgb(52 211 153 / 0.58) transparent;
+  }
+
+  .dark .chat-scrollbar::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, rgb(52 211 153 / 0.68), rgb(13 148 136 / 0.58));
+    background-clip: padding-box;
+  }
+
+  .dark .chat-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, rgb(110 231 183 / 0.85), rgb(45 212 191 / 0.75));
+    background-clip: padding-box;
+  }
 }

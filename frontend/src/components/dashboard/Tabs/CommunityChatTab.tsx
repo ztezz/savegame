@@ -441,7 +441,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
         </div>
       </div>}
 
-      <div ref={listRef} onScroll={handleScroll} className="community-chat-pattern relative flex-1 space-y-4 overflow-y-auto p-4 sm:p-6" style={chatPattern}>
+      <div ref={listRef} onScroll={handleScroll} className="community-chat-pattern chat-scrollbar relative flex-1 space-y-4 overflow-y-auto p-4 sm:p-6" style={chatPattern}>
         {loading ? <div className="rounded-2xl bg-white/80 px-4 py-3 text-sm font-semibold text-slate-500 shadow-sm backdrop-blur">Đang tải tin nhắn...</div> : visibleMessages.length === 0 ? <div className="h-full flex items-center justify-center text-center text-slate-600 text-sm"><div className="rounded-3xl bg-white/80 px-6 py-5 shadow-sm backdrop-blur">{chatSearch ? 'Không tìm thấy tin nhắn phù hợp.' : 'Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện.'}</div></div> : visibleMessages.map((item, index) => {
           const mine = item.user_id === currentUser?.id || item.username === currentUser?.username;
           const isAi = item.sender_type === 'ai' || item.role === 'AI';

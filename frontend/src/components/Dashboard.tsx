@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, lazy, Suspense } from 'react';
-import api, { uploadWithProgress } from '../utils/api';
+import api, { API_ORIGIN, uploadWithProgress } from '../utils/api';
 import { savesApi } from '../utils/apiClient';
 import { Search, Plus, User, LogOut, Lock, Menu, Moon, Sun } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
@@ -36,6 +36,18 @@ import { GameSave, UserAccount, RestoreStatusItem } from './dashboard/types';
 
 const DASHBOARD_TABS: DashboardTab[] = ['dashboard', 'library', 'drive', 'community', 'devices', 'settings', 'logs', 'users', 'activation', 'category', 'account', 'sqlite'];
 const ADMIN_TABS: DashboardTab[] = ['logs', 'users', 'sqlite'];
+type ThemeMode = 'light' | 'dark' | 'auto';
+
+const isAutoDarkTime = () => {
+  const hour = new Date().getHours();
+  return hour < 6 || hour >= 18;
+};
+
+const getInitialThemeMode = (): ThemeMode => {
+  const saved = localStorage.getItem('dashboardThemeMode');
+  if (saved === 'light' || saved === 'dark' || saved === 'auto') return saved;
+  return localStorage.getItem('dashboardDarkMode') === '1' ? 'dark' : 'light';
+};
 
 const getInitialDashboardTab = (): DashboardTab => {
   const saved = localStorage.getItem('dashboardActiveTab');
@@ -110,7 +122,8 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
   // Change Password State
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [changePasswordLoading, setChangePasswordLoading] = useState(false);
-  const [darkMode, setDarkMode] = useState(() => localStorage.getItem('dashboardDarkMode') === '1');
+  const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialThemeMode);
+  const [darkMode, setDarkMode] = useState(() => themeMode === 'dark' || (themeMode === 'auto' && isAutoDarkTime()));
 
   // User Detail Modal State
   const [showUserDetailModal, setShowUserDetailModal] = useState(false);
@@ -130,8 +143,17 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
   }, [activeTab, isAdmin]);
 
   useEffect(() => {
-    localStorage.setItem('dashboardDarkMode', darkMode ? '1' : '0');
-  }, [darkMode]);
+    const applyTheme = () => {
+      const nextDarkMode = themeMode === 'dark' || (themeMode === 'auto' && isAutoDarkTime());
+      setDarkMode(nextDarkMode);
+      localStorage.setItem('dashboardDarkMode', nextDarkMode ? '1' : '0');
+    };
+    localStorage.setItem('dashboardThemeMode', themeMode);
+    applyTheme();
+    if (themeMode !== 'auto') return;
+    const timer = window.setInterval(applyTheme, 60_000);
+    return () => window.clearInterval(timer);
+  }, [themeMode]);
 
   const pageTitles: Record<typeof activeTab, { title: string; description: string }> = {
     dashboard: {
@@ -829,7 +851,7 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
               </>
             )}
             <button
-              onClick={() => setDarkMode((value) => !value)}
+              onClick={() => setThemeMode(darkMode ? 'light' : 'dark')}
               className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               title={darkMode ? 'Tắt dark mode' : 'Bật dark mode'}
               aria-label={darkMode ? 'Tắt chế độ tối' : 'Bật chế độ tối'}
@@ -855,7 +877,8 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
                 aria-haspopup="menu"
                 className="group flex items-center gap-2 rounded-lg px-1.5 py-2 transition-colors hover:bg-slate-100 dark:hover:bg-slate-800 sm:px-3"
               >
-                <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-lg flex items-center justify-center text-white font-bold text-sm">
+                {currentUser?.avatar_url ? <img src={`${API_ORIGIN}${currentUser.avatar_url}`} alt={`Ảnh đại diện của ${currentUser.username || 'người dùng'}`} className="h-8 w-8 rounded-lg border border-slate-200 object-cover dark:border-slate-700" onError={(event) => { event.currentTarget.style.display = 'none'; event.currentTarget.nextElementSibling?.classList.remove('hidden'); }} /> : null}
+                <div className={`${currentUser?.avatar_url ? 'hidden' : 'flex'} h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 text-sm font-bold text-white`}>
                   {currentUser?.username?.charAt(0).toUpperCase() || 'U'}
                 </div>
                 <div className="hidden min-w-[4.5rem] text-left lg:block">
@@ -1035,9 +1058,12 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
                 setAutoSyncEnabled={setAutoSyncEnabled}
                 directoryHandle={directoryHandle}
                 handleSelectDirectory={handleSelectDirectory}
-                syncInterval={syncInterval}
-                setSyncInterval={setSyncInterval}
-              />
+                 syncInterval={syncInterval}
+                 setSyncInterval={setSyncInterval}
+                 darkMode={darkMode}
+                 themeMode={themeMode}
+                 setThemeMode={setThemeMode}
+               />
             </Suspense>
           )}
 
