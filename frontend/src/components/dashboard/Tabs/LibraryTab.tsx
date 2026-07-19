@@ -131,9 +131,9 @@ const LibraryTab: React.FC<LibraryTabProps> = ({
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
                 {targetDevice && agentOnlineMap[targetDevice] ? <Wifi className="h-4 w-4 text-emerald-500" /> : <WifiOff className="h-4 w-4 text-slate-400" />}
-                <select value={targetDevice} onChange={(event) => setTargetDevice(event.target.value)} className="min-w-0 flex-1 bg-transparent text-xs font-bold text-slate-700 outline-none dark:text-slate-100 sm:min-w-48">
-                  <option value="">Chọn thiết bị khôi phục</option>
-                  {devices.map((device) => <option key={device} value={device}>{device} {agentOnlineMap[device] ? '• Online' : '• Offline'}</option>)}
+                <select value={targetDevice} onChange={(event) => setTargetDevice(event.target.value)} className="min-w-0 flex-1 bg-transparent text-xs font-bold text-slate-700 outline-none dark:[color-scheme:dark] dark:text-slate-100 sm:min-w-48">
+                  <option className="bg-white text-slate-700 dark:bg-slate-800 dark:text-slate-100" value="">Chọn thiết bị khôi phục</option>
+                  {devices.map((device) => <option className="bg-white text-slate-700 dark:bg-slate-800 dark:text-slate-100" key={device} value={device}>{device} {agentOnlineMap[device] ? '• Online' : '• Offline'}</option>)}
                 </select>
               </div>
               <button onClick={() => setSelectedSaveIds(allSelected ? [] : selectableSaveIds)} disabled={!selectableSaveIds.length} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
