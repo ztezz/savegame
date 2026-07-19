@@ -46,15 +46,16 @@ async function beginTransaction(client: SQLiteClient) {
 
   let releaseQueue!: () => void;
   const previousTransaction = transactionQueue;
-  transactionQueue = new Promise<void>((resolve) => {
+  const currentTransaction = new Promise<void>((resolve) => {
     releaseQueue = resolve;
   });
+  transactionQueue = currentTransaction;
   await previousTransaction;
 
   try {
     database.exec("BEGIN IMMEDIATE");
     transactionOwner = client;
-    transactionFinished = transactionQueue;
+    transactionFinished = currentTransaction;
     finishTransaction = releaseQueue;
     client.markTransactionStarted();
     transactionTimeout = setTimeout(() => {
@@ -72,13 +73,22 @@ async function beginTransaction(client: SQLiteClient) {
 
 function endTransaction(client: SQLiteClient, command: "COMMIT" | "ROLLBACK") {
   if (transactionOwner !== client) return;
-  if (transactionTimeout) {
-    clearTimeout(transactionTimeout);
-    transactionTimeout = null;
-  }
   try {
     if (database.inTransaction) database.exec(command);
+  } catch (error) {
+    if (command === "COMMIT" && database.inTransaction) {
+      try {
+        database.exec("ROLLBACK");
+      } catch (rollbackError) {
+        console.error("SQLite rollback after failed commit also failed", rollbackError);
+      }
+    }
+    throw error;
   } finally {
+    if (transactionTimeout) {
+      clearTimeout(transactionTimeout);
+      transactionTimeout = null;
+    }
     transactionOwner = null;
     finishTransaction?.();
     finishTransaction = null;
