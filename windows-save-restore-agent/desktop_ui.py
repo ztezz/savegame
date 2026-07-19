@@ -1002,6 +1002,12 @@ class DesktopAgentApp:
             self.show_toast("Yêu cầu đăng nhập", "Hoàn tất liên kết thiết bị trong trình duyệt.", tone="warning")
             return
 
+        if event_type == "link_not_required":
+            self._set_link_waiting(False)
+            self.link_display_var.set("Thiết bị đã được liên kết")
+            self.append_activity("Thiết bị đã được liên kết; không cần tạo phiên mới.")
+            return
+
         if event_type == "authenticated":
             self.authenticated = True
             self.is_syncing = False

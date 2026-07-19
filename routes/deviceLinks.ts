@@ -53,6 +53,7 @@ function getFrontendBaseUrl(): string {
 deviceLinksRouter.post("/api/device-links/start", async (req: any, res) => {
   const deviceName = (req.body?.device_name ?? "").toString().trim();
   const apiKey = (req.body?.api_key ?? "").toString().trim();
+  const forceRelink = req.body?.force_relink === true;
 
   if (!deviceName) return res.status(400).json({ error: "device_name is required" });
   if (!apiKey) return res.status(400).json({ error: "api_key is required" });
@@ -68,7 +69,7 @@ deviceLinksRouter.post("/api/device-links/start", async (req: any, res) => {
       [apiKey]
     );
 
-    if (existingKey.rows.length > 0) {
+    if (existingKey.rows.length > 0 && !forceRelink) {
       return res.json({ already_linked: true });
     }
 

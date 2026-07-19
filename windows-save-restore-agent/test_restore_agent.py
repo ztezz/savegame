@@ -74,6 +74,49 @@ class RestoreAgentSecurityTests(unittest.TestCase):
             with self.subTest(payload=payload), self.assertRaises(ValueError):
                 restore_agent.parse_update_info(payload, restore_agent.API_BASE_URL)
 
+    def test_manual_link_refresh_requests_a_new_session_for_linked_key(self) -> None:
+        agent = restore_agent.RestoreAgent.__new__(restore_agent.RestoreAgent)
+        agent.device_id = "test-device"
+        agent.display_name = "Test device"
+        agent.api_key = "a" * 64
+        agent.link_started = False
+        agent.link_expires_at = 0.0
+        agent.emit = Mock()
+        response = Mock()
+        response.json.return_value = {
+            "already_linked": False,
+            "verification_url": "https://luugame.fun/?device_link=new-token",
+            "expires_in_seconds": 600,
+        }
+        agent._request = Mock(return_value=response)
+
+        with patch.object(restore_agent.webbrowser, "open", return_value=True):
+            agent.start_link_flow(force=True)
+
+        self.assertTrue(agent._request.call_args.kwargs["json"]["force_relink"])
+        agent.emit.assert_called_once_with(
+            "link_required",
+            verification_url="https://luugame.fun/?device_link=new-token",
+            device_id="test-device",
+            api_key="a" * 64,
+        )
+
+    def test_already_linked_response_releases_waiting_ui(self) -> None:
+        agent = restore_agent.RestoreAgent.__new__(restore_agent.RestoreAgent)
+        agent.device_id = "test-device"
+        agent.display_name = "Test device"
+        agent.api_key = "a" * 64
+        agent.link_started = False
+        agent.link_expires_at = 0.0
+        agent.emit = Mock()
+        response = Mock()
+        response.json.return_value = {"already_linked": True}
+        agent._request = Mock(return_value=response)
+
+        agent.start_link_flow()
+
+        agent.emit.assert_called_once_with("link_not_required")
+
     def test_rejects_zip_traversal(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

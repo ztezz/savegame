@@ -516,11 +516,13 @@ class RestoreAgent:
             response = self._request(
                 "POST",
                 "/api/device-links/start",
-                json={"device_name": self.device_id, "device_display_name": self.display_name, "api_key": self.api_key},
+                json={"device_name": self.device_id, "device_display_name": self.display_name,
+                      "api_key": self.api_key, "force_relink": force},
             )
             payload = response.json() or {}
 
             if payload.get("already_linked"):
+                self.emit("link_not_required")
                 return
 
             verification_url = validate_url(str(payload.get("verification_url", "")).strip(), VERIFICATION_HOSTS, "verification")
