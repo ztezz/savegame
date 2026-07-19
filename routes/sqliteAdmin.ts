@@ -185,27 +185,7 @@ sqliteAdminRouter.get("/api/admin/sqlite/databases", (_req, res) => {
 });
 
 sqliteAdminRouter.post("/api/admin/sqlite/databases", async (req: any, res) => {
-  try {
-    const root = decodeId(req.body?.directoryId);
-    const allowedRoot = canonicalRoots().find((item) => item === root);
-    if (!allowedRoot) return res.status(400).json({ error: "Thư mục tạo database không hợp lệ" });
-    let name = String(req.body?.name || "").trim();
-    if (!name) return res.status(400).json({ error: "Tên database không được để trống" });
-    if (!/^[a-zA-Z0-9._-]+$/.test(name) || name === "." || name === "..") return res.status(400).json({ error: "Tên chỉ được chứa chữ, số, dấu chấm, gạch ngang và gạch dưới" });
-    if (!SQLITE_EXTENSIONS.has(path.extname(name).toLowerCase())) name += ".sqlite";
-    const target = path.join(allowedRoot, name);
-    if (!isInsideRoot(target, allowedRoot)) return res.status(400).json({ error: "Đường dẫn database không hợp lệ" });
-    if (fs.existsSync(target)) return res.status(409).json({ error: "Database đã tồn tại" });
-    const database = openDatabase(target);
-    database.pragma("journal_mode = WAL");
-    database.exec("VACUUM");
-    database.close();
-    await writeAudit(req.user.id, "CREATE", "sqlite:database", { path: target });
-    const stat = fs.statSync(target);
-    res.status(201).json({ database: { id: encodeId(fs.realpathSync(target)), name: path.basename(target), path: target, bytes: stat.size, modifiedAt: stat.mtime.toISOString(), tableCount: 0, primary: false } });
-  } catch (error) {
-    sendError(res, error);
-  }
+  return res.status(403).json({ error: "Tính năng tạo cơ sở dữ liệu đã bị vô hiệu hóa" });
 });
 
 sqliteAdminRouter.get("/api/admin/sqlite/overview", async (req, res) => {

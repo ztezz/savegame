@@ -215,14 +215,12 @@ export default function SqliteAdminTab() {
     <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-end">
       <label className="min-w-0 flex-1 text-[10px] font-black uppercase tracking-widest text-slate-500">Database trên server
         <select value={selectedDatabase} disabled={databaseLoading || databases.length === 0} onChange={(event) => setSelectedDatabase(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 font-mono text-xs font-bold normal-case tracking-normal text-slate-800 outline-none focus:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-60">
-          {databaseLoading && <option value="">Đang quét database...</option>}
+          {databaseLoading && <option value="">Đang tải database...</option>}
           {!databaseLoading && databases.length === 0 && <option value="">Không tìm thấy database</option>}
           {databases.map((item) => <option key={item.id} value={item.id}>{item.primary ? '[Chính] ' : ''}{item.name} · {item.tableCount} bảng · {formatBytes(item.bytes)}</option>)}
         </select>
         {databaseError && <span className="mt-2 block normal-case tracking-normal text-rose-500">{databaseError}</span>}
       </label>
-      <button onClick={rescan} disabled={databaseLoading} className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-black text-slate-700 hover:border-emerald-300 disabled:opacity-50"><FolderSearch className={`h-4 w-4 text-emerald-600 ${databaseLoading ? 'animate-pulse' : ''}`} />Quét lại</button>
-      <button onClick={() => setCreateDialog(true)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-xs font-black text-white"><Plus className="h-4 w-4" />Tạo SQLite mới</button>
     </div>
 
     <div className="overflow-hidden rounded-3xl bg-slate-950 p-6 text-white shadow-xl">
