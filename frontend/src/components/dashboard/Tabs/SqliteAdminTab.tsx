@@ -212,16 +212,11 @@ export default function SqliteAdminTab() {
   const totalPages = Math.max(1, Math.ceil((tableData?.total || 0) / (tableData?.limit || 50)));
 
   return <div className="admin-dark-surface col-span-12 space-y-5">
-    <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-end">
-      <label className="min-w-0 flex-1 text-[10px] font-black uppercase tracking-widest text-slate-500">Database trên server
-        <select value={selectedDatabase} disabled={databaseLoading || databases.length === 0} onChange={(event) => setSelectedDatabase(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 font-mono text-xs font-bold normal-case tracking-normal text-slate-800 outline-none focus:border-emerald-400 disabled:cursor-not-allowed disabled:opacity-60">
-          {databaseLoading && <option value="">Đang tải database...</option>}
-          {!databaseLoading && databases.length === 0 && <option value="">Không tìm thấy database</option>}
-          {databases.map((item) => <option key={item.id} value={item.id}>{item.primary ? '[Chính] ' : ''}{item.name} · {item.tableCount} bảng · {formatBytes(item.bytes)}</option>)}
-        </select>
-        {databaseError && <span className="mt-2 block normal-case tracking-normal text-rose-500">{databaseError}</span>}
-      </label>
-    </div>
+    {databaseError && (
+      <div className="rounded-3xl border border-rose-200 bg-rose-50 p-4 text-xs font-bold text-rose-600">
+        {databaseError}
+      </div>
+    )}
 
     <div className="overflow-hidden rounded-3xl bg-slate-950 p-6 text-white shadow-xl">
       <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
