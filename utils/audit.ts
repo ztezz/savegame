@@ -102,6 +102,13 @@ export async function writeAudit(
     "INSERT INTO audit_logs (user_id, action, resource, detail_json) VALUES ($1, $2, $3, $4::jsonb)",
     [userId, action, resource, JSON.stringify(sanitizeForAudit(detail || {}))]
   );
+  
+  // Tự động dọn dẹp giữ tối đa 1000 dòng audit logs gần nhất
+  await pool.query(
+    "DELETE FROM audit_logs WHERE id NOT IN (SELECT id FROM audit_logs ORDER BY id DESC LIMIT 1000)"
+  ).catch((err: any) => {
+    console.error("Failed to clean up old audit logs:", err?.message || err);
+  });
 }
 
 export function auditApiRequestMiddleware(req: any, res: any, next: any) {
