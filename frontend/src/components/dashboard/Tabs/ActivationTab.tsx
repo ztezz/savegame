@@ -113,15 +113,13 @@ const ActivationTab: React.FC<ActivationTabProps> = ({ currentUser, activationFi
 
   const handleDownload = async (file: ActivationFile) => {
     try {
-      const response = await api.get(`/activation/download/${file.id}`, { responseType: 'blob' });
-      const url = URL.createObjectURL(response.data);
+      const response = await api.post(`/activation/download/${file.id}/link`);
       const link = document.createElement('a');
-      link.href = url;
-      link.download = file.originalName;
+      link.href = response.data.downloadUrl;
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(url);
+      showToast('Đã tạo link tải xuống', 'success', 2500);
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Không thể tải file kích hoạt', 'error', 3500);
     }

@@ -3,7 +3,9 @@ import express from "express";
 import * as path from "path";
 import * as fs from "fs";
 import crypto from "node:crypto";
+import jwt from "jsonwebtoken";
 import { pool, isUsingDatabase } from "../config/database.js";
+import { JWT_SECRET, PUBLIC_API_ORIGIN } from "../config/environment.js";
 import { upload, UPLOADS_DIR_PATH } from "../config/multer.js";
 import { authenticateToken, isAdmin } from "../middleware/auth.js";
 import { streamFileDownload } from "../utils/download.js";
@@ -12,7 +14,13 @@ import { UploadSession } from "../database/types.js";
 
 export const activationRouter = Router();
 
+const ACTIVATION_DOWNLOAD_TOKEN_TTL = "5m";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function createActivationDownloadUrl(fileId: number) {
+  const token = jwt.sign({ purpose: "activation-download", fileId }, JWT_SECRET, { expiresIn: ACTIVATION_DOWNLOAD_TOKEN_TTL });
+  return `${PUBLIC_API_ORIGIN}/api/activation/download-link/${encodeURIComponent(token)}`;
+}
 
 async function insertActivationFileWithRetry(values: any[]) {
   let lastErr: any;
@@ -136,24 +144,43 @@ activationRouter.get("/api/activation/list", authenticateToken, async (req: any,
   }
 });
 
-// Download activation file
-activationRouter.get("/api/activation/download/:id", authenticateToken, async (req: any, res) => {
-  const id = parseInt(req.params.id);
+// Create a short-lived browser download link.
+activationRouter.post("/api/activation/download/:id/link", authenticateToken, async (req: any, res) => {
+  const id = Number.parseInt(req.params.id, 10);
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid activation file ID" });
+
   if (isUsingDatabase()) {
     try {
-      const { rows } = await pool.query(
-        'SELECT * FROM activation_files WHERE id = $1',
-        [id]
-      );
-      const record = rows[0];
-      if (!record) return res.status(404).json({ error: "File not found" });
-      const filePath = path.join(UPLOADS_DIR_PATH, record.file_path);
-      return streamFileDownload(res, filePath, record.original_name);
+      const { rows } = await pool.query('SELECT id FROM activation_files WHERE id = $1', [id]);
+      if (!rows[0]) return res.status(404).json({ error: "File not found" });
+      return res.json({ downloadUrl: createActivationDownloadUrl(id), expiresInSeconds: 300 });
     } catch (err) {
       res.status(500).json({ error: "Database error" });
     }
   } else {
     res.status(404).json({ error: "File not found" });
+  }
+});
+
+activationRouter.get("/api/activation/download-link/:token", async (req, res) => {
+  let fileId: number;
+  try {
+    const payload = jwt.verify(req.params.token, JWT_SECRET) as jwt.JwtPayload;
+    if (payload.purpose !== "activation-download" || !Number.isInteger(payload.fileId)) throw new Error("Invalid download token");
+    fileId = payload.fileId;
+  } catch {
+    return res.status(401).json({ error: "Download link is invalid or expired" });
+  }
+
+  if (!isUsingDatabase()) return res.status(404).json({ error: "File not found" });
+
+  try {
+    const { rows } = await pool.query('SELECT file_path, original_name FROM activation_files WHERE id = $1', [fileId]);
+    const record = rows[0];
+    if (!record) return res.status(404).json({ error: "File not found" });
+    return streamFileDownload(res, path.join(UPLOADS_DIR_PATH, record.file_path), record.original_name);
+  } catch (err) {
+    return res.status(500).json({ error: "Database error" });
   }
 });
 
