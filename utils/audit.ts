@@ -111,6 +111,49 @@ export async function writeAudit(
   });
 }
 
+function getActionDescription(method: string, path: string, statusCode: number): string {
+  const cleanPath = path.toLowerCase();
+  const isSuccess = statusCode >= 200 && statusCode < 300;
+
+  if (cleanPath.startsWith("/api/auth/")) {
+    if (cleanPath.includes("/login")) return isSuccess ? "Đăng nhập hệ thống thành công" : "Đăng nhập hệ thống thất bại";
+    if (cleanPath.includes("/change-password")) return isSuccess ? "Đổi mật khẩu tài khoản thành công" : "Đổi mật khẩu tài khoản thất bại";
+    return isSuccess ? "Xác thực tài khoản thành công" : "Xác thực tài khoản thất bại";
+  }
+  if (cleanPath.startsWith("/api/users/")) {
+    if (method === "POST") return isSuccess ? "Tạo tài khoản người dùng mới thành công" : "Tạo tài khoản người dùng thất bại";
+    if (method === "PUT" || method === "PATCH") return isSuccess ? "Cập nhật thông tin tài khoản thành công" : "Cập nhật thông tin tài khoản thất bại";
+    if (method === "DELETE") return isSuccess ? "Xóa tài khoản người dùng thành công" : "Xóa tài khoản người dùng thất bại";
+    return isSuccess ? "Thao tác trên tài khoản người dùng" : "Thao tác trên tài khoản thất bại";
+  }
+  if (cleanPath.startsWith("/api/system/")) {
+    if (cleanPath.includes("/settings")) return isSuccess ? "Cập nhật cài đặt cấu hình hệ thống thành công" : "Cập nhật cài đặt cấu hình thất bại";
+    if (cleanPath.includes("/agent/windows")) return isSuccess ? "Cập nhật ứng dụng Agent Windows" : "Cập nhật Agent Windows thất bại";
+    return isSuccess ? "Cấu hình hệ thống" : "Cấu hình hệ thống thất bại";
+  }
+  if (cleanPath.startsWith("/api/activation/")) {
+    return isSuccess ? "Cập nhật thông tin kích hoạt bản quyền thành công" : "Cập nhật thông tin kích hoạt thất bại";
+  }
+  if (cleanPath.startsWith("/api/admin/sqlite/")) {
+    if (cleanPath.includes("/query")) return isSuccess ? "Thực thi câu lệnh SQL trực tiếp thành công" : "Thực thi câu lệnh SQL thất bại";
+    return isSuccess ? "Tác vụ quản trị cơ sở dữ liệu SQLite thành công" : "Tác vụ quản trị cơ sở dữ liệu thất bại";
+  }
+  return `${method} ${path}`;
+}
+
+function getActionKey(method: string, path: string, statusCode: number): string {
+  const cleanPath = path.toLowerCase();
+  const isSuccess = statusCode >= 200 && statusCode < 300;
+
+  if (cleanPath.startsWith("/api/auth/")) {
+    if (cleanPath.includes("/login")) return isSuccess ? "AUTH_LOGIN_SUCCESS" : "AUTH_LOGIN_FAILED";
+    if (cleanPath.includes("/change-password")) return isSuccess ? "AUTH_CHANGE_PASSWORD" : "AUTH_CHANGE_PASSWORD_FAILED";
+  }
+  if (cleanPath.startsWith("/api/admin/sqlite/")) return "SQL";
+
+  return method;
+}
+
 export function auditApiRequestMiddleware(req: any, res: any, next: any) {
   if (
     !req.path?.startsWith("/api/") ||
@@ -123,7 +166,6 @@ export function auditApiRequestMiddleware(req: any, res: any, next: any) {
     return next();
   }
 
-  const startedAt = Date.now();
   const method = req.method;
   const resource = req.path;
 
@@ -131,23 +173,15 @@ export function auditApiRequestMiddleware(req: any, res: any, next: any) {
     if (res.statusCode < 100) return;
 
     const detail: AuditDetail = {
-      method,
-      statusCode: res.statusCode,
-      success: res.statusCode < 400,
-      durationMs: Date.now() - startedAt,
       ip: getClientIp(req),
-      userAgent: req.headers?.["user-agent"] || null,
-      query: sanitizeForAudit(req.query || {}),
-      contentLength: Number(req.headers?.["content-length"] || 0) || null,
+      success: res.statusCode < 400,
+      description: getActionDescription(method, resource, res.statusCode)
     };
 
-    if (method !== "GET" && method !== "HEAD" && !isUploadPath(resource) && !isDataSyncPath(resource)) {
-      detail.body = sanitizeForAudit(req.body || {});
-    }
-
+    const actionKey = getActionKey(method, resource, res.statusCode);
     const userId = req.user?.id ?? null;
 
-    void writeAudit(userId, method, resource, detail).catch((err: any) => {
+    void writeAudit(userId, actionKey, resource, detail).catch((err: any) => {
       console.error("Failed to write audit log:", err?.message || err);
     });
   });
