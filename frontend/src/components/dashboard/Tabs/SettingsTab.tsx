@@ -16,13 +16,14 @@ interface SettingsTabProps {
   darkMode: boolean;
   themeMode: 'light' | 'dark' | 'auto';
   setThemeMode: (mode: 'light' | 'dark' | 'auto') => void;
+  onSiteNameChange: (siteName: string) => void;
 }
 
 const defaultSettings = {
   security: { enforceStrongPassword: true, sessionTimeoutMinutes: 120, allowSelfRegister: false },
   sync: { autoSyncEnabled: false, syncIntervalMinutes: 5, maxUploadSizeMb: 2048, retentionDays: 30, retryLimit: 2 },
   drive: { defaultQuotaMb: 20480 },
-  ui: { compactMode: false, language: 'vi', showAdvancedStats: true },
+  ui: { siteName: 'CloudSave Hub', compactMode: false, language: 'vi', showAdvancedStats: true },
   technical: { smtpHost: '', smtpPort: 587, smtpSecure: false, backupEnabled: false },
   ai: { enabled: false, provider: '9router', apiKey: '', model: 'cx/gpt-5.5', botName: 'Mây Mặn', baseUrl: 'https://api.9router.com/v1', humorLevel: 'funny' },
   windowsAgent: { filename: 'Cloudsave.exe', version: '', size: 0, sha256: '', downloadUrl: '', updatedAt: null, available: false }
@@ -72,7 +73,7 @@ const formatUploadEta = (seconds: number | null) => {
 };
 
 const SettingsTab: React.FC<SettingsTabProps> = ({
-  autoSyncEnabled, setAutoSyncEnabled, directoryHandle, handleSelectDirectory, syncInterval, setSyncInterval, currentUser, darkMode, themeMode, setThemeMode
+  autoSyncEnabled, setAutoSyncEnabled, directoryHandle, handleSelectDirectory, syncInterval, setSyncInterval, currentUser, darkMode, themeMode, setThemeMode, onSiteNameChange
 }) => {
   const { showToast } = useToast();
   const isAdmin = currentUser?.role?.toLowerCase() === 'admin' || currentUser?.username === 'admin';
@@ -110,7 +111,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
     const load = async () => {
       try {
         const res = await api.get('/system/settings');
-        setSettings({ ...defaultSettings, ...res.data });
+        setSettings({ ...defaultSettings, ...res.data, ui: { ...defaultSettings.ui, ...(res.data?.ui || {}) } });
         setAgentVersion(res.data?.windowsAgent?.version || '');
       } catch {
         showToast('Không tải được cài đặt hệ thống', 'error');
@@ -137,9 +138,16 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
 
   const saveSettings = async () => {
     if (!isAdmin) return;
+    const siteName = String(settings.ui?.siteName || '').trim();
+    if (!siteName) {
+      showToast('Tên website không được để trống', 'error');
+      return;
+    }
     setSaving(true);
     try {
       await api.put('/system/settings', settings);
+      setSettings((current: any) => ({ ...current, ui: { ...current.ui, siteName } }));
+      onSiteNameChange(siteName);
       showToast('Lưu cài đặt thành công', 'success');
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Lưu cài đặt thất bại', 'error');
@@ -478,6 +486,11 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <h3 className="flex items-center gap-2 text-sm font-black uppercase tracking-widest text-slate-800"><Monitor className="h-4 w-4 text-indigo-600" />Giao diện</h3>
         <p className="mt-1 text-xs text-slate-500">Tùy chỉnh trải nghiệm hiển thị cho dashboard.</p>
+        <label className="mt-5 block rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm">
+          <span className="font-bold text-slate-900">Tên website</span>
+          <span className="mt-1 block text-xs text-slate-500">Hiển thị trên trang đăng nhập, sidebar, tiêu đề trình duyệt và link chia sẻ.</span>
+          <input type="text" maxLength={80} value={settings.ui.siteName || ''} disabled={!isAdmin} onChange={(e) => setSettings((s: any) => ({ ...s, ui: { ...s.ui, siteName: e.target.value } }))} className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-bold text-slate-800 outline-none transition focus:border-indigo-400 focus:ring-4 focus:ring-indigo-50 disabled:bg-slate-100 dark:focus:ring-indigo-950" placeholder="CloudSave Hub" />
+        </label>
         <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-2">
           <p className="px-2 pb-2 text-[10px] font-black uppercase tracking-widest text-slate-400">Chế độ màu</p>
           <div className="grid grid-cols-3 gap-2">

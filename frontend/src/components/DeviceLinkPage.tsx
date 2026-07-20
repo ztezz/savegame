@@ -7,11 +7,12 @@ type LinkStatus = 'pending' | 'approved' | 'expired';
 interface DeviceLinkPageProps {
   linkToken: string;
   token: string | null;
+  siteName: string;
   onLogin: (token: string, user: any) => void;
   onDone: () => void;
 }
 
-export default function DeviceLinkPage({ linkToken, token, onLogin, onDone }: DeviceLinkPageProps) {
+export default function DeviceLinkPage({ linkToken, token, siteName, onLogin, onDone }: DeviceLinkPageProps) {
   const [deviceName, setDeviceName] = useState('');
   const [status, setStatus] = useState<LinkStatus | 'loading'>('loading');
   const [expiresAt, setExpiresAt] = useState<string | null>(null);
@@ -36,7 +37,7 @@ export default function DeviceLinkPage({ linkToken, token, onLogin, onDone }: De
   }, [linkToken]);
 
   if (!token) {
-    return <Auth onLogin={onLogin} darkMode />;
+    return <Auth onLogin={onLogin} darkMode siteName={siteName} />;
   }
 
   const handleConfirm = async () => {

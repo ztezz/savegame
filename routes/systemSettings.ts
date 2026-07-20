@@ -88,7 +88,7 @@ const DEFAULT_SETTINGS = {
   security: { enforceStrongPassword: true, sessionTimeoutMinutes: 120, allowSelfRegister: false },
   sync: { autoSyncEnabled: false, syncIntervalMinutes: 5, maxUploadSizeMb: 2048, retentionDays: 30, retryLimit: 2 },
   drive: { defaultQuotaMb: Math.round(DRIVE_QUOTA_BYTES / (1024 * 1024)) },
-  ui: { compactMode: false, language: "vi", showAdvancedStats: true },
+  ui: { siteName: "CloudSave Hub", compactMode: false, language: "vi", showAdvancedStats: true },
   technical: { smtpHost: "", smtpPort: 587, smtpSecure: false, backupEnabled: false },
   ai: { enabled: false, provider: "9router", apiKey: "", model: "cx/gpt-5.5", botName: "Mây Mặn", baseUrl: "https://api.9router.com/v1", humorLevel: "funny" },
   windowsAgent: { filename: WINDOWS_AGENT_FILENAME, version: "", size: 0, sha256: "", releasePath: "", downloadUrl: "", updatedAt: null, available: false }
@@ -129,14 +129,16 @@ async function resolveAiSettings(payload: any = {}) {
 }
 
 settingsRouter.get('/api/public/auth-settings', async (_req, res) => {
-  if (!isUsingDatabase()) return res.json({ allowSelfRegister: DEFAULT_SETTINGS.security.allowSelfRegister });
+  if (!isUsingDatabase()) return res.json({ allowSelfRegister: DEFAULT_SETTINGS.security.allowSelfRegister, siteName: DEFAULT_SETTINGS.ui.siteName });
   try {
-    const { rows } = await pool.query("SELECT value_json FROM system_settings WHERE key = 'security'");
-    const security = { ...DEFAULT_SETTINGS.security, ...(rows[0]?.value_json || {}) };
-    res.json({ allowSelfRegister: Boolean(security.allowSelfRegister) });
+    const { rows } = await pool.query("SELECT key, value_json FROM system_settings WHERE key IN ('security', 'ui')");
+    const stored = Object.fromEntries(rows.map((row: any) => [row.key, row.value_json || {}]));
+    const security = { ...DEFAULT_SETTINGS.security, ...(stored.security || {}) };
+    const ui = { ...DEFAULT_SETTINGS.ui, ...(stored.ui || {}) };
+    res.json({ allowSelfRegister: Boolean(security.allowSelfRegister), siteName: String(ui.siteName || DEFAULT_SETTINGS.ui.siteName) });
   } catch (err: any) {
     console.error('Failed to load public auth settings:', err?.message || err);
-    res.json({ allowSelfRegister: DEFAULT_SETTINGS.security.allowSelfRegister });
+    res.json({ allowSelfRegister: DEFAULT_SETTINGS.security.allowSelfRegister, siteName: DEFAULT_SETTINGS.ui.siteName });
   }
 });
 
@@ -147,6 +149,7 @@ settingsRouter.get('/api/system/settings', authenticateToken, async (_req: any, 
     const data: any = { ...DEFAULT_SETTINGS };
     for (const row of rows) data[row.key] = row.value_json;
     data.drive = { ...DEFAULT_SETTINGS.drive, ...(data.drive || {}) };
+    data.ui = { ...DEFAULT_SETTINGS.ui, ...(data.ui || {}) };
     data.ai = { ...DEFAULT_SETTINGS.ai, ...(data.ai || {}) };
     if (data.ai.apiKey) data.ai.apiKey = '********';
     const verifiedAgent = await validateAgentReleaseMetadata(UPLOADS_DIR_PATH, data.windowsAgent);
@@ -179,6 +182,12 @@ settingsRouter.put('/api/system/settings', authenticateToken, isAdmin, async (re
       if (key === 'drive') {
         const defaultQuotaMb = Math.max(1, Math.min(Number(payload.drive?.defaultQuotaMb || DEFAULT_SETTINGS.drive.defaultQuotaMb), 1048576));
         value = { ...DEFAULT_SETTINGS.drive, ...payload.drive, defaultQuotaMb };
+      }
+      if (key === 'ui') {
+        const siteName = String(payload.ui?.siteName || '').trim();
+        if (!siteName) return res.status(400).json({ error: 'Tên website không được để trống' });
+        if (siteName.length > 80) return res.status(400).json({ error: 'Tên website không được vượt quá 80 ký tự' });
+        value = { ...DEFAULT_SETTINGS.ui, ...payload.ui, siteName };
       }
       await pool.query(
         `INSERT INTO system_settings (key, value_json, updated_by, updated_at)

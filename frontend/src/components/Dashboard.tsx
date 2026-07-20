@@ -47,7 +47,7 @@ const getInitialDashboardTab = (): DashboardTab => {
   return DASHBOARD_TABS.includes(saved as DashboardTab) ? saved as DashboardTab : 'dashboard';
 };
 
-export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onLogout: () => void, currentUser: any, onUserUpdate: (user: any) => void }) {
+export default function Dashboard({ onLogout, currentUser, onUserUpdate, siteName, onSiteNameChange }: { onLogout: () => void, currentUser: any, onUserUpdate: (user: any) => void, siteName: string, onSiteNameChange: (siteName: string) => void }) {
   const { showToast } = useToast();
   const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
   const { categories, fetchCategories: refetchCategories } = useDynamicCategories();
@@ -169,7 +169,7 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
     },
     community: {
       title: 'Chat cộng đồng',
-      description: 'Trao đổi nhanh với các thành viên đang dùng CloudSave.',
+      description: `Trao đổi nhanh với các thành viên đang dùng ${siteName}.`,
     },
     devices: {
       title: 'Thiết bị kết nối',
@@ -841,7 +841,7 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
 
   return (
     <div className={`flex h-screen font-sans overflow-hidden ${darkMode ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-50'}`}>
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} currentUser={currentUser} mobileOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} currentUser={currentUser} siteName={siteName} mobileOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -1086,6 +1086,7 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
                  darkMode={darkMode}
                  themeMode={themeMode}
                  setThemeMode={handleThemeModeChange}
+                 onSiteNameChange={onSiteNameChange}
                />
             </Suspense>
           )}

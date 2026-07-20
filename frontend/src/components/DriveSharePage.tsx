@@ -18,6 +18,7 @@ interface SharedFile {
 
 interface DriveSharePageProps {
   token: string;
+  siteName: string;
 }
 
 type PreviewKind = 'image' | 'pdf' | 'video' | 'audio' | 'none';
@@ -53,7 +54,7 @@ const getFileVisual = (file: SharedFile) => {
   return { Icon: File, label: file.mime_type || 'Tệp dữ liệu', color: 'bg-blue-50 text-blue-600 ring-blue-100' };
 };
 
-export default function DriveSharePage({ token }: DriveSharePageProps) {
+export default function DriveSharePage({ token, siteName }: DriveSharePageProps) {
   const [file, setFile] = useState<SharedFile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -78,9 +79,9 @@ export default function DriveSharePage({ token }: DriveSharePageProps) {
   }, [token]);
 
   useEffect(() => {
-    document.title = file ? `${file.original_name} | CloudSave` : 'CloudSave Drive Share';
-    return () => { document.title = 'CloudSave Hub'; };
-  }, [file]);
+    document.title = file ? `${file.original_name} | ${siteName}` : `${siteName} Drive Share`;
+    return () => { document.title = siteName; };
+  }, [file, siteName]);
 
   const sharePath = `/drive/share/${encodeURIComponent(token)}`;
   const rawUrl = `${API_BASE_URL}${sharePath}/raw`;
@@ -104,8 +105,8 @@ export default function DriveSharePage({ token }: DriveSharePageProps) {
     <header className="relative z-10 border-b border-white/70 bg-white/65 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:h-20 sm:px-6 lg:px-8">
         <div className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-slate-200"><img src="/logo.svg" alt="CloudSave" className="h-8 w-8" /></span>
-          <div><p className="text-base font-black tracking-tight text-slate-950">CloudSave</p><p className="text-[9px] font-black uppercase tracking-[0.22em] text-emerald-600">Drive Share</p></div>
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-slate-200"><img src="/logo.svg" alt={siteName} className="h-8 w-8" /></span>
+          <div><p className="max-w-48 truncate text-base font-black tracking-tight text-slate-950 sm:max-w-sm">{siteName}</p><p className="text-[9px] font-black uppercase tracking-[0.22em] text-emerald-600">Drive Share</p></div>
         </div>
         <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-[11px] font-black text-emerald-700"><ShieldCheck className="h-4 w-4" /><span className="hidden sm:inline">Kết nối an toàn</span><span className="sm:hidden">An toàn</span></div>
       </div>
@@ -128,7 +129,7 @@ export default function DriveSharePage({ token }: DriveSharePageProps) {
             <div className="relative flex flex-col gap-7 lg:flex-row lg:items-center lg:justify-between">
               <div className="flex min-w-0 items-start gap-4 sm:gap-6">
                 <span className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white text-emerald-600 shadow-xl sm:h-20 sm:w-20 ${visual.color}`}><visual.Icon className="h-8 w-8 sm:h-10 sm:w-10" /></span>
-                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-emerald-400/15 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-300 ring-1 ring-emerald-300/20">Được chia sẻ với bạn</span><span className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white/70">{getExtension(file.original_name)}</span></div><h1 className="mt-4 break-words text-2xl font-black leading-tight tracking-tight sm:text-4xl">{file.original_name}</h1><p className="mt-3 text-sm leading-6 text-slate-300">Sẵn sàng để xem trước hoặc tải xuống từ CloudSave Drive.</p></div>
+                <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-emerald-400/15 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-300 ring-1 ring-emerald-300/20">Được chia sẻ với bạn</span><span className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-white/70">{getExtension(file.original_name)}</span></div><h1 className="mt-4 break-words text-2xl font-black leading-tight tracking-tight sm:text-4xl">{file.original_name}</h1><p className="mt-3 text-sm leading-6 text-slate-300">Sẵn sàng để xem trước hoặc tải xuống từ {siteName} Drive.</p></div>
               </div>
               <a href={downloadUrl} className="inline-flex w-full shrink-0 items-center justify-center gap-3 rounded-2xl bg-emerald-400 px-6 py-4 text-sm font-black text-emerald-950 shadow-xl shadow-emerald-950/30 transition hover:-translate-y-0.5 hover:bg-emerald-300 lg:w-auto"><Download className="h-5 w-5" /> Tải file xuống</a>
             </div>
@@ -152,13 +153,13 @@ export default function DriveSharePage({ token }: DriveSharePageProps) {
 
           <aside className="space-y-4">
             {file.note && <section className="rounded-3xl border border-white bg-white/90 p-5 shadow-lg shadow-slate-950/5"><p className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-600">Ghi chú từ người chia sẻ</p><p className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-slate-600">{file.note}</p></section>}
-            <section className="rounded-3xl border border-white bg-white/90 p-5 shadow-lg shadow-slate-950/5"><div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><ShieldCheck className="h-5 w-5" /></span><div><h2 className="text-sm font-black text-slate-900">Chia sẻ an toàn</h2><p className="mt-1 text-xs leading-5 text-slate-500">File được truyền trực tiếp từ CloudSave. Chỉ mở file khi bạn tin tưởng người gửi.</p></div></div><button type="button" onClick={copyLink} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-black text-slate-600 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700">{copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}{copied ? 'Đã sao chép link' : 'Sao chép link chia sẻ'}</button></section>
+            <section className="rounded-3xl border border-white bg-white/90 p-5 shadow-lg shadow-slate-950/5"><div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600"><ShieldCheck className="h-5 w-5" /></span><div><h2 className="text-sm font-black text-slate-900">Chia sẻ an toàn</h2><p className="mt-1 text-xs leading-5 text-slate-500">File được truyền trực tiếp từ {siteName}. Chỉ mở file khi bạn tin tưởng người gửi.</p></div></div><button type="button" onClick={copyLink} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-3 text-xs font-black text-slate-600 transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700">{copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}{copied ? 'Đã sao chép link' : 'Sao chép link chia sẻ'}</button></section>
             {previewKind !== 'none' && <a href={downloadUrl} className="inline-flex w-full items-center justify-center gap-3 rounded-2xl bg-slate-950 px-5 py-4 text-sm font-black text-white shadow-lg transition hover:bg-emerald-700"><Download className="h-5 w-5" /> Tải bản gốc</a>}
           </aside>
         </div>
       </div> : null}
     </main>
 
-    <footer className="relative z-10 px-4 pb-8 pt-2 text-center"><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">CloudSave Hub · Chia sẻ file nhanh chóng và an toàn</p></footer>
+    <footer className="relative z-10 px-4 pb-8 pt-2 text-center"><p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400">{siteName} · Chia sẻ file nhanh chóng và an toàn</p></footer>
   </div>;
 }

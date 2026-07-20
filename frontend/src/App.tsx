@@ -32,6 +32,7 @@ export default function App() {
   const [token, setToken] = useState<string | null>(getStoredToken);
   const [user, setUser] = useState<any>(getStoredUser);
   const [loginDarkMode, setLoginDarkMode] = useState(() => isThemeDark(getCachedThemeMode()));
+  const [siteName, setSiteName] = useState('CloudSave Hub');
   const [deviceLinkToken, setDeviceLinkToken] = useState<string | null>(
     new URLSearchParams(window.location.search).get('device_link')
   );
@@ -60,6 +61,17 @@ export default function App() {
     window.addEventListener('auth:logout', handleLogout);
     return () => window.removeEventListener('auth:logout', handleLogout);
   }, []);
+
+  useEffect(() => {
+    api.get('/public/auth-settings').then(({ data }) => {
+      const nextSiteName = String(data?.siteName || '').trim();
+      if (nextSiteName) setSiteName(nextSiteName);
+    }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!shareToken) document.title = siteName;
+  }, [shareToken, siteName]);
 
   useEffect(() => {
     if (!token) return;
@@ -102,33 +114,34 @@ export default function App() {
     <ToastProvider>
       <div className="font-sans text-slate-900 bg-white">
         {shareToken ? (
-          <DriveSharePage token={shareToken} />
+          <DriveSharePage token={shareToken} siteName={siteName} />
         ) : deviceLinkToken ? (
           <div className="min-h-screen flex flex-col">
             <div className="flex-1">
               <DeviceLinkPage
                 linkToken={deviceLinkToken}
                 token={token}
+                siteName={siteName}
                 onLogin={handleLogin}
                 onDone={handleLeaveDeviceLink}
               />
             </div>
             <footer className="border-t border-slate-200 bg-slate-50 py-6 text-center text-xs text-slate-500">
               <div className="max-w-7xl mx-auto px-4">
-                © 2026 CloudSave Hub. Tất cả quyền được bảo lưu.
+                © 2026 {siteName}. Tất cả quyền được bảo lưu.
               </div>
             </footer>
           </div>
         ) : token ? (
-          <Dashboard onLogout={handleLogout} currentUser={user} onUserUpdate={handleUserUpdate} />
+          <Dashboard onLogout={handleLogout} currentUser={user} onUserUpdate={handleUserUpdate} siteName={siteName} onSiteNameChange={setSiteName} />
         ) : (
           <div className="min-h-screen flex flex-col">
             <div className="flex-1">
-              <Auth onLogin={handleLogin} darkMode={loginDarkMode} />
+              <Auth onLogin={handleLogin} darkMode={loginDarkMode} siteName={siteName} />
             </div>
             <footer className={`border-t py-6 text-center font-mono text-[10px] uppercase tracking-widest ${loginDarkMode ? 'border-cyan-400/10 bg-[#02050b] text-slate-600' : 'border-cyan-700/15 bg-slate-100 text-slate-500'}`}>
               <div className="max-w-7xl mx-auto px-4">
-                © 2026 CloudSave Hub. Tất cả quyền được bảo lưu.
+                © 2026 {siteName}. Tất cả quyền được bảo lưu.
               </div>
             </footer>
           </div>

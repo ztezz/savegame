@@ -21,7 +21,7 @@ import TurnstileWidget from './TurnstileWidget';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || '';
 
-export default function Auth({ onLogin, darkMode }: { onLogin: (token: string, user: any) => void; darkMode: boolean }) {
+export default function Auth({ onLogin, darkMode, siteName = 'CloudSave Hub' }: { onLogin: (token: string, user: any) => void; darkMode: boolean; siteName?: string }) {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -173,9 +173,9 @@ export default function Auth({ onLogin, darkMode }: { onLogin: (token: string, u
           <motion.div initial={reduceMotion ? false : { opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55 }} style={{ x: leftParallaxX, y: leftParallaxY }} className="relative z-10 w-full max-w-2xl px-12 xl:px-16">
             <div className="mb-14 flex items-center gap-4">
               <motion.div whileHover={reduceMotion ? undefined : { rotate: -4, scale: 1.06 }} className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-xl shadow-indigo-950/40">
-                <img src="/logo.svg" alt="CloudSave logo" className="h-10 w-10 object-contain" />
+                <img src="/logo.svg" alt={`${siteName} logo`} className="h-10 w-10 object-contain" />
               </motion.div>
-              <div><h1 className="text-2xl font-black tracking-tight">CloudSave<span className="text-indigo-300">Hub</span></h1><p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Đồng bộ dữ liệu game</p></div>
+              <div><h1 className="text-2xl font-black tracking-tight">{siteName}</h1><p className="text-[11px] font-bold uppercase tracking-widest text-slate-400">Đồng bộ dữ liệu game</p></div>
             </div>
 
             <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-indigo-300/20 bg-indigo-400/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-200"><RadioTower className="h-3.5 w-3.5" />Cloud workspace thế hệ mới</div>
@@ -194,8 +194,8 @@ export default function Auth({ onLogin, darkMode }: { onLogin: (token: string, u
           <div aria-hidden className="absolute inset-0 bg-[radial-gradient(circle_at_100%_0%,rgba(99,102,241,0.08),transparent_30%),radial-gradient(circle_at_0%_100%,rgba(6,182,212,0.06),transparent_32%)]" />
           <motion.div initial={reduceMotion ? false : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} style={{ rotateX: formRotateX, rotateY: formRotateY, transformPerspective: 1200 }} className="relative z-30 w-full max-w-md rounded-[2rem] border border-slate-200/80 bg-white/90 p-6 shadow-2xl shadow-slate-200/70 backdrop-blur-xl sm:p-8">
             <div className="mb-10 flex items-center gap-3 lg:hidden">
-              <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-slate-900"><img src="/logo.svg" alt="CloudSave logo" className="h-9 w-9 object-contain" /></div>
-              <div><h1 className="text-xl font-black tracking-tight text-slate-950">CloudSaveHub</h1><p className="text-xs font-semibold text-slate-500">Đồng bộ dữ liệu game</p></div>
+              <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-xl bg-slate-900"><img src="/logo.svg" alt={`${siteName} logo`} className="h-9 w-9 object-contain" /></div>
+              <div><h1 className="text-xl font-black tracking-tight text-slate-950">{siteName}</h1><p className="text-xs font-semibold text-slate-500">Đồng bộ dữ liệu game</p></div>
             </div>
 
             <div className="mb-8">
@@ -207,7 +207,7 @@ export default function Auth({ onLogin, darkMode }: { onLogin: (token: string, u
               </div>
               <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-lg shadow-slate-300"><CloudCog className="h-5 w-5" /></div>
               <h2 className="mb-2 text-3xl font-black tracking-[-0.035em] text-slate-950">{isLogin ? 'Chào mừng trở lại' : 'Tạo tài khoản mới'}</h2>
-              <p className="text-sm leading-6 text-slate-500">{isLogin ? 'Xác thực để truy cập dashboard CloudSaveHub.' : 'Tạo tài khoản để bắt đầu quản lý dữ liệu đồng bộ.'}</p>
+              <p className="text-sm leading-6 text-slate-500">{isLogin ? `Xác thực để truy cập dashboard ${siteName}.` : 'Tạo tài khoản để bắt đầu quản lý dữ liệu đồng bộ.'}</p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5" noValidate>
@@ -226,7 +226,7 @@ export default function Auth({ onLogin, darkMode }: { onLogin: (token: string, u
               {isLogin && <TurnstileWidget siteKey={TURNSTILE_SITE_KEY} resetKey={turnstileResetKey} darkMode={false} onToken={setTurnstileToken} />}
               <motion.button whileHover={canSubmit && !reduceMotion ? { y: -2, scale: 1.01 } : undefined} whileTap={canSubmit && !reduceMotion ? { scale: 0.98 } : undefined} type="submit" disabled={!canSubmit} className="flex w-full items-center justify-center gap-3 rounded-xl bg-slate-950 py-4 font-bold text-white shadow-lg shadow-slate-300 transition hover:bg-indigo-600 hover:shadow-indigo-200 disabled:cursor-not-allowed disabled:opacity-50">{loading ? <><Loader2 className="h-4 w-4 animate-spin" />Đang xử lý...</> : <><span>{isLogin ? 'Đăng nhập' : 'Đăng ký tài khoản'}</span><ArrowRight className="h-4 w-4" /></>}</motion.button>
             </form>
-            <div className="mt-8 flex items-center gap-2 text-xs text-slate-500"><CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-600" /><span>Thông tin đăng nhập được gửi qua API nội bộ của CloudSaveHub.</span></div>
+            <div className="mt-8 flex items-center gap-2 text-xs text-slate-500"><CheckCircle2 className="h-4 w-4 flex-shrink-0 text-emerald-600" /><span>Thông tin đăng nhập được gửi qua API nội bộ của {siteName}.</span></div>
           </motion.div>
         </section>
       </main>
@@ -254,10 +254,10 @@ export default function Auth({ onLogin, darkMode }: { onLogin: (token: string, u
         <motion.div initial={reduceMotion ? false : { opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55 }} style={{ x: leftParallaxX, y: leftParallaxY }} className="relative z-10 w-full max-w-2xl px-12 xl:px-16">
           <div className="mb-14 flex items-center gap-4">
             <motion.div whileHover={reduceMotion ? undefined : { rotate: -3, scale: 1.06 }} className="relative flex h-13 w-13 items-center justify-center overflow-hidden border border-cyan-300/50 bg-[#07101b] shadow-[0_0_28px_rgba(34,211,238,0.2)] [clip-path:polygon(0_0,calc(100%-12px)_0,100%_12px,100%_100%,12px_100%,0_calc(100%-12px))]">
-              <img src="/logo.svg" alt="CloudSave logo" className="h-10 w-10 object-contain" />
+              <img src="/logo.svg" alt={`${siteName} logo`} className="h-10 w-10 object-contain" />
             </motion.div>
             <div>
-              <h1 className="text-2xl font-black tracking-tight">CloudSave<span className="text-cyan-300">Hub</span></h1>
+              <h1 className="text-2xl font-black tracking-tight">{siteName}</h1>
               <p className="font-mono text-[10px] font-bold uppercase tracking-[0.25em] text-slate-500">Secure game data network</p>
             </div>
           </div>
@@ -288,9 +288,9 @@ export default function Auth({ onLogin, darkMode }: { onLogin: (token: string, u
         <motion.div initial={reduceMotion ? false : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} style={{ rotateX: formRotateX, rotateY: formRotateY, transformPerspective: 1200 }} className="auth-cyber-panel relative z-30 w-full max-w-md border border-cyan-300/25 bg-[#07101b]/90 p-6 shadow-[0_0_70px_rgba(6,182,212,0.09),0_24px_80px_rgba(0,0,0,0.65)] backdrop-blur-xl sm:p-8">
           <div className="mb-9 flex items-center gap-3 lg:hidden">
             <div className="flex h-11 w-11 items-center justify-center overflow-hidden border border-cyan-300/40 bg-[#02050b] shadow-[0_0_20px_rgba(34,211,238,0.18)]">
-              <img src="/logo.svg" alt="CloudSave logo" className="h-9 w-9 object-contain" />
+              <img src="/logo.svg" alt={`${siteName} logo`} className="h-9 w-9 object-contain" />
             </div>
-            <div><h1 className="text-xl font-black tracking-tight text-white">CloudSave<span className="text-cyan-300">Hub</span></h1><p className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">Secure data network</p></div>
+            <div><h1 className="text-xl font-black tracking-tight text-white">{siteName}</h1><p className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-slate-500">Secure data network</p></div>
           </div>
 
           <div className="mb-8">
@@ -307,7 +307,7 @@ export default function Auth({ onLogin, darkMode }: { onLogin: (token: string, u
             </div>
             <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-300/70">{isLogin ? '// Identity verification' : '// New identity protocol'}</p>
             <h2 className="mb-2 text-3xl font-black tracking-[-0.035em] text-white">{isLogin ? 'Truy cập hệ thống' : 'Khởi tạo tài khoản'}</h2>
-            <p className="text-sm leading-6 text-slate-400">{isLogin ? 'Nhập thông tin định danh để mở CloudSaveHub.' : 'Tạo danh tính mới để bắt đầu đồng bộ dữ liệu.'}</p>
+            <p className="text-sm leading-6 text-slate-400">{isLogin ? `Nhập thông tin định danh để mở ${siteName}.` : 'Tạo danh tính mới để bắt đầu đồng bộ dữ liệu.'}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5" noValidate>

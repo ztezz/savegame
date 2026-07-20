@@ -6,6 +6,29 @@ import { useToast } from '../../../context/ToastContext';
 import { DriveShare } from '../drive/driveTypes';
 import { formatFileSize, formatFileType } from '../drive/driveUtils';
 
+const normalizeShares = (data: any): DriveShare[] | null => {
+  const shares = Array.isArray(data) ? data : data?.shares;
+  if (!Array.isArray(shares)) return null;
+  return shares.filter((share): share is DriveShare => Boolean(share && share.file_id && share.token && share.original_name));
+};
+
+const sharesFromFiles = (data: any): DriveShare[] | null => {
+  if (!Array.isArray(data?.files)) return null;
+  const now = Date.now();
+  return data.files
+    .filter((file: any) => file?.id && file?.original_name && file?.share_token)
+    .filter((file: any) => !file.share_expires_at || new Date(file.share_expires_at).getTime() > now)
+    .map((file: any) => ({
+      file_id: file.id,
+      original_name: file.original_name,
+      mime_type: file.mime_type || null,
+      file_size: Number(file.file_size || 0),
+      token: file.share_token,
+      created_at: file.created_at,
+      expires_at: file.share_expires_at || null,
+    }));
+};
+
 const SharedLinksTab: React.FC = () => {
   const { showToast } = useToast();
   const [shares, setShares] = useState<DriveShare[]>([]);
@@ -19,12 +42,23 @@ const SharedLinksTab: React.FC = () => {
     setLoadError('');
     try {
       const response = await api.get('/drive/shares');
-      const data = Array.isArray(response.data) ? response.data : response.data?.shares;
-      if (!Array.isArray(data)) throw new Error('Invalid Drive shares response');
-      setShares(data.filter((share): share is DriveShare => Boolean(share && share.file_id && share.token && share.original_name)));
-    } catch (error: any) {
-      setShares([]);
-      setLoadError(error.response?.data?.error || 'Không tải được danh sách link chia sẻ.');
+      const data = normalizeShares(response.data);
+      if (data) {
+        setShares(data);
+        return;
+      }
+      throw new Error('Drive shares endpoint is unavailable');
+    } catch (shareError: any) {
+      try {
+        // Older API deployments expose share metadata through the all-files search.
+        const response = await api.get('/drive/files', { params: { search: '%' } });
+        const data = sharesFromFiles(response.data);
+        if (!data) throw new Error('Invalid Drive files response');
+        setShares(data);
+      } catch (fallbackError: any) {
+        setShares([]);
+        setLoadError(fallbackError.response?.data?.error || shareError.response?.data?.error || 'Không tải được danh sách link chia sẻ.');
+      }
     } finally {
       setLoading(false);
     }

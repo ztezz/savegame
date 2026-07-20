@@ -10,6 +10,7 @@ interface SidebarProps {
   activeTab: TabType;
   setActiveTab: (tab: TabType) => void;
   currentUser: any;
+  siteName: string;
   mobileOpen?: boolean;
   onClose?: () => void;
 }
@@ -36,7 +37,7 @@ const adminItems = [
   { tab: 'users', label: 'Quản lý tài khoản', icon: Users },
 ] as const;
 
-const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, currentUser, mobileOpen = false, onClose }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, currentUser, siteName, mobileOpen = false, onClose }) => {
   const isAdmin = currentUser?.role?.toLowerCase() === 'admin';
   const selectTab = (tab: TabType) => {
     setActiveTab(tab);
@@ -63,9 +64,9 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, currentUser,
           <div>
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center overflow-hidden">
-                <img src="/logo.svg" alt="CloudSave logo" className="w-7 h-7 object-contain" />
+                <img src="/logo.svg" alt={`${siteName} logo`} className="w-7 h-7 object-contain" />
               </div>
-              <h1 className="text-xl font-bold tracking-tight">CloudSave</h1>
+              <h1 className="truncate text-xl font-bold tracking-tight">{siteName}</h1>
             </div>
             <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-widest font-black">Trung tâm đồng bộ</p>
           </div>
