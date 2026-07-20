@@ -68,7 +68,7 @@ export default function TurnstileWidget({
       widgetId = window.turnstile.render(containerRef.current, {
         sitekey: siteKey,
         theme: darkMode ? 'dark' : 'light',
-        size: 'flexible',
+        size: 'normal',
         action: 'login',
         callback: (token: string) => onToken(token),
         'expired-callback': () => onToken(''),
@@ -94,7 +94,9 @@ export default function TurnstileWidget({
         <p className={`font-mono text-[10px] font-bold uppercase tracking-[0.2em] ${darkMode ? 'text-cyan-300' : 'text-cyan-800'}`}>Cloudflare verification</p>
         <span className={`font-mono text-[9px] uppercase tracking-wider ${darkMode ? 'text-slate-600' : 'text-slate-500'}`}>Anti-bot active</span>
       </div>
-      <div ref={containerRef} className="min-h-[65px] w-full" />
+      <div className="overflow-x-auto">
+        <div ref={containerRef} className="min-h-[65px] w-[300px] max-w-full" />
+      </div>
       {loadError && <p role="alert" className="text-xs font-semibold text-rose-300">{loadError}</p>}
     </div>
   );

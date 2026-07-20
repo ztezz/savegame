@@ -93,11 +93,27 @@ async function verifyTurnstile(token: unknown, remoteIp?: string): Promise<boole
       body,
       signal: AbortSignal.timeout(10_000),
     });
-    if (!response.ok) return false;
+    if (!response.ok) {
+      console.error("Turnstile Siteverify HTTP error:", response.status);
+      return false;
+    }
 
-    const result = await response.json() as { success?: boolean; action?: string; hostname?: string };
-    if (!result.success || (NODE_ENV === "production" && result.action !== "login")) return false;
+    const result = await response.json() as {
+      success?: boolean;
+      action?: string;
+      hostname?: string;
+      "error-codes"?: string[];
+    };
+    if (!result.success) {
+      console.error("Turnstile Siteverify rejected token:", result["error-codes"] || []);
+      return false;
+    }
+    if (NODE_ENV === "production" && result.action !== "login") {
+      console.error("Turnstile action mismatch:", { expected: "login", received: result.action || null });
+      return false;
+    }
     if (TURNSTILE_ALLOWED_HOSTNAMES.size > 0 && !TURNSTILE_ALLOWED_HOSTNAMES.has(String(result.hostname || "").toLowerCase())) {
+      console.error("Turnstile hostname rejected:", result.hostname || null);
       return false;
     }
     return true;
