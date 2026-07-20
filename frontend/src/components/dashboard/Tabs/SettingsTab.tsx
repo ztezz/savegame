@@ -457,6 +457,13 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
             </span>
             <input className="h-5 w-5 accent-indigo-600" type="checkbox" checked={!!settings.security.enforceStrongPassword} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,security:{...s.security,enforceStrongPassword:e.target.checked}}))} />
           </label>
+          <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm">
+            <span>
+              <span className="block font-bold text-slate-900">Cho phép tự đăng ký</span>
+              <span className="mt-1 block text-xs text-slate-500">Hiển thị tab đăng ký và cho phép tạo tài khoản mới.</span>
+            </span>
+            <input className="h-5 w-5 accent-indigo-600" type="checkbox" checked={!!settings.security.allowSelfRegister} disabled={!isAdmin} onChange={(e)=>setSettings((s:any)=>({...s,security:{...s.security,allowSelfRegister:e.target.checked}}))} />
+          </label>
           <label className="rounded-2xl border border-slate-200 p-4 text-sm">
             <span className="font-bold text-slate-900">Session timeout</span>
             <span className="mt-1 block text-xs text-slate-500">Tự đăng xuất sau số phút không hoạt động.</span>

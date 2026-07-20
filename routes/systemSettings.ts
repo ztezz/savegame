@@ -128,6 +128,18 @@ async function resolveAiSettings(payload: any = {}) {
   return next;
 }
 
+settingsRouter.get('/api/public/auth-settings', async (_req, res) => {
+  if (!isUsingDatabase()) return res.json({ allowSelfRegister: DEFAULT_SETTINGS.security.allowSelfRegister });
+  try {
+    const { rows } = await pool.query("SELECT value_json FROM system_settings WHERE key = 'security'");
+    const security = { ...DEFAULT_SETTINGS.security, ...(rows[0]?.value_json || {}) };
+    res.json({ allowSelfRegister: Boolean(security.allowSelfRegister) });
+  } catch (err: any) {
+    console.error('Failed to load public auth settings:', err?.message || err);
+    res.json({ allowSelfRegister: DEFAULT_SETTINGS.security.allowSelfRegister });
+  }
+});
+
 settingsRouter.get('/api/system/settings', authenticateToken, async (_req: any, res) => {
   if (!isUsingDatabase()) return res.json(DEFAULT_SETTINGS);
   try {

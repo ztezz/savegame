@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import api from '../utils/api';
 import {
   ArrowRight,
@@ -30,6 +30,7 @@ export default function Auth({ onLogin, darkMode }: { onLogin: (token: string, u
   const [error, setError] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
+  const [allowSelfRegister, setAllowSelfRegister] = useState(false);
   const { showToast } = useToast();
   const reduceMotion = useReducedMotion();
   const pointerX = useMotionValue(50);
@@ -131,6 +132,28 @@ export default function Auth({ onLogin, darkMode }: { onLogin: (token: string, u
     pointerY.set(50);
   };
 
+  useEffect(() => {
+    let cancelled = false;
+    api.get('/public/auth-settings').then(({ data }) => {
+      if (!cancelled) setAllowSelfRegister(data?.allowSelfRegister === true);
+    }).catch(() => {
+      if (!cancelled) setAllowSelfRegister(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!allowSelfRegister && !isLogin) {
+      setIsLogin(true);
+      setError('');
+      setPassword('');
+      setShowPassword(false);
+      clearTurnstile();
+    }
+  }, [allowSelfRegister, isLogin]);
+
   if (!darkMode) {
     return (
       <main onPointerMove={handlePointerMove} onPointerLeave={resetPointer} className="relative grid min-h-screen overflow-hidden bg-slate-50 font-sans lg:grid-cols-[1.08fr_0.92fr]">
@@ -176,11 +199,11 @@ export default function Auth({ onLogin, darkMode }: { onLogin: (token: string, u
             </div>
 
             <div className="mb-8">
-              <div className="relative mb-8 inline-flex rounded-xl bg-slate-100 p-1" aria-label="Chọn chế độ xác thực">
-                {isLogin && <motion.span layoutId="auth-mode" className="absolute bottom-1 left-1 top-1 w-[calc(50%-0.25rem)] rounded-lg bg-white shadow-sm" />}
+              <div className={`relative mb-8 grid rounded-xl bg-slate-100 p-1 ${allowSelfRegister ? 'grid-cols-2' : 'grid-cols-1'}`} aria-label="Chọn chế độ xác thực">
+                {isLogin && <motion.span layoutId="auth-mode" className={`absolute bottom-1 left-1 top-1 rounded-lg bg-white shadow-sm ${allowSelfRegister ? 'w-[calc(50%-0.25rem)]' : 'right-1'}`} />}
                 {!isLogin && <motion.span layoutId="auth-mode" className="absolute bottom-1 right-1 top-1 w-[calc(50%-0.25rem)] rounded-lg bg-white shadow-sm" />}
                 <button type="button" onClick={() => !isLogin && switchMode()} className={`relative z-10 rounded-lg px-4 py-2 text-sm font-bold transition ${isLogin ? 'text-slate-950' : 'text-slate-500 hover:text-slate-800'}`}>Đăng nhập</button>
-                <button type="button" onClick={() => isLogin && switchMode()} className={`relative z-10 rounded-lg px-4 py-2 text-sm font-bold transition ${!isLogin ? 'text-slate-950' : 'text-slate-500 hover:text-slate-800'}`}>Đăng ký</button>
+                {allowSelfRegister && <button type="button" onClick={() => isLogin && switchMode()} className={`relative z-10 rounded-lg px-4 py-2 text-sm font-bold transition ${!isLogin ? 'text-slate-950' : 'text-slate-500 hover:text-slate-800'}`}>Đăng ký</button>}
               </div>
               <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-lg shadow-slate-300"><CloudCog className="h-5 w-5" /></div>
               <h2 className="mb-2 text-3xl font-black tracking-[-0.035em] text-slate-950">{isLogin ? 'Chào mừng trở lại' : 'Tạo tài khoản mới'}</h2>
@@ -271,11 +294,11 @@ export default function Auth({ onLogin, darkMode }: { onLogin: (token: string, u
           </div>
 
           <div className="mb-8">
-            <div className="relative mb-8 grid grid-cols-2 border border-slate-700/80 bg-[#02050b]/80 p-1" aria-label="Chọn chế độ xác thực">
-              {isLogin && <motion.span layoutId="auth-mode" className="absolute bottom-1 left-1 top-1 w-[calc(50%-0.25rem)] border border-cyan-300/50 bg-cyan-300/10 shadow-[inset_0_0_18px_rgba(34,211,238,0.08)]" />}
+            <div className={`relative mb-8 grid border border-slate-700/80 bg-[#02050b]/80 p-1 ${allowSelfRegister ? 'grid-cols-2' : 'grid-cols-1'}`} aria-label="Chọn chế độ xác thực">
+              {isLogin && <motion.span layoutId="auth-mode" className={`absolute bottom-1 left-1 top-1 border border-cyan-300/50 bg-cyan-300/10 shadow-[inset_0_0_18px_rgba(34,211,238,0.08)] ${allowSelfRegister ? 'w-[calc(50%-0.25rem)]' : 'right-1'}`} />}
               {!isLogin && <motion.span layoutId="auth-mode" className="absolute bottom-1 right-1 top-1 w-[calc(50%-0.25rem)] border border-fuchsia-300/50 bg-fuchsia-300/10 shadow-[inset_0_0_18px_rgba(217,70,239,0.08)]" />}
               <button type="button" onClick={() => !isLogin && switchMode()} className={`relative z-10 px-4 py-2 font-mono text-xs font-bold uppercase tracking-wider transition ${isLogin ? 'text-cyan-200' : 'text-slate-500 hover:text-slate-200'}`}>Đăng nhập</button>
-              <button type="button" onClick={() => isLogin && switchMode()} className={`relative z-10 px-4 py-2 font-mono text-xs font-bold uppercase tracking-wider transition ${!isLogin ? 'text-fuchsia-200' : 'text-slate-500 hover:text-slate-200'}`}>Đăng ký</button>
+              {allowSelfRegister && <button type="button" onClick={() => isLogin && switchMode()} className={`relative z-10 px-4 py-2 font-mono text-xs font-bold uppercase tracking-wider transition ${!isLogin ? 'text-fuchsia-200' : 'text-slate-500 hover:text-slate-200'}`}>Đăng ký</button>}
             </div>
 
             <div className="mb-4 flex items-center justify-between">
