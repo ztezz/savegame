@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 
 interface TurnstileApi {
-  ready: (callback: () => void) => void;
   render: (container: HTMLElement, options: Record<string, unknown>) => string;
   remove: (widgetId: string) => void;
 }
@@ -28,8 +27,6 @@ function loadTurnstileScript() {
     script.addEventListener('error', handleError, { once: true });
     if (!existingScript) {
       script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-      script.async = true;
-      script.defer = true;
       script.dataset.cloudsaveTurnstile = 'true';
       document.head.appendChild(script);
     }
@@ -68,21 +65,18 @@ export default function TurnstileWidget({
 
     loadTurnstileScript().then(() => {
       if (cancelled || !containerRef.current || !window.turnstile) return;
-      window.turnstile.ready(() => {
-        if (cancelled || !containerRef.current || !window.turnstile) return;
-        widgetId = window.turnstile.render(containerRef.current, {
-          sitekey: siteKey,
-          theme: darkMode ? 'dark' : 'light',
-          size: 'flexible',
-          action: 'login',
-          callback: (token: string) => onToken(token),
-          'expired-callback': () => onToken(''),
-          'timeout-callback': () => onToken(''),
-          'error-callback': () => {
-            onToken('');
-            setLoadError('Xác minh Cloudflare gặp lỗi. Vui lòng thử lại.');
-          },
-        });
+      widgetId = window.turnstile.render(containerRef.current, {
+        sitekey: siteKey,
+        theme: darkMode ? 'dark' : 'light',
+        size: 'flexible',
+        action: 'login',
+        callback: (token: string) => onToken(token),
+        'expired-callback': () => onToken(''),
+        'timeout-callback': () => onToken(''),
+        'error-callback': () => {
+          onToken('');
+          setLoadError('Xác minh Cloudflare gặp lỗi. Vui lòng thử lại.');
+        },
       });
     }).catch((error: Error) => {
       if (!cancelled) setLoadError(error.message);
