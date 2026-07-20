@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowDown, Bot, ChevronDown, Copy, Hash, Lock, Menu, Pin, Radio, Search, Send, Shield, Smile, Sparkles, X } from 'lucide-react';
-import { motion, useReducedMotion } from 'motion/react';
+import { ArrowDown, Bot, ChevronDown, Copy, Hash, Loader2, Lock, Menu, Pin, Radio, Search, Send, Shield, Smile, Sparkles, Trash2, X } from 'lucide-react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import api, { API_BASE_URL } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
 
@@ -68,7 +68,11 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
   const [aiTyping, setAiTyping] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState('');
+  const [deletingMessage, setDeletingMessage] = useState<ChatMessage | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [newMessageCount, setNewMessageCount] = useState(0);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const lastMessageIdRef = useRef(0);
   const activeRoomIdRef = useRef(activeRoomId);
   const roomCountsRef = useRef<Record<number, number>>({});
@@ -85,16 +89,24 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
     : messages;
   const pinnedMessages = messages.filter((item) => item.pinned_at).slice(-3).reverse();
 
+  const isNearBottom = () => {
+    const el = listRef.current;
+    return !el || el.scrollHeight - el.scrollTop - el.clientHeight < 140;
+  };
+
   const scrollToBottom = () => {
     requestAnimationFrame(() => {
-      if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
+      if (listRef.current) listRef.current.scrollTo({ top: listRef.current.scrollHeight, behavior: reduceMotion ? 'auto' : 'smooth' });
     });
+    setNewMessageCount(0);
   };
 
   const handleScroll = () => {
     const el = listRef.current;
     if (!el) return;
-    setShowScrollButton(el.scrollHeight - el.scrollTop - el.clientHeight > 180);
+    const awayFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight > 180;
+    setShowScrollButton(awayFromBottom);
+    if (!awayFromBottom) setNewMessageCount(0);
   };
 
   const formatDay = (value: string) => {
@@ -130,16 +142,18 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
       roomCountsRef.current = nextCounts;
       roomsInitializedRef.current = true;
       setRooms(incoming);
-      if (incoming.length > 0 && !incoming.some((room) => room.id === activeRoomId)) setActiveRoomId(incoming[0].id);
+      if (incoming.length > 0 && !incoming.some((room) => room.id === activeRoomIdRef.current)) setActiveRoomId(incoming[0].id);
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Không tải được danh sách phòng', 'error');
     }
   };
 
-  const fetchMessages = async (initial = false) => {
+  const fetchMessages = async (roomId: number, initial = false) => {
     try {
       const lastId = initial ? 0 : lastMessageIdRef.current;
-      const res = await api.get('/community/messages', { params: lastId ? { roomId: activeRoomId, afterId: lastId } : { roomId: activeRoomId, limit: 80 } });
+      const shouldStickToBottom = isNearBottom();
+      const res = await api.get('/community/messages', { params: lastId ? { roomId, afterId: lastId } : { roomId, limit: 80 } });
+      if (activeRoomIdRef.current !== roomId) return;
       const incoming = Array.isArray(res.data) ? res.data : [];
       if (initial) {
         setMessages(incoming);
@@ -152,7 +166,8 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
           return merged;
         });
       }
-      if (incoming.length > 0 || initial) scrollToBottom();
+      if (initial || (incoming.length > 0 && shouldStickToBottom)) scrollToBottom();
+      else if (incoming.length > 0) setNewMessageCount((count) => count + incoming.length);
     } catch (err: any) {
       if (initial) showToast(err.response?.data?.error || 'Không tải được phòng chat', 'error');
     } finally {
@@ -161,14 +176,18 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
   };
 
   const mergeIncomingMessage = (incoming: ChatMessage) => {
+    const shouldStickToBottom = isNearBottom();
+    let added = false;
     setMessages((current) => {
       if (incoming.room_id && incoming.room_id !== activeRoomIdRef.current) return current;
       if (current.some((item) => item.id === incoming.id)) return current;
+      added = true;
       const merged = [...current, incoming].slice(-200);
       lastMessageIdRef.current = merged.length > 0 ? merged[merged.length - 1].id : 0;
       return merged;
     });
-    scrollToBottom();
+    if (shouldStickToBottom) scrollToBottom();
+    else if (added) setNewMessageCount((count) => count + 1);
   };
 
   useEffect(() => {
@@ -200,6 +219,15 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
             const payload = JSON.parse(event.data);
             if (payload.type === 'message_created') {
               if (payload.roomId === activeRoomIdRef.current) mergeIncomingMessage(payload.message);
+              fetchRooms();
+            }
+            if (payload.type === 'message_updated' && payload.roomId === activeRoomIdRef.current) {
+              setMessages((current) => current.map((item) => item.id === payload.messageId ? { ...item, ...payload.changes } : item));
+            }
+            if (payload.type === 'message_deleted' && payload.roomId === activeRoomIdRef.current) {
+              setMessages((current) => current.filter((item) => item.id !== payload.messageId));
+              setReplyTo((current) => current?.id === payload.messageId ? null : current);
+              setEditingMessageId((current) => current === payload.messageId ? null : current);
               fetchRooms();
             }
             if (payload.type === 'room_changed') fetchRooms();
@@ -262,14 +290,16 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
     setReplyTo(null);
     setEditingMessageId(null);
     setEditingText('');
+    setDeletingMessage(null);
+    setNewMessageCount(0);
     lastMessageIdRef.current = 0;
     setLoading(true);
     setTypingUsers((current) => ({ ...current, [activeRoomId]: {} }));
     typingActiveRef.current = false;
     if (typingTimeoutRef.current) window.clearTimeout(typingTimeoutRef.current);
     setUnreadByRoom((current) => ({ ...current, [activeRoomId]: 0 }));
-    fetchMessages(true);
-    const timer = window.setInterval(() => fetchMessages(false), 4000);
+    fetchMessages(activeRoomId, true);
+    const timer = window.setInterval(() => fetchMessages(activeRoomId, false), 4000);
     return () => {
       window.clearInterval(timer);
       if (typingActiveRef.current) {
@@ -297,6 +327,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
         return merged;
       });
       setMessage('');
+      if (composerRef.current) composerRef.current.style.height = 'auto';
       setReplyTo(null);
       void api.post('/community/typing', { roomId: activeRoomId, typing: false }).catch(() => undefined);
       typingActiveRef.current = false;
@@ -385,11 +416,31 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
     }
   };
 
+  const deleteMessage = async () => {
+    if (!deletingMessage || deleting) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/community/messages/${deletingMessage.id}`);
+      setMessages((current) => current.filter((item) => item.id !== deletingMessage.id));
+      if (replyTo?.id === deletingMessage.id) setReplyTo(null);
+      if (editingMessageId === deletingMessage.id) {
+        setEditingMessageId(null);
+        setEditingText('');
+      }
+      setDeletingMessage(null);
+      showToast('Đã xóa tin nhắn', 'success');
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Xóa tin nhắn thất bại', 'error');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return <motion.div initial={reduceMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} className="admin-dark-surface relative col-span-12 h-full min-h-0 overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-indigo-50 via-slate-100 to-emerald-50 p-1.5 dark:from-slate-950 dark:via-indigo-950/70 dark:to-emerald-950/60 sm:p-2">
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-70 dark:opacity-55" style={{ backgroundImage: 'radial-gradient(circle at 12% 18%, rgba(99,102,241,.3), transparent 24%), radial-gradient(circle at 88% 82%, rgba(16,185,129,.22), transparent 25%), radial-gradient(rgba(100,116,139,.2) 1px, transparent 1px)', backgroundSize: 'auto, auto, 20px 20px' }} />
     <div aria-hidden="true" className="pointer-events-none absolute -left-12 top-1/3 h-40 w-40 rounded-full border border-indigo-300/40 dark:border-indigo-500/20" />
     <div aria-hidden="true" className="pointer-events-none absolute -right-16 bottom-1/4 h-56 w-56 rounded-full border border-emerald-300/40 dark:border-emerald-500/20" />
-    <div className="relative z-10 flex h-full min-h-[680px] flex-col overflow-hidden rounded-[2rem] border border-white/70 bg-white shadow-2xl shadow-indigo-200/50 dark:border-slate-700/80 dark:shadow-black/40">
+    <div className="relative z-10 flex h-[calc(100dvh-8.5rem)] min-h-[34rem] flex-col overflow-hidden rounded-[2rem] border border-white/70 bg-white shadow-2xl shadow-indigo-200/50 dark:border-slate-700/80 dark:shadow-black/40 sm:h-[calc(100dvh-10rem)] lg:h-full lg:min-h-[42rem]">
       <div className="relative overflow-hidden border-b border-white/10 bg-slate-950 p-5 text-white sm:p-6">
         <div className="pointer-events-none absolute -right-12 -top-20 h-48 w-48 rounded-full bg-indigo-500/30 blur-3xl" />
         <div className="relative flex items-center justify-between gap-3">
@@ -419,16 +470,18 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
         </div>
       </div>
 
-      {searchOpen && <div className="border-b border-slate-100 bg-white px-4 py-3">
+      <AnimatePresence initial={false}>{searchOpen && <motion.div initial={reduceMotion ? false : { height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.18 }} className="overflow-hidden border-b border-slate-100 bg-white">
+        <div className="px-4 py-3">
         <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-sm transition focus-within:border-indigo-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-100/60 dark:focus-within:bg-slate-800 dark:focus-within:ring-indigo-950">
           <Search className="h-4 w-4 text-slate-400" />
           <input autoFocus value={chatSearch} onChange={(e) => setChatSearch(e.target.value)} placeholder="Tìm trong phòng chat..." className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-100 dark:caret-indigo-400" />
           {chatSearch && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-black text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300">{visibleMessages.length}</span>}
           {chatSearch && <button type="button" aria-label="Xóa tìm kiếm" onClick={() => setChatSearch('')} className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"><X className="h-3.5 w-3.5" /></button>}
         </div>
-      </div>}
+        </div>
+      </motion.div>}</AnimatePresence>
 
-      {pinnedMessages.length > 0 && <div className="border-b border-amber-100 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/50">
+      <AnimatePresence initial={false}>{pinnedMessages.length > 0 && <motion.div initial={reduceMotion ? false : { opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="border-b border-amber-100 bg-amber-50 px-4 py-3 dark:border-amber-900 dark:bg-amber-950/50">
         <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-widest text-amber-700 dark:text-amber-300"><Pin className="h-3.5 w-3.5" />Tin ghim</div>
         <div className="space-y-2">
           {pinnedMessages.map((item) => <div key={item.id} className="flex items-start justify-between gap-3 rounded-2xl bg-white px-4 py-3 text-sm shadow-sm dark:bg-slate-800">
@@ -439,10 +492,10 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
             {isAdmin && <button type="button" onClick={() => togglePin(item)} className="rounded-full p-1 text-amber-600 hover:bg-amber-100 dark:text-amber-300 dark:hover:bg-amber-900"><X className="h-4 w-4" /></button>}
           </div>)}
         </div>
-      </div>}
+      </motion.div>}</AnimatePresence>
 
       <div ref={listRef} onScroll={handleScroll} className="community-chat-pattern chat-scrollbar relative flex-1 space-y-4 overflow-y-auto p-4 sm:p-6" style={chatPattern}>
-        {loading ? <div className="rounded-2xl bg-white/80 px-4 py-3 text-sm font-semibold text-slate-500 shadow-sm backdrop-blur">Đang tải tin nhắn...</div> : visibleMessages.length === 0 ? <div className="h-full flex items-center justify-center text-center text-slate-600 text-sm"><div className="rounded-3xl bg-white/80 px-6 py-5 shadow-sm backdrop-blur">{chatSearch ? 'Không tìm thấy tin nhắn phù hợp.' : 'Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện.'}</div></div> : visibleMessages.map((item, index) => {
+        {loading ? <div className="space-y-4" aria-label="Đang tải tin nhắn">{[0, 1, 2, 3, 4].map((item) => <motion.div key={item} initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: [0.45, 0.8, 0.45] }} transition={{ duration: 1.4, repeat: Infinity, delay: item * 0.08 }} className={`flex ${item % 2 ? 'justify-end' : 'justify-start'}`}><div className={`h-16 rounded-2xl bg-white/65 shadow-sm backdrop-blur ${item % 2 ? 'w-[58%]' : 'w-[68%]'}`} /></motion.div>)}</div> : visibleMessages.length === 0 ? <div className="h-full flex items-center justify-center text-center text-slate-600 text-sm"><motion.div initial={reduceMotion ? false : { opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="rounded-3xl bg-white/80 px-6 py-5 shadow-sm backdrop-blur">{chatSearch ? 'Không tìm thấy tin nhắn phù hợp.' : 'Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện.'}</motion.div></div> : visibleMessages.map((item, index) => {
           const mine = item.user_id === currentUser?.id || item.username === currentUser?.username;
           const isAi = item.sender_type === 'ai' || item.role === 'AI';
           const previous = visibleMessages[index - 1];
@@ -450,7 +503,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
           const showDay = !previous || new Date(previous.created_at).toDateString() !== new Date(item.created_at).toDateString();
           return <React.Fragment key={item.id}>
             {showDay && <div className="flex justify-center py-2"><span className="rounded-full border border-white/80 bg-white px-3 py-1 text-[11px] font-black text-sky-700 shadow-sm dark:border-slate-600 dark:bg-slate-800 dark:text-sky-300">{formatDay(item.created_at)}</span></div>}
-            <motion.div initial={reduceMotion ? false : { opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.25 }} className={`flex items-end gap-2 ${mine ? 'justify-end' : 'justify-start'}`}>
+            <motion.div layout initial={reduceMotion ? false : { opacity: 0, x: mine ? 10 : -10, scale: 0.98 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: reduceMotion ? 0 : 0.2 }} className={`flex items-end gap-2 ${mine ? 'justify-end' : 'justify-start'}`}>
             {!mine && <div className={`mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[10px] font-black text-white shadow-sm ${isAi ? 'bg-gradient-to-br from-violet-500 to-indigo-600' : 'bg-slate-800'}`}>{isAi ? <Bot className="h-4 w-4" /> : avatarLabel(item)}</div>}
             <div className={`relative max-w-[88%] px-4 py-3 shadow-sm sm:max-w-[72%] ${mine ? 'rounded-2xl rounded-br-md border border-emerald-200/80 bg-emerald-100 text-slate-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-50' : isAi ? 'rounded-2xl rounded-bl-md border border-violet-100 bg-violet-50 text-slate-800 dark:border-violet-800 dark:bg-violet-950/90 dark:text-violet-100' : 'rounded-2xl rounded-bl-md border border-white/80 bg-white text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100'}`}>
               <div className="flex items-center justify-between gap-3 mb-1">
@@ -477,40 +530,50 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
                 {((mine && !isAi) || isAdmin) && <button type="button" onClick={() => startEdit(item)} className={`text-[10px] font-black ${mine ? 'text-emerald-700 hover:text-emerald-900 dark:text-emerald-300' : 'text-slate-500'}`}>Sửa</button>}
                 {isAdmin && <button type="button" onClick={() => togglePin(item)} className={`inline-flex items-center gap-1 text-[10px] font-black ${mine ? 'text-emerald-700 hover:text-emerald-900 dark:text-emerald-300' : 'text-amber-600'}`}><Pin className="h-3 w-3" />{item.pinned_at ? 'Bỏ ghim' : 'Ghim'}</button>}
                 <button type="button" onClick={() => copyMessage(item.message)} className={`inline-flex items-center gap-1 text-[10px] font-black ${mine ? 'text-emerald-700 hover:text-emerald-900 dark:text-emerald-300' : 'text-slate-500'}`}><Copy className="h-3 w-3" />Copy</button>
+                {((mine && !isAi) || isAdmin) && <button type="button" onClick={() => setDeletingMessage(item)} className="inline-flex items-center gap-1 text-[10px] font-black text-red-500 transition hover:text-red-700"><Trash2 className="h-3 w-3" />Xóa</button>}
                 {['👍', '😂', '❤️'].map((emoji) => <button key={emoji} type="button" onClick={() => toggleReaction(item.id, emoji)} className={`text-[11px] ${mine ? 'hover:bg-white/50 dark:hover:bg-white/10' : 'hover:bg-slate-100 dark:hover:bg-slate-700'} rounded-full px-1`}>{emoji}</button>)}
               </div>
             </div>
             </motion.div>
           </React.Fragment>;
         })}
-        {sending && <div className="flex justify-end"><div className="rounded-full bg-white/80 px-4 py-2 text-xs font-bold text-sky-700 shadow-sm backdrop-blur">Đang gửi...</div></div>}
-        {Object.keys(typingUsers[activeRoomId] || {}).length > 0 && <div className="flex justify-start"><div className="rounded-full bg-white/85 px-4 py-2 text-xs font-bold text-slate-600 shadow-sm backdrop-blur">{Object.values(typingUsers[activeRoomId]).slice(0, 2).join(', ')} đang gõ...</div></div>}
-        {aiTyping && <div className="flex justify-start"><div className="rounded-full bg-amber-50 px-4 py-2 text-xs font-bold text-amber-700 shadow-sm backdrop-blur dark:bg-amber-950/70 dark:text-amber-300">AI đang gõ...</div></div>}
-        {showScrollButton && <button type="button" aria-label="Cuộn xuống tin nhắn mới nhất" onClick={scrollToBottom} className="sticky bottom-3 left-full ml-auto flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950 text-white shadow-xl transition hover:bg-indigo-600"><ArrowDown className="h-4 w-4" /></button>}
+        <AnimatePresence>{sending && <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex justify-end"><div className="inline-flex items-center gap-2 rounded-full bg-white/80 px-4 py-2 text-xs font-bold text-sky-700 shadow-sm backdrop-blur"><Loader2 className="h-3.5 w-3.5 animate-spin" />Đang gửi...</div></motion.div>}</AnimatePresence>
+        <AnimatePresence>{Object.keys(typingUsers[activeRoomId] || {}).length > 0 && <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 3 }} className="flex justify-start"><div className="rounded-2xl rounded-bl-md bg-white/85 px-4 py-2 text-xs font-bold text-slate-600 shadow-sm backdrop-blur"><span>{Object.values(typingUsers[activeRoomId]).slice(0, 2).join(', ')} đang gõ</span><span className="ml-2 inline-flex gap-1">{[0, 1, 2].map((dot) => <motion.span key={dot} animate={reduceMotion ? undefined : { y: [0, -3, 0], opacity: [0.45, 1, 0.45] }} transition={{ duration: 0.8, repeat: Infinity, delay: dot * 0.14 }} className="h-1 w-1 rounded-full bg-slate-500" />)}</span></div></motion.div>}</AnimatePresence>
+        <AnimatePresence>{aiTyping && <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex justify-start"><div className="inline-flex items-center gap-2 rounded-2xl rounded-bl-md bg-amber-50 px-4 py-2 text-xs font-bold text-amber-700 shadow-sm backdrop-blur dark:bg-amber-950/70 dark:text-amber-300"><Sparkles className="h-3.5 w-3.5" />AI đang gõ<span className="inline-flex gap-1">{[0, 1, 2].map((dot) => <motion.span key={dot} animate={reduceMotion ? undefined : { opacity: [0.35, 1, 0.35] }} transition={{ duration: 0.9, repeat: Infinity, delay: dot * 0.16 }} className="h-1 w-1 rounded-full bg-amber-500" />)}</span></div></motion.div>}</AnimatePresence>
+        <AnimatePresence>{showScrollButton && <motion.button initial={{ opacity: 0, y: 8, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.9 }} type="button" aria-label="Cuộn xuống tin nhắn mới nhất" onClick={scrollToBottom} className="sticky bottom-3 left-full ml-auto flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-3 text-white shadow-xl transition hover:bg-indigo-600"><ArrowDown className="h-4 w-4" />{newMessageCount > 0 && <span className="text-[10px] font-black">{newMessageCount} mới</span>}</motion.button>}</AnimatePresence>
       </div>
 
       <form onSubmit={sendMessage} className="border-t border-slate-200 bg-white/95 p-3 backdrop-blur dark:border-slate-700 dark:bg-slate-900/95 sm:p-4">
-        {roomLockedForUser && <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">Phòng này đang bị khóa, chỉ admin có thể gửi tin nhắn.</div>}
-        {replyTo && <div className="mb-3 flex items-center justify-between gap-3 rounded-2xl border-l-4 border-sky-400 bg-white px-4 py-2 text-sm shadow-sm dark:bg-slate-800">
+        <AnimatePresence initial={false}>{roomLockedForUser && <motion.div initial={reduceMotion ? false : { opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-3 overflow-hidden rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300">Phòng này đang bị khóa, chỉ admin có thể gửi tin nhắn.</motion.div>}</AnimatePresence>
+        <AnimatePresence initial={false}>{replyTo && <motion.div initial={reduceMotion ? false : { opacity: 0, y: 6, height: 0 }} animate={{ opacity: 1, y: 0, height: 'auto' }} exit={{ opacity: 0, y: 4, height: 0 }} className="mb-3 flex items-center justify-between gap-3 overflow-hidden rounded-2xl border-l-4 border-sky-400 bg-white px-4 py-2 text-sm shadow-sm dark:bg-slate-800">
           <div className="min-w-0">
             <p className="font-black text-sky-700">Đang trả lời {replyTo.display_name || replyTo.username}</p>
             <p className="truncate text-xs text-slate-500">{replyTo.message}</p>
           </div>
           <button type="button" onClick={() => setReplyTo(null)} className="rounded-full px-2 py-1 text-xs font-black text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">Hủy</button>
-        </div>}
+        </motion.div>}</AnimatePresence>
         <div className="relative mb-2">
           <button type="button" onClick={() => setEmojiOpen((open) => !open)} disabled={sending} className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 transition hover:bg-indigo-50 hover:text-indigo-600 disabled:opacity-50 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"><Smile className="h-3.5 w-3.5" />Biểu cảm</button>
-          {emojiOpen && <div className="absolute bottom-full left-0 z-20 mb-2 flex max-w-[min(92vw,420px)] gap-2 overflow-x-auto rounded-2xl border border-sky-100 bg-white p-3 shadow-2xl shadow-sky-200/60 dark:border-slate-700 dark:bg-slate-800 dark:shadow-black/40">
-            {quickEmojis.map((emoji) => <button key={emoji} type="button" onClick={() => addEmoji(emoji)} disabled={sending} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white text-lg shadow-sm transition hover:scale-110 hover:bg-sky-100 disabled:opacity-50 dark:bg-slate-700 dark:hover:bg-slate-600">{emoji}</button>)}
-          </div>}
+          <AnimatePresence>{emojiOpen && <motion.div initial={reduceMotion ? false : { opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.98 }} transition={{ duration: reduceMotion ? 0 : 0.16 }} className="absolute bottom-full left-0 z-20 mb-2 flex max-w-[min(92vw,420px)] gap-2 overflow-x-auto rounded-2xl border border-sky-100 bg-white p-3 shadow-2xl shadow-sky-200/60 dark:border-slate-700 dark:bg-slate-800 dark:shadow-black/40">
+            {quickEmojis.map((emoji) => <motion.button whileHover={reduceMotion ? undefined : { y: -3, scale: 1.12 }} whileTap={reduceMotion ? undefined : { scale: 0.9 }} key={emoji} type="button" onClick={() => addEmoji(emoji)} disabled={sending} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-lg shadow-sm transition hover:bg-sky-100 disabled:opacity-50 dark:bg-slate-700 dark:hover:bg-slate-600">{emoji}</motion.button>)}
+          </motion.div>}</AnimatePresence>
         </div>
         <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-2 transition focus-within:border-indigo-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-100/60 dark:border-slate-700 dark:bg-slate-800 dark:focus-within:bg-slate-800 dark:focus-within:ring-indigo-950">
-          <textarea value={message} onChange={(e)=>handleMessageChange(e.target.value)} onKeyDown={handleMessageKeyDown} maxLength={1000} rows={2} disabled={roomLockedForUser} placeholder={roomLockedForUser ? 'Phòng đang bị khóa' : `Nhắn tin tới #${activeRoom?.name || 'cộng đồng'}`} className="max-h-32 min-h-12 flex-1 resize-none bg-transparent px-2 py-2 text-sm font-medium text-slate-800 caret-indigo-600 outline-none placeholder:text-slate-400 disabled:text-slate-400 dark:!bg-transparent dark:text-white dark:caret-indigo-400 dark:placeholder:text-slate-500" />
+          <textarea ref={composerRef} value={message} onChange={(e) => { handleMessageChange(e.target.value); e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`; }} onKeyDown={handleMessageKeyDown} maxLength={1000} rows={1} disabled={roomLockedForUser} placeholder={roomLockedForUser ? 'Phòng đang bị khóa' : `Nhắn tin tới #${activeRoom?.name || 'cộng đồng'}`} className="max-h-32 min-h-11 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-sm font-medium text-slate-800 caret-indigo-600 outline-none placeholder:text-slate-400 disabled:text-slate-400 dark:!bg-transparent dark:text-white dark:caret-indigo-400 dark:placeholder:text-slate-500" />
           <motion.button whileTap={reduceMotion ? undefined : { scale: 0.92 }} type="submit" disabled={!message.trim() || sending || roomLockedForUser} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none dark:shadow-none dark:disabled:bg-slate-700 dark:disabled:text-slate-400"><Send className="h-4 w-4" /></motion.button>
         </div>
         <div className="mt-2 flex items-center justify-between px-1 text-[10px] font-semibold text-slate-400"><span>Enter để gửi · Shift + Enter để xuống dòng</span><span>{message.length}/1000</span></div>
       </form>
     </div>
+    <AnimatePresence>{deletingMessage && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/55 p-4 backdrop-blur-sm sm:items-center" onMouseDown={(event) => { if (event.target === event.currentTarget && !deleting) setDeletingMessage(null); }}>
+      <motion.div initial={reduceMotion ? false : { opacity: 0, y: 24, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 18, scale: 0.98 }} className="w-full max-w-md rounded-[1.75rem] border border-white/10 bg-white p-6 shadow-2xl dark:bg-slate-900">
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-500 dark:bg-red-950/60"><Trash2 className="h-5 w-5" /></span>
+        <h3 className="mt-5 text-xl font-black text-slate-900 dark:text-white">Xóa tin nhắn?</h3>
+        <p className="mt-2 text-sm leading-6 text-slate-500">Tin nhắn sẽ biến mất với tất cả thành viên và không thể khôi phục.</p>
+        <blockquote className="mt-4 line-clamp-3 rounded-2xl border-l-4 border-red-300 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">{deletingMessage.message}</blockquote>
+        <div className="mt-6 grid grid-cols-2 gap-3"><button type="button" disabled={deleting} onClick={() => setDeletingMessage(null)} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">Hủy</button><button type="button" disabled={deleting} onClick={deleteMessage} className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3 text-sm font-black text-white transition hover:bg-red-700 disabled:opacity-60">{deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}{deleting ? 'Đang xóa...' : 'Xóa tin nhắn'}</button></div>
+      </motion.div>
+    </motion.div>}</AnimatePresence>
   </motion.div>;
 };
 

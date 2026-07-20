@@ -68,11 +68,11 @@ export const authenticateToken = async (req: any, res: any, next: any) => {
     if (isUsingDatabase()) {
       try {
         const { rows } = await pool.query(
-          "SELECT id, username, role, status FROM users WHERE username = $1 AND status = 'Active'",
+          "SELECT id, username, display_name, role, status FROM users WHERE username = $1 AND status = 'Active'",
           [user.username]
         );
         if (rows.length > 0) {
-          req.user = { id: rows[0].id, username: rows[0].username, role: rows[0].role };
+          req.user = { id: rows[0].id, username: rows[0].username, display_name: rows[0].display_name, role: rows[0].role };
           if (!isNoisyPollPath) console.log('✅ User loaded from DB:', req.user);
         } else {
           console.log('⚠️  User not found in database');

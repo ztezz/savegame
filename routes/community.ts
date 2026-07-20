@@ -18,6 +18,8 @@ const DEFAULT_AI_SETTINGS = {
 
 type CommunityEvent =
   | { type: 'message_created'; roomId: number; message: any }
+  | { type: 'message_updated'; roomId: number; messageId: number; changes: Record<string, any> }
+  | { type: 'message_deleted'; roomId: number; messageId: number }
   | { type: 'room_changed' }
   | { type: 'typing'; roomId: number; userId: number; displayName: string; typing: boolean };
 
@@ -619,7 +621,7 @@ communityRouter.post("/api/community/messages/:id/reactions", authenticateToken,
   if (!isUsingDatabase()) return res.status(404).json({ error: "Message not found" });
 
   try {
-    const { rows } = await pool.query('SELECT reactions_json FROM community_messages WHERE id = $1', [id]);
+    const { rows } = await pool.query('SELECT room_id, reactions_json FROM community_messages WHERE id = $1', [id]);
     if (!rows[0]) return res.status(404).json({ error: "Message not found" });
     const reactions = rows[0].reactions_json || {};
     const users = Array.isArray(reactions[emoji]) ? reactions[emoji] : [];
@@ -628,6 +630,7 @@ communityRouter.post("/api/community/messages/:id/reactions", authenticateToken,
     if (reactions[emoji].length === 0) delete reactions[emoji];
     const updated = await pool.query('UPDATE community_messages SET reactions_json = $1::jsonb WHERE id = $2 RETURNING reactions_json', [JSON.stringify(reactions), id]);
     res.json({ reactions_json: updated.rows[0].reactions_json });
+    broadcastCommunityEvent({ type: 'message_updated', roomId: rows[0].room_id, messageId: id, changes: { reactions_json: updated.rows[0].reactions_json } });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to update reaction" });
   }
@@ -641,11 +644,12 @@ communityRouter.post("/api/community/messages/:id/pin", authenticateToken, isAdm
 
   try {
     const { rows } = await pool.query(
-      `UPDATE community_messages SET pinned_at = ${pinned ? 'NOW()' : 'NULL'} WHERE id = $1 RETURNING id, pinned_at`,
+      `UPDATE community_messages SET pinned_at = ${pinned ? 'NOW()' : 'NULL'} WHERE id = $1 RETURNING id, room_id, pinned_at`,
       [id]
     );
     if (!rows[0]) return res.status(404).json({ error: "Message not found" });
     res.json(rows[0]);
+    broadcastCommunityEvent({ type: 'message_updated', roomId: rows[0].room_id, messageId: id, changes: { pinned_at: rows[0].pinned_at } });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to update pinned message" });
   }
@@ -664,11 +668,12 @@ communityRouter.patch("/api/community/messages/:id", authenticateToken, async (r
       `UPDATE community_messages
        SET message = $1, edited_at = NOW()
        WHERE id = $2 AND sender_type = 'user' AND (user_id = $3 OR $4 = 'Admin')
-       RETURNING id, message, edited_at`,
+       RETURNING id, room_id, message, edited_at`,
       [message, id, req.user.id, req.user.role]
     );
     if (!rows[0]) return res.status(404).json({ error: "Message not found or unauthorized" });
     res.json(rows[0]);
+    broadcastCommunityEvent({ type: 'message_updated', roomId: rows[0].room_id, messageId: id, changes: { message: rows[0].message, edited_at: rows[0].edited_at } });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to edit message" });
   }
@@ -683,11 +688,12 @@ communityRouter.delete("/api/community/messages/:id", authenticateToken, async (
     const { rows } = await pool.query(
       `DELETE FROM community_messages
        WHERE id = $1 AND (user_id = $2 OR $3 = 'Admin')
-       RETURNING id`,
+       RETURNING id, room_id`,
       [id, req.user.id, req.user.role]
     );
     if (rows.length === 0) return res.status(404).json({ error: "Message not found or unauthorized" });
     res.json({ success: true });
+    broadcastCommunityEvent({ type: 'message_deleted', roomId: rows[0].room_id, messageId: id });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to delete message" });
   }
