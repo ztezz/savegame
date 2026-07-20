@@ -16,10 +16,42 @@ const DEFAULT_AI_SETTINGS = {
   humorLevel: "funny",
 };
 
+const COMMUNITY_STICKERS = new Set(['party', 'gg', 'lol', 'love', 'wow', 'rage', 'sad', 'sleep', 'gaming', 'victory', 'fire', 'cheers']);
+
+async function getPollMetadata(pollIds: number[], userId: number) {
+  if (pollIds.length === 0) return [];
+  const placeholders = pollIds.map((_id, index) => `$${index + 1}`).join(', ');
+  const { rows: polls } = await pool.query(
+    `SELECT cp.id, cp.room_id, cp.message_id, cp.question, cp.allow_multiple, cp.closes_at, cp.created_at,
+            COALESCE(u.display_name, u.username, 'Thành viên') AS created_by_name
+     FROM community_polls cp LEFT JOIN users u ON u.id = cp.created_by
+     WHERE cp.id IN (${placeholders})`,
+    pollIds
+  );
+  if (polls.length === 0) return [];
+  const { rows: options } = await pool.query(
+    `SELECT cpo.id, cpo.poll_id, cpo.label, cpo.sort_order, COUNT(cpv.user_id)::int AS vote_count
+     FROM community_poll_options cpo
+     LEFT JOIN community_poll_votes cpv ON cpv.option_id = cpo.id AND cpv.poll_id = cpo.poll_id
+     WHERE cpo.poll_id IN (${placeholders})
+     GROUP BY cpo.id ORDER BY cpo.poll_id, cpo.sort_order, cpo.id`,
+    pollIds
+  );
+  const { rows: selected } = await pool.query(
+    `SELECT poll_id, option_id FROM community_poll_votes WHERE user_id = $${pollIds.length + 1} AND poll_id IN (${placeholders})`,
+    [...pollIds, userId]
+  );
+  return polls.map((poll: any) => {
+    const pollOptions = options.filter((option: any) => option.poll_id === poll.id);
+    return { ...poll, allow_multiple: Boolean(poll.allow_multiple), options: pollOptions, selected_option_ids: selected.filter((vote: any) => vote.poll_id === poll.id).map((vote: any) => vote.option_id), total_votes: pollOptions.reduce((sum: number, option: any) => sum + Number(option.vote_count || 0), 0), closed: Boolean(poll.closes_at && new Date(poll.closes_at).getTime() <= Date.now()) };
+  });
+}
+
 type CommunityEvent =
   | { type: 'message_created'; roomId: number; message: any }
   | { type: 'message_updated'; roomId: number; messageId: number; changes: Record<string, any> }
   | { type: 'message_deleted'; roomId: number; messageId: number }
+  | { type: 'poll_updated'; roomId: number; pollId: number }
   | { type: 'room_changed' }
   | { type: 'presence'; userIds: number[] }
   | { type: 'typing'; roomId: number; userId: number; displayName: string; typing: boolean };
@@ -352,23 +384,51 @@ communityRouter.get("/api/community/events", async (req: any, res) => {
   });
 });
 
-communityRouter.get("/api/community/rooms", authenticateToken, async (_req: any, res) => {
+communityRouter.get("/api/community/rooms", authenticateToken, async (req: any, res) => {
   if (!isUsingDatabase()) return res.json([]);
 
   try {
     const { rows } = await pool.query(
       `SELECT cr.id, cr.name, cr.description, cr.is_locked, cr.ai_enabled, cr.ai_bot_name, cr.ai_tone, cr.ai_prompt, cr.ai_auto_reply, cr.sort_order, cr.created_at,
               COUNT(cm.id)::int AS message_count,
-              MAX(cm.created_at) AS latest_at
+              MAX(cm.created_at) AS latest_at,
+              COUNT(CASE WHEN cm.id > COALESCE(crs.last_read_message_id, 0) AND cm.user_id != $1 THEN 1 END)::int AS unread_count,
+              COUNT(CASE WHEN cm.id > COALESCE(crs.last_read_message_id, 0) AND cm.user_id != $1 AND LOWER(cm.message) LIKE $2 THEN 1 END)::int AS mention_count
        FROM community_rooms cr
        LEFT JOIN community_messages cm ON cm.room_id = cr.id
+       LEFT JOIN community_read_states crs ON crs.room_id = cr.id AND crs.user_id = $1
        WHERE cr.deleted_at IS NULL
-       GROUP BY cr.id
-       ORDER BY cr.sort_order ASC, cr.id ASC`
+       GROUP BY cr.id, crs.last_read_message_id
+       ORDER BY cr.sort_order ASC, cr.id ASC`,
+      [req.user.id, `%@${String(req.user.username).toLowerCase()}%`]
     );
     res.json(rows);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to load chat rooms" });
+  }
+});
+
+communityRouter.post("/api/community/rooms/:id/read", authenticateToken, async (req: any, res) => {
+  if (!isUsingDatabase()) return res.json({ success: true, lastReadMessageId: 0 });
+  const roomId = Number(req.params.id);
+  const requestedId = Number(req.body?.messageId || 0);
+  if (!Number.isInteger(roomId) || roomId <= 0 || !Number.isInteger(requestedId) || requestedId < 0) return res.status(400).json({ error: "Invalid read state" });
+
+  try {
+    const room = await ensureRoom(roomId);
+    if (!room) return res.status(404).json({ error: "Room not found" });
+    const latest = await pool.query("SELECT COALESCE(MAX(id), 0)::int AS id FROM community_messages WHERE room_id = $1", [roomId]);
+    const lastReadMessageId = Math.min(requestedId, Number(latest.rows[0]?.id || 0));
+    await pool.query(
+      `INSERT INTO community_read_states (user_id, room_id, last_read_message_id, updated_at)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+       ON CONFLICT (user_id, room_id)
+       DO UPDATE SET last_read_message_id = MAX(community_read_states.last_read_message_id, EXCLUDED.last_read_message_id), updated_at = CURRENT_TIMESTAMP`,
+      [req.user.id, roomId, lastReadMessageId]
+    );
+    res.json({ success: true, lastReadMessageId });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to update read state" });
   }
 });
 
@@ -563,6 +623,91 @@ communityRouter.post("/api/community/drive-shares/metadata", authenticateToken, 
   }
 });
 
+communityRouter.post("/api/community/polls/metadata", authenticateToken, async (req: any, res) => {
+  if (!isUsingDatabase()) return res.json([]);
+  const pollIds = Array.from(new Set<number>(Array.isArray(req.body?.pollIds) ? req.body.pollIds.map(Number) : []))
+    .filter((id) => Number.isInteger(id) && id > 0).slice(0, 30);
+  try {
+    res.json(await getPollMetadata(pollIds, req.user.id));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to load polls" });
+  }
+});
+
+communityRouter.post("/api/community/polls", authenticateToken, async (req: any, res) => {
+  if (!isUsingDatabase()) return res.status(400).json({ error: "Polls require database mode" });
+  const roomId = Math.max(1, Number(req.body?.roomId || 1));
+  const question = String(req.body?.question || '').trim();
+  const options = (Array.isArray(req.body?.options) ? req.body.options : []).map((option: any) => String(option).trim()).filter(Boolean);
+  const allowMultiple = req.body?.allowMultiple === true;
+  const durationHours = req.body?.durationHours === null ? null : Number(req.body?.durationHours || 24);
+  if (!question || question.length > 240) return res.status(400).json({ error: "Câu hỏi phải có từ 1 đến 240 ký tự" });
+  if (options.length < 2 || options.length > 6 || options.some((option: string) => option.length > 120)) return res.status(400).json({ error: "Bình chọn cần 2-6 lựa chọn, tối đa 120 ký tự mỗi lựa chọn" });
+  if (new Set(options.map((option: string) => option.toLocaleLowerCase('vi'))).size !== options.length) return res.status(400).json({ error: "Các lựa chọn không được trùng nhau" });
+  if (durationHours !== null && (!Number.isFinite(durationHours) || durationHours < 1 || durationHours > 720)) return res.status(400).json({ error: "Thời hạn bình chọn không hợp lệ" });
+  const room = await ensureRoom(roomId);
+  if (!room) return res.status(404).json({ error: "Room not found" });
+  if (room.is_locked && req.user.role !== 'Admin') return res.status(403).json({ error: "Phòng chat đang bị khóa" });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const poll = await client.query(
+      `INSERT INTO community_polls (room_id, created_by, question, allow_multiple, closes_at)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [roomId, req.user.id, question, allowMultiple, durationHours === null ? null : new Date(Date.now() + durationHours * 3600000).toISOString()]
+    );
+    const pollId = poll.rows[0].id;
+    const message = await client.query(
+      `INSERT INTO community_messages (room_id, user_id, message) VALUES ($1, $2, $3)
+       RETURNING id, room_id, user_id, message, sender_type, display_name, reply_to_id, reactions_json, edited_at, pinned_at, created_at`,
+      [roomId, req.user.id, `[poll:${pollId}]`]
+    );
+    await client.query("UPDATE community_polls SET message_id = $1 WHERE id = $2", [message.rows[0].id, pollId]);
+    for (let index = 0; index < options.length; index++) await client.query("INSERT INTO community_poll_options (poll_id, label, sort_order) VALUES ($1, $2, $3)", [pollId, options[index], index]);
+    await client.query('COMMIT');
+    const userMessage = { ...message.rows[0], username: req.user.username, display_name: req.user.display_name || req.user.username, avatar_url: req.user.avatar_url || null, role: req.user.role };
+    const metadata = (await getPollMetadata([pollId], req.user.id))[0];
+    res.status(201).json({ message: userMessage, poll: metadata });
+    broadcastCommunityEvent({ type: 'message_created', roomId, message: userMessage }, room.is_locked);
+  } catch (err: any) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    res.status(500).json({ error: err.message || "Failed to create poll" });
+  } finally {
+    client.release();
+  }
+});
+
+communityRouter.post("/api/community/polls/:id/vote", authenticateToken, async (req: any, res) => {
+  if (!isUsingDatabase()) return res.status(404).json({ error: "Poll not found" });
+  const pollId = Number(req.params.id);
+  const optionIds = Array.from(new Set<number>(Array.isArray(req.body?.optionIds) ? req.body.optionIds.map(Number) : []));
+  if (!Number.isInteger(pollId) || pollId <= 0 || optionIds.some((id) => !Number.isInteger(id) || id <= 0)) return res.status(400).json({ error: "Lựa chọn không hợp lệ" });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const pollResult = await client.query("SELECT id, room_id, allow_multiple, closes_at FROM community_polls WHERE id = $1", [pollId]);
+    const poll = pollResult.rows[0];
+    if (!poll) { await client.query('ROLLBACK'); return res.status(404).json({ error: "Poll not found" }); }
+    if (poll.closes_at && new Date(poll.closes_at).getTime() <= Date.now()) { await client.query('ROLLBACK'); return res.status(400).json({ error: "Bình chọn đã kết thúc" }); }
+    if ((!poll.allow_multiple && optionIds.length > 1) || optionIds.length > 6) { await client.query('ROLLBACK'); return res.status(400).json({ error: "Số lựa chọn không hợp lệ" }); }
+    if (optionIds.length > 0) {
+      const placeholders = optionIds.map((_id, index) => `$${index + 2}`).join(', ');
+      const valid = await client.query(`SELECT id FROM community_poll_options WHERE poll_id = $1 AND id IN (${placeholders})`, [pollId, ...optionIds]);
+      if (valid.rows.length !== optionIds.length) { await client.query('ROLLBACK'); return res.status(400).json({ error: "Lựa chọn không thuộc bình chọn này" }); }
+    }
+    await client.query("DELETE FROM community_poll_votes WHERE poll_id = $1 AND user_id = $2", [pollId, req.user.id]);
+    for (const optionId of optionIds) await client.query("INSERT INTO community_poll_votes (poll_id, option_id, user_id) VALUES ($1, $2, $3)", [pollId, optionId, req.user.id]);
+    await client.query('COMMIT');
+    res.json((await getPollMetadata([pollId], req.user.id))[0]);
+    broadcastCommunityEvent({ type: 'poll_updated', roomId: poll.room_id, pollId });
+  } catch (err: any) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    res.status(500).json({ error: err.message || "Failed to vote" });
+  } finally {
+    client.release();
+  }
+});
+
 communityRouter.get("/api/community/messages", authenticateToken, async (req: any, res) => {
   if (!isUsingDatabase()) return res.json([]);
 
@@ -674,6 +819,8 @@ communityRouter.post("/api/community/messages", authenticateToken, async (req: a
   const roomId = Math.max(1, Number(req.body?.roomId || 1));
   if (!message) return res.status(400).json({ error: "Message is required" });
   if (message.length > 1000) return res.status(400).json({ error: "Message is too long" });
+  const stickerMatch = message.match(/^\[sticker:([a-z0-9-]+)\]$/);
+  if (stickerMatch && !COMMUNITY_STICKERS.has(stickerMatch[1])) return res.status(400).json({ error: "Invalid sticker" });
   if (replyToId !== null && (!Number.isInteger(replyToId) || replyToId <= 0)) return res.status(400).json({ error: "Invalid reply message id" });
   if (!isUsingDatabase()) return res.status(400).json({ error: "Community chat requires database mode" });
 
@@ -775,6 +922,8 @@ communityRouter.patch("/api/community/messages/:id", authenticateToken, async (r
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid message id" });
   if (!message) return res.status(400).json({ error: "Message is required" });
   if (message.length > 1000) return res.status(400).json({ error: "Message is too long" });
+  const stickerMatch = message.match(/^\[sticker:([a-z0-9-]+)\]$/);
+  if (stickerMatch && !COMMUNITY_STICKERS.has(stickerMatch[1])) return res.status(400).json({ error: "Invalid sticker" });
   if (!isUsingDatabase()) return res.status(404).json({ error: "Message not found" });
 
   try {

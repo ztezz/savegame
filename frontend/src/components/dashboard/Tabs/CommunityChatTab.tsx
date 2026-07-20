@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowDown, Bot, ChevronDown, Copy, ExternalLink, File, HardDrive, Hash, Loader2, Lock, Menu, Paperclip, Pin, Radio, Search, Send, Shield, Smile, Sparkles, Trash2, X } from 'lucide-react';
+import { ArrowDown, BarChart3, Bell, BellOff, Bot, Check, ChevronDown, Copy, ExternalLink, File, HardDrive, Hash, Loader2, Lock, Menu, Paperclip, Pin, Plus, Radio, Search, Send, Settings2, Shield, Smile, Sparkles, Sticker, Trash2, Volume2, VolumeX, X } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import api, { API_BASE_URL, API_ORIGIN } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
@@ -42,6 +42,8 @@ interface ChatRoom {
   ai_auto_reply?: boolean;
   sort_order?: number;
   message_count?: number;
+  unread_count?: number;
+  mention_count?: number;
   latest_at?: string | null;
 }
 
@@ -65,10 +67,51 @@ interface ChatDriveShare {
   file_size: number;
 }
 
+interface ChatPoll {
+  id: number;
+  room_id: number;
+  message_id: number;
+  question: string;
+  allow_multiple: boolean;
+  closes_at: string | null;
+  created_by_name: string;
+  options: Array<{ id: number; poll_id: number; label: string; vote_count: number }>;
+  selected_option_ids: number[];
+  total_votes: number;
+  closed: boolean;
+}
+
 type ConnectionState = 'connecting' | 'live' | 'reconnecting' | 'offline';
+type ChatNotificationMode = 'mentions' | 'all' | 'off';
 
 const CHAT_DRAFT_KEY = 'communityChatDrafts';
+const RECENT_EMOJI_KEY = 'communityRecentEmojis';
+const CHAT_NOTIFICATION_KEY = 'communityChatNotifications';
 const shareTokenPattern = /\/share\/([a-f0-9]{48})(?:\b|[/?#])/gi;
+const stickerPattern = /^\[sticker:([a-z0-9-]+)\]$/;
+const pollPattern = /^\[poll:(\d+)\]$/;
+
+const emojiGroups = {
+  'Gần đây': [] as string[],
+  'Cảm xúc': ['😀', '😃', '😄', '😁', '😂', '🤣', '😊', '😍', '🥰', '😘', '😎', '🤩', '🥳', '🤔', '😴', '😭', '😡', '🤯', '🥶', '😱'],
+  'Cử chỉ': ['👍', '👎', '👏', '🙌', '🙏', '🤝', '💪', '✌️', '🤟', '👌', '👀', '❤️', '💔', '💯', '✨', '🔥'],
+  'Game': ['🎮', '🕹️', '🏆', '🥇', '⚔️', '🛡️', '🎯', '💣', '👾', '🤖', '💎', '🪙', '🚀', '🍻', '☕', '🎉'],
+};
+
+const stickerCatalog = [
+  { id: 'party', emoji: '🥳', accent: 'from-fuchsia-500 to-amber-400', label: 'Quẩy lên', motion: 'bounce' },
+  { id: 'gg', emoji: '🏆', accent: 'from-amber-400 to-orange-600', label: 'GG!', motion: 'shine' },
+  { id: 'lol', emoji: '🤣', accent: 'from-cyan-400 to-blue-600', label: 'Cười xỉu', motion: 'wobble' },
+  { id: 'love', emoji: '🥰', accent: 'from-pink-400 to-rose-600', label: 'Yêu quá', motion: 'pulse' },
+  { id: 'wow', emoji: '🤯', accent: 'from-violet-500 to-indigo-700', label: 'Wow!', motion: 'pop' },
+  { id: 'rage', emoji: '😡', accent: 'from-red-500 to-orange-600', label: 'Tức quá', motion: 'shake' },
+  { id: 'sad', emoji: '😭', accent: 'from-sky-400 to-indigo-500', label: 'Buồn quá', motion: 'float' },
+  { id: 'sleep', emoji: '😴', accent: 'from-slate-500 to-indigo-700', label: 'Đi ngủ', motion: 'float' },
+  { id: 'gaming', emoji: '🎮', accent: 'from-emerald-400 to-cyan-600', label: 'Chiến game', motion: 'wobble' },
+  { id: 'victory', emoji: '✌️', accent: 'from-lime-400 to-emerald-600', label: 'Chiến thắng', motion: 'bounce' },
+  { id: 'fire', emoji: '🔥', accent: 'from-yellow-400 to-red-600', label: 'Quá cháy', motion: 'pulse' },
+  { id: 'cheers', emoji: '🍻', accent: 'from-yellow-300 to-amber-600', label: 'Cạn ly', motion: 'wobble' },
+] as const;
 
 const extractShareTokens = (text: string) => Array.from(text.matchAll(shareTokenPattern), (match) => match[1].toLowerCase());
 
@@ -86,6 +129,15 @@ const getStoredDrafts = (): Record<number, string> => {
   }
 };
 
+const getStoredNotificationSettings = (): { mode: ChatNotificationMode; sound: boolean } => {
+  try {
+    const value = JSON.parse(localStorage.getItem(CHAT_NOTIFICATION_KEY) || '{}');
+    return { mode: ['mentions', 'all', 'off'].includes(value.mode) ? value.mode : 'mentions', sound: value.sound !== false };
+  } catch {
+    return { mode: 'mentions', sound: true };
+  }
+};
+
 const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpenMenu }) => {
   const { showToast } = useToast();
   const reduceMotion = useReducedMotion();
@@ -94,11 +146,30 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [message, setMessage] = useState('');
   const [unreadByRoom, setUnreadByRoom] = useState<Record<number, number>>({});
+  const [mentionsByRoom, setMentionsByRoom] = useState<Record<number, number>>({});
   const [typingUsers, setTypingUsers] = useState<Record<number, Record<number, string>>>({});
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [pickerTab, setPickerTab] = useState<'emoji' | 'sticker'>('emoji');
+  const [emojiGroup, setEmojiGroup] = useState<keyof typeof emojiGroups>('Cảm xúc');
+  const [recentEmojis, setRecentEmojis] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(RECENT_EMOJI_KEY) || '[]'); } catch { return []; }
+  });
+  const [reactionPickerId, setReactionPickerId] = useState<number | null>(null);
+  const [notificationPanelOpen, setNotificationPanelOpen] = useState(false);
+  const [notificationMode, setNotificationMode] = useState<ChatNotificationMode>(() => getStoredNotificationSettings().mode);
+  const [notificationSound, setNotificationSound] = useState(() => getStoredNotificationSettings().sound);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(() => typeof Notification === 'undefined' ? 'denied' : Notification.permission);
+  const [pollMetadata, setPollMetadata] = useState<Record<number, ChatPoll>>({});
+  const [pollComposerOpen, setPollComposerOpen] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState(['', '']);
+  const [pollMultiple, setPollMultiple] = useState(false);
+  const [pollDuration, setPollDuration] = useState('24');
+  const [pollSaving, setPollSaving] = useState(false);
+  const [pollVotingId, setPollVotingId] = useState<number | null>(null);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const [chatSearch, setChatSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -134,10 +205,17 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const typingActiveRef = useRef(false);
   const remoteTypingTimeoutsRef = useRef<Map<string, number>>(new Map());
+  const lastMarkedReadRef = useRef<Record<number, number>>({});
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const notificationModeRef = useRef(notificationMode);
+  const notificationSoundRef = useRef(notificationSound);
+  const notificationPermissionRef = useRef(notificationPermission);
+  const roomsRef = useRef<ChatRoom[]>([]);
+  const notifiedMessageIdsRef = useRef<Set<number>>(new Set());
   const isAdmin = currentUser?.role === 'Admin' || currentUser?.username === 'admin';
   const activeRoom = rooms.find((room) => room.id === activeRoomId);
   const roomLockedForUser = !!activeRoom?.is_locked && !isAdmin;
-  const quickEmojis = ['😀', '😂', '🤣', '😍', '😎', '🤔', '😭', '😡', '👍', '🙏', '🔥', '🎮', '❤️', '✨', '💯', '🍻'];
+  const displayedEmojis = emojiGroup === 'Gần đây' ? recentEmojis : emojiGroups[emojiGroup];
   const visibleMessages = messages;
   const pinnedMessages = messages.filter((item) => item.pinned_at).slice(-3).reverse();
   const mentionSuggestions = mentionQuery === null ? [] : members
@@ -146,9 +224,24 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
     .slice(0, 6);
   const onlineMembers = members.filter((member) => onlineUserIds.includes(member.id));
 
+  useEffect(() => { notificationModeRef.current = notificationMode; }, [notificationMode]);
+  useEffect(() => { notificationSoundRef.current = notificationSound; }, [notificationSound]);
+  useEffect(() => { notificationPermissionRef.current = notificationPermission; }, [notificationPermission]);
+  useEffect(() => { roomsRef.current = rooms; }, [rooms]);
+
   const isNearBottom = () => {
     const el = listRef.current;
     return !el || el.scrollHeight - el.scrollTop - el.clientHeight < 140;
+  };
+
+  const markRoomRead = (roomId: number, messageId: number) => {
+    if (!messageId || lastMarkedReadRef.current[roomId] >= messageId) return;
+    lastMarkedReadRef.current[roomId] = messageId;
+    setUnreadByRoom((current) => ({ ...current, [roomId]: 0 }));
+    setMentionsByRoom((current) => ({ ...current, [roomId]: 0 }));
+    void api.post(`/community/rooms/${roomId}/read`, { messageId }).catch(() => {
+      lastMarkedReadRef.current[roomId] = 0;
+    });
   };
 
   const scrollToBottom = () => {
@@ -156,6 +249,8 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
       if (listRef.current) listRef.current.scrollTo({ top: listRef.current.scrollHeight, behavior: reduceMotion ? 'auto' : 'smooth' });
     });
     setNewMessageCount(0);
+    const latestMessageId = messages[messages.length - 1]?.id || 0;
+    if (latestMessageId) markRoomRead(activeRoomIdRef.current, latestMessageId);
   };
 
   const handleScroll = () => {
@@ -163,7 +258,11 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
     if (!el) return;
     const awayFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight > 180;
     setShowScrollButton(awayFromBottom);
-    if (!awayFromBottom) setNewMessageCount(0);
+    if (!awayFromBottom) {
+      setNewMessageCount(0);
+      const latestMessageId = messages[messages.length - 1]?.id || 0;
+      if (latestMessageId) markRoomRead(activeRoomIdRef.current, latestMessageId);
+    }
   };
 
   const formatDay = (value: string) => {
@@ -184,18 +283,8 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
         acc[room.id] = room.message_count || 0;
         return acc;
       }, {});
-      if (roomsInitializedRef.current) {
-        setUnreadByRoom((current) => {
-          const next = { ...current };
-          incoming.forEach((room: ChatRoom) => {
-            const previous = roomCountsRef.current[room.id] || 0;
-            const latest = room.message_count || 0;
-            if (room.id === activeRoomIdRef.current) next[room.id] = 0;
-            else if (latest > previous) next[room.id] = (next[room.id] || 0) + latest - previous;
-          });
-          return next;
-        });
-      }
+      setUnreadByRoom(Object.fromEntries(incoming.map((room: ChatRoom) => [room.id, room.id === activeRoomIdRef.current && isNearBottom() ? 0 : Number(room.unread_count || 0)])));
+      setMentionsByRoom(Object.fromEntries(incoming.map((room: ChatRoom) => [room.id, room.id === activeRoomIdRef.current && isNearBottom() ? 0 : Number(room.mention_count || 0)])));
       roomCountsRef.current = nextCounts;
       roomsInitializedRef.current = true;
       setRooms(incoming);
@@ -217,6 +306,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
         setHasOlder(incoming.length === 80);
         lastMessageIdRef.current = incoming.length > 0 ? incoming[incoming.length - 1].id : 0;
       } else if (incoming.length > 0) {
+        incoming.forEach(notifyIncomingMessage);
         setMessages((current) => {
           const existingIds = new Set(current.map((item) => item.id));
           const merged = [...current, ...incoming.filter((item) => !existingIds.has(item.id))].slice(-200);
@@ -247,6 +337,73 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
     if (shouldStickToBottom) scrollToBottom();
     else if (added) setNewMessageCount((count) => count + 1);
   };
+
+  const saveNotificationSettings = (mode: ChatNotificationMode, sound: boolean) => {
+    setNotificationMode(mode);
+    setNotificationSound(sound);
+    localStorage.setItem(CHAT_NOTIFICATION_KEY, JSON.stringify({ mode, sound }));
+  };
+
+  const requestNotificationPermission = async () => {
+    if (typeof Notification === 'undefined') return;
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+    if (permission === 'granted') showToast('Đã bật thông báo trình duyệt', 'success');
+    else if (permission === 'denied') showToast('Trình duyệt đã chặn thông báo', 'warning');
+  };
+
+  const playNotificationSound = (mention: boolean) => {
+    if (!notificationSoundRef.current) return;
+    try {
+      const AudioContextConstructor = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextConstructor) return;
+      const context = audioContextRef.current || new AudioContextConstructor();
+      audioContextRef.current = context;
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(mention ? 740 : 520, context.currentTime);
+      oscillator.frequency.exponentialRampToValueAtTime(mention ? 980 : 660, context.currentTime + 0.12);
+      gain.gain.setValueAtTime(0.0001, context.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.075, context.currentTime + 0.018);
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.24);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.25);
+    } catch {
+      // Audio notification is best-effort.
+    }
+  };
+
+  const notifyIncomingMessage = (incoming: ChatMessage) => {
+    if (notifiedMessageIdsRef.current.has(incoming.id)) return;
+    notifiedMessageIdsRef.current.add(incoming.id);
+    if (notifiedMessageIdsRef.current.size > 300) notifiedMessageIdsRef.current.delete(notifiedMessageIdsRef.current.values().next().value as number);
+    const mode = notificationModeRef.current;
+    if (incoming.user_id === currentUser?.id || incoming.username === currentUser?.username || mode === 'off') return;
+    const ownMention = incoming.message.toLocaleLowerCase('vi').includes(`@${String(currentUser?.username || '').toLocaleLowerCase('vi')}`);
+    if (mode === 'mentions' && !ownMention) return;
+    const pageIsVisible = !document.hidden;
+    const watchingCurrentRoom = incoming.room_id === activeRoomIdRef.current && pageIsVisible && isNearBottom();
+    if (watchingCurrentRoom && !ownMention) return;
+    playNotificationSound(ownMention);
+    if (notificationPermissionRef.current !== 'granted' || typeof Notification === 'undefined' || (pageIsVisible && !ownMention)) return;
+    const roomName = roomsRef.current.find((room) => room.id === incoming.room_id)?.name || 'Cộng đồng';
+    const sticker = incoming.message.match(stickerPattern);
+    const body = sticker ? 'Đã gửi một nhãn dán' : incoming.message.slice(0, 180);
+    const notification = new Notification(`${incoming.display_name || incoming.username} · #${roomName}`, { body, icon: incoming.avatar_url ? `${API_ORIGIN}${incoming.avatar_url}` : '/logo.svg', tag: `community-room-${incoming.room_id}` });
+    notification.onclick = () => {
+      window.focus();
+      if (incoming.room_id) setActiveRoomId(incoming.room_id);
+      notification.close();
+    };
+  };
+
+  useEffect(() => () => {
+    void audioContextRef.current?.close().catch(() => undefined);
+    audioContextRef.current = null;
+  }, []);
 
   const loadDriveShares = async () => {
     setDriveSharesLoading(true);
@@ -389,6 +546,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
           try {
             const payload = JSON.parse(event.data);
             if (payload.type === 'message_created') {
+              notifyIncomingMessage(payload.message);
               if (payload.roomId === activeRoomIdRef.current) mergeIncomingMessage(payload.message);
               fetchRooms();
             }
@@ -403,6 +561,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
             }
             if (payload.type === 'room_changed') fetchRooms();
             if (payload.type === 'presence') setOnlineUserIds(Array.isArray(payload.userIds) ? payload.userIds : []);
+            if (payload.type === 'poll_updated' && payload.roomId === activeRoomIdRef.current) void loadPollMetadata([payload.pollId]);
             if (payload.type === 'typing' && payload.userId !== currentUser?.id) {
               const timeoutKey = `${payload.roomId}:${payload.userId}`;
               const existingTimeout = remoteTypingTimeoutsRef.current.get(timeoutKey);
@@ -487,6 +646,23 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
     return () => { cancelled = true; };
   }, [messages, driveMetadata]);
 
+  const loadPollMetadata = async (pollIds: number[]) => {
+    if (pollIds.length === 0) return;
+    try {
+      const response = await api.post('/community/polls/metadata', { pollIds });
+      if (!Array.isArray(response.data)) return;
+      setPollMetadata((current) => ({ ...current, ...Object.fromEntries(response.data.map((poll: ChatPoll) => [poll.id, poll])) }));
+    } catch {
+      // Poll cards fall back to their text code while metadata is unavailable.
+    }
+  };
+
+  useEffect(() => {
+    const pollIds: number[] = Array.from(new Set<number>(messages.map((item) => Number(item.message.match(pollPattern)?.[1] || 0)).filter(Boolean)))
+      .filter((pollId) => !pollMetadata[pollId]);
+    void loadPollMetadata(pollIds);
+  }, [messages, pollMetadata]);
+
   useEffect(() => {
     activeRoomIdRef.current = activeRoomId;
     setMessages([]);
@@ -547,6 +723,12 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
       window.clearTimeout(timer);
     };
   }, [activeRoomId, chatSearch, searchOpen, showToast]);
+
+  useEffect(() => {
+    if (loading || !pageVisible || !isNearBottom()) return;
+    const latestMessageId = messages[messages.length - 1]?.id || 0;
+    if (latestMessageId) markRoomRead(activeRoomId, latestMessageId);
+  }, [activeRoomId, loading, messages, pageVisible]);
 
   const sendMessage = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -632,6 +814,9 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
   };
 
   const addEmoji = (emoji: string) => {
+    const nextRecent = [emoji, ...recentEmojis.filter((item) => item !== emoji)].slice(0, 20);
+    setRecentEmojis(nextRecent);
+    localStorage.setItem(RECENT_EMOJI_KEY, JSON.stringify(nextRecent));
     setMessage((current) => {
       const next = `${current}${emoji}`;
       draftsRef.current[activeRoomId] = next;
@@ -639,6 +824,60 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
       return next;
     });
     setEmojiOpen(false);
+  };
+
+  const sendSticker = async (stickerId: string) => {
+    if (sending || roomLockedForUser) return;
+    setSending(true);
+    setEmojiOpen(false);
+    try {
+      const response = await api.post('/community/messages', { roomId: activeRoomId, message: `[sticker:${stickerId}]`, replyToId: replyTo?.id || null });
+      const incoming = response.data?.message || response.data;
+      mergeIncomingMessage(incoming);
+      setReplyTo(null);
+      scrollToBottom();
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Gửi nhãn dán thất bại', 'error');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const createPoll = async () => {
+    const options = pollOptions.map((option) => option.trim()).filter(Boolean);
+    if (!pollQuestion.trim() || options.length < 2 || pollSaving) return;
+    setPollSaving(true);
+    try {
+      const response = await api.post('/community/polls', { roomId: activeRoomId, question: pollQuestion.trim(), options, allowMultiple: pollMultiple, durationHours: pollDuration === 'never' ? null : Number(pollDuration) });
+      if (response.data?.message) mergeIncomingMessage(response.data.message);
+      if (response.data?.poll) setPollMetadata((current) => ({ ...current, [response.data.poll.id]: response.data.poll }));
+      setPollComposerOpen(false);
+      setPollQuestion('');
+      setPollOptions(['', '']);
+      setPollMultiple(false);
+      setPollDuration('24');
+      scrollToBottom();
+      showToast('Đã tạo bình chọn', 'success');
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Tạo bình chọn thất bại', 'error');
+    } finally {
+      setPollSaving(false);
+    }
+  };
+
+  const votePoll = async (poll: ChatPoll, optionId: number) => {
+    if (poll.closed || pollVotingId === poll.id) return;
+    const selected = poll.selected_option_ids.includes(optionId);
+    const optionIds = poll.allow_multiple ? (selected ? poll.selected_option_ids.filter((id) => id !== optionId) : [...poll.selected_option_ids, optionId]) : (selected ? [] : [optionId]);
+    setPollVotingId(poll.id);
+    try {
+      const response = await api.post(`/community/polls/${poll.id}/vote`, { optionIds });
+      setPollMetadata((current) => ({ ...current, [poll.id]: response.data }));
+    } catch (err: any) {
+      showToast(err.response?.data?.error || 'Bỏ phiếu thất bại', 'error');
+    } finally {
+      setPollVotingId(null);
+    }
   };
 
   const avatarLabel = (item: ChatMessage) => (item.display_name || item.username || '?').slice(0, 1).toUpperCase();
@@ -650,6 +889,30 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
       const isMe = part.slice(1).toLocaleLowerCase('vi') === ownUsername;
       return <span key={index} className={`rounded-md px-1 py-0.5 font-black ${isMe ? 'bg-amber-300 text-amber-950 ring-2 ring-amber-200/60' : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200'}`}>{part}</span>;
     });
+  };
+
+  const renderSticker = (text: string) => {
+    const match = text.match(stickerPattern);
+    if (!match) return null;
+    const sticker = stickerCatalog.find((item) => item.id === match[1]);
+    if (!sticker) return null;
+    const animations = {
+      bounce: { y: [0, -12, 0], rotate: [0, -5, 4, 0] },
+      shine: { scale: [1, 1.12, 1], filter: ['brightness(1)', 'brightness(1.35)', 'brightness(1)'] },
+      wobble: { rotate: [0, -9, 9, -5, 5, 0] },
+      pulse: { scale: [1, 1.13, 1] },
+      pop: { scale: [1, 1.2, 0.96, 1], rotate: [0, 8, -4, 0] },
+      shake: { x: [0, -5, 5, -4, 4, 0], rotate: [0, -4, 4, 0] },
+      float: { y: [0, -7, 0], rotate: [0, 3, 0] },
+    } as const;
+    return <motion.div initial={reduceMotion ? false : { opacity: 0, scale: 0.65 }} animate={reduceMotion ? { opacity: 1, scale: 1 } : { opacity: 1, ...animations[sticker.motion] }} transition={reduceMotion ? { duration: 0 } : { duration: sticker.motion === 'shake' ? 0.7 : 1.8, repeat: Infinity, repeatDelay: sticker.motion === 'shake' ? 1.4 : 0.35, ease: 'easeInOut' }} className={`relative mt-1 flex h-32 w-32 flex-col items-center justify-center overflow-hidden rounded-[2rem] bg-gradient-to-br ${sticker.accent} text-white shadow-xl ring-4 ring-white/50`}><div aria-hidden className="absolute inset-0 bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,.45),transparent_28%)]" /><span className="relative text-6xl drop-shadow-lg">{sticker.emoji}</span><span className="relative mt-1 rounded-full bg-black/20 px-3 py-1 text-[10px] font-black uppercase tracking-wider backdrop-blur">{sticker.label}</span></motion.div>;
+  };
+
+  const renderPoll = (text: string) => {
+    const pollId = Number(text.match(pollPattern)?.[1] || 0);
+    const poll = pollMetadata[pollId];
+    if (!poll) return <div className="mt-2 flex items-center gap-2 rounded-2xl bg-indigo-50 px-4 py-3 text-xs font-bold text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300"><Loader2 className="h-4 w-4 animate-spin" />Đang tải bình chọn...</div>;
+    return <div className="mt-2 w-full min-w-64 overflow-hidden rounded-2xl border border-indigo-100 bg-white/90 shadow-sm dark:border-indigo-900 dark:bg-slate-900/85"><div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-3 text-white"><p className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-indigo-100"><BarChart3 className="h-3.5 w-3.5" />Bình chọn · {poll.allow_multiple ? 'Nhiều lựa chọn' : 'Một lựa chọn'}</p><h4 className="mt-2 break-words text-sm font-black leading-5">{poll.question}</h4></div><div className="space-y-2 p-3">{poll.options.map((option) => { const selected = poll.selected_option_ids.includes(option.id); const percent = poll.total_votes ? Math.round(Number(option.vote_count || 0) / poll.total_votes * 100) : 0; return <button key={option.id} type="button" disabled={poll.closed || pollVotingId === poll.id} onClick={() => votePoll(poll, option.id)} className={`relative w-full overflow-hidden rounded-xl border px-3 py-2.5 text-left transition disabled:cursor-default ${selected ? 'border-indigo-300 bg-indigo-50 dark:border-indigo-700 dark:bg-indigo-950/70' : 'border-slate-200 bg-white hover:border-indigo-200 dark:border-slate-700 dark:bg-slate-800'}`}><motion.span initial={false} animate={{ width: `${percent}%` }} className={`absolute inset-y-0 left-0 ${selected ? 'bg-indigo-100 dark:bg-indigo-900/50' : 'bg-slate-100 dark:bg-slate-700/50'}`} /><span className="relative flex items-center justify-between gap-3"><span className="flex min-w-0 items-center gap-2"><span className={`flex h-5 w-5 shrink-0 items-center justify-center ${poll.allow_multiple ? 'rounded-md' : 'rounded-full'} border ${selected ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'}`}>{selected && <Check className="h-3 w-3" />}</span><span className="break-words text-xs font-bold text-slate-700 dark:text-slate-200">{option.label}</span></span><span className="shrink-0 text-[10px] font-black text-slate-500">{percent}% · {option.vote_count}</span></span></button>; })}<div className="flex items-center justify-between px-1 pt-1 text-[9px] font-bold text-slate-400"><span>{poll.total_votes} lượt chọn · bởi {poll.created_by_name}</span><span className={poll.closed ? 'text-red-500' : ''}>{poll.closed ? 'Đã kết thúc' : poll.closes_at ? `Đóng ${new Date(poll.closes_at).toLocaleString('vi-VN')}` : 'Không giới hạn'}</span></div></div></div>;
   };
 
   const renderDriveCards = (text: string) => Array.from(new Set(extractShareTokens(text))).map((token) => {
@@ -767,7 +1030,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
             <div className="flex min-w-0 items-center gap-2">
               <div className="relative min-w-0">
                 <select aria-label="Chọn phòng chat" value={activeRoomId} onChange={(event) => setActiveRoomId(Number(event.target.value))} className="max-w-[55vw] appearance-none truncate rounded-xl border border-white/10 bg-white/[0.08] py-2 pl-3 pr-9 text-sm font-black text-white outline-none transition hover:bg-white/[0.13] focus:border-indigo-400 sm:max-w-sm sm:text-base">
-                  {rooms.map((room) => <option key={room.id} value={room.id} className="bg-slate-900 text-white">#{room.name}{unreadByRoom[room.id] ? ` (${unreadByRoom[room.id]} mới)` : ''}</option>)}
+                   {rooms.map((room) => <option key={room.id} value={room.id} className="bg-slate-900 text-white">#{room.name}{mentionsByRoom[room.id] ? ` (@${mentionsByRoom[room.id]})` : unreadByRoom[room.id] ? ` (${unreadByRoom[room.id]} mới)` : ''}</option>)}
                 </select>
                 <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-indigo-300" />
               </div>
@@ -782,9 +1045,15 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
             {activeRoom?.is_locked && <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-300/20 bg-amber-400/10 px-3 py-1.5 text-amber-200"><Lock className="h-3 w-3" />Đã khóa</span>}
           </div>
           <button type="button" onClick={() => { setSearchOpen((open) => !open); if (searchOpen) { setChatSearch(''); setSearchResults([]); } }} aria-label={searchOpen ? 'Đóng tìm kiếm' : 'Tìm trong phòng chat'} aria-expanded={searchOpen} className={`flex h-10 w-10 items-center justify-center rounded-xl border transition ${searchOpen ? 'border-indigo-400 bg-indigo-500 text-white' : 'border-white/10 bg-white/[0.07] text-slate-300 hover:bg-white/15 hover:text-white'}`}>{searchOpen ? <X className="h-4 w-4" /> : <Search className="h-4 w-4" />}</button>
+          <button type="button" onClick={() => setNotificationPanelOpen((open) => !open)} aria-label="Cài đặt thông báo chat" aria-expanded={notificationPanelOpen} className={`flex h-10 w-10 items-center justify-center rounded-xl border transition ${notificationPanelOpen ? 'border-fuchsia-400 bg-fuchsia-500 text-white' : 'border-white/10 bg-white/[0.07] text-slate-300 hover:bg-white/15 hover:text-white'}`}>{notificationMode === 'off' ? <BellOff className="h-4 w-4" /> : <Bell className="h-4 w-4" />}</button>
         </div>
         </div>
       </div>
+
+      <AnimatePresence initial={false}>{notificationPanelOpen && <motion.div initial={reduceMotion ? false : { height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden border-b border-fuchsia-100 bg-white dark:border-slate-800 dark:bg-slate-900"><div className="grid gap-3 p-4 sm:grid-cols-[1fr_auto] sm:items-center">
+        <div><p className="flex items-center gap-2 text-xs font-black uppercase tracking-widest text-fuchsia-600"><Settings2 className="h-4 w-4" />Thông báo chat</p><p className="mt-1 text-[10px] font-medium text-slate-400">Chỉ báo khi cần thiết, không làm phiền lúc bạn đang đọc.</p></div>
+        <div className="flex flex-wrap items-center gap-2"><div className="flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800">{([{ value: 'mentions', label: 'Chỉ @mention' }, { value: 'all', label: 'Mọi tin' }, { value: 'off', label: 'Tắt' }] as Array<{ value: ChatNotificationMode; label: string }>).map((option) => <button key={option.value} type="button" onClick={() => saveNotificationSettings(option.value, notificationSound)} className={`rounded-lg px-3 py-2 text-[10px] font-black transition ${notificationMode === option.value ? 'bg-white text-fuchsia-600 shadow-sm dark:bg-slate-700 dark:text-fuchsia-300' : 'text-slate-500'}`}>{option.label}</button>)}</div><button type="button" onClick={() => saveNotificationSettings(notificationMode, !notificationSound)} className={`flex h-9 w-9 items-center justify-center rounded-xl border transition ${notificationSound ? 'border-emerald-200 bg-emerald-50 text-emerald-600 dark:border-emerald-900 dark:bg-emerald-950' : 'border-slate-200 text-slate-400 dark:border-slate-700'}`} title={notificationSound ? 'Tắt âm báo' : 'Bật âm báo'}>{notificationSound ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}</button>{notificationPermission !== 'granted' && notificationMode !== 'off' && <button type="button" onClick={requestNotificationPermission} disabled={notificationPermission === 'denied'} className="rounded-xl bg-fuchsia-600 px-3 py-2.5 text-[10px] font-black text-white transition hover:bg-fuchsia-700 disabled:bg-slate-300">{notificationPermission === 'denied' ? 'Đã bị chặn' : 'Bật thông báo desktop'}</button>}</div>
+      </div></motion.div>}</AnimatePresence>
 
       <div className="flex items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/80 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900">
         <div className="flex min-w-0 items-center gap-2"><div className="flex -space-x-2">{onlineMembers.slice(0, 5).map((member) => <motion.span initial={{ opacity: 0, scale: 0.7 }} animate={{ opacity: 1, scale: 1 }} key={member.id} title={member.display_name || member.username} className="relative flex h-7 w-7 items-center justify-center overflow-hidden rounded-full border-2 border-white bg-gradient-to-br from-indigo-500 to-violet-600 text-[9px] font-black text-white dark:border-slate-900">{member.avatar_url ? <img src={`${API_ORIGIN}${member.avatar_url}`} alt="" className="h-full w-full object-cover" /> : (member.display_name || member.username).slice(0, 1).toUpperCase()}<span className="absolute bottom-0 right-0 h-2 w-2 rounded-full border border-white bg-emerald-400" /></motion.span>)}</div><p className="truncate text-[10px] font-bold text-slate-500">{connectionState === 'live' ? `${onlineMembers.length} thành viên đang online` : connectionState === 'offline' ? 'Mất kết nối mạng' : 'Đang khôi phục kết nối realtime...'}</p></div>
@@ -795,7 +1064,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
         {rooms.map((room) => <motion.button layout key={room.id} type="button" onClick={() => setActiveRoomId(room.id)} className={`group relative flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-black transition ${activeRoomId === room.id ? 'border-indigo-200 bg-indigo-600 text-white shadow-md shadow-indigo-100 dark:shadow-none' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-indigo-200 hover:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}>
           <Hash className={`h-3.5 w-3.5 ${activeRoomId === room.id ? 'text-indigo-200' : 'text-slate-400 group-hover:text-indigo-500'}`} />
           <span>{room.name}</span>
-          {unreadByRoom[room.id] > 0 && <motion.span initial={{ scale: 0.7 }} animate={{ scale: 1 }} className={`min-w-5 rounded-full px-1.5 py-0.5 text-[9px] ${activeRoomId === room.id ? 'bg-white text-indigo-700' : 'bg-rose-500 text-white'}`}>{Math.min(unreadByRoom[room.id], 99)}</motion.span>}
+          {mentionsByRoom[room.id] > 0 ? <motion.span initial={{ scale: 0.7 }} animate={{ scale: 1 }} title={`${mentionsByRoom[room.id]} lượt nhắc bạn`} className={`min-w-5 rounded-full px-1.5 py-0.5 text-[9px] ${activeRoomId === room.id ? 'bg-amber-300 text-amber-950' : 'bg-amber-400 text-amber-950'}`}>@{Math.min(mentionsByRoom[room.id], 99)}</motion.span> : unreadByRoom[room.id] > 0 && <motion.span initial={{ scale: 0.7 }} animate={{ scale: 1 }} className={`min-w-5 rounded-full px-1.5 py-0.5 text-[9px] ${activeRoomId === room.id ? 'bg-white text-indigo-700' : 'bg-rose-500 text-white'}`}>{Math.min(unreadByRoom[room.id], 99)}</motion.span>}
           {room.is_locked && <Lock className="h-3 w-3 text-amber-400" />}
         </motion.button>)}
       </div>}
@@ -835,6 +1104,8 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
         {loading ? <div className="space-y-4" aria-label="Đang tải tin nhắn">{[0, 1, 2, 3, 4].map((item) => <motion.div key={item} initial={reduceMotion ? false : { opacity: 0 }} animate={{ opacity: [0.45, 0.8, 0.45] }} transition={{ duration: 1.4, repeat: Infinity, delay: item * 0.08 }} className={`flex ${item % 2 ? 'justify-end' : 'justify-start'}`}><div className={`h-16 rounded-2xl bg-white/65 shadow-sm backdrop-blur ${item % 2 ? 'w-[58%]' : 'w-[68%]'}`} /></motion.div>)}</div> : visibleMessages.length === 0 ? <div className="h-full flex items-center justify-center text-center text-slate-600 text-sm"><motion.div initial={reduceMotion ? false : { opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="rounded-3xl bg-white/80 px-6 py-5 shadow-sm backdrop-blur">{chatSearch ? 'Không tìm thấy tin nhắn phù hợp.' : 'Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện.'}</motion.div></div> : visibleMessages.map((item, index) => {
           const mine = item.user_id === currentUser?.id || item.username === currentUser?.username;
           const isAi = item.sender_type === 'ai' || item.role === 'AI';
+          const isSticker = stickerPattern.test(item.message);
+          const isPoll = pollPattern.test(item.message);
           const previous = visibleMessages[index - 1];
           const reply = findReply(item.reply_to_id);
           const showDay = !previous || new Date(previous.created_at).toDateString() !== new Date(item.created_at).toDateString();
@@ -857,7 +1128,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
                   <button type="button" onClick={saveEdit} className="rounded-lg bg-emerald-500 px-3 py-1 text-xs font-black text-white">Lưu</button>
                   <button type="button" onClick={() => { setEditingMessageId(null); setEditingText(''); }} className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-black text-slate-600 dark:bg-slate-700 dark:text-slate-200">Hủy</button>
                 </div>
-              </div> : <><p className="text-sm whitespace-pre-wrap break-words leading-6">{renderMessageText(item.message)}</p>{renderDriveCards(item.message)}</>}
+              </div> : isSticker ? renderSticker(item.message) : isPoll ? renderPoll(item.message) : <><p className="text-sm whitespace-pre-wrap break-words leading-6">{renderMessageText(item.message)}</p>{renderDriveCards(item.message)}</>}
               {item.edited_at && <p className={`mt-1 text-[10px] font-semibold ${mine ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>đã sửa</p>}
               {item.reactions_json && Object.keys(item.reactions_json).length > 0 && <div className="mt-2 flex flex-wrap gap-1">
                 {Object.entries(item.reactions_json as Record<string, string[]>).map(([emoji, users]) => <button key={emoji} type="button" onClick={() => toggleReaction(item.id, emoji)} className={`rounded-full px-2 py-0.5 text-xs font-bold ${mine ? 'bg-white/60 text-emerald-800 dark:bg-white/10 dark:text-emerald-100' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200'}`}>{emoji} {users.length}</button>)}
@@ -869,6 +1140,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
                 <button type="button" onClick={() => copyMessage(item.message)} className={`inline-flex items-center gap-1 text-[10px] font-black ${mine ? 'text-emerald-700 hover:text-emerald-900 dark:text-emerald-300' : 'text-slate-500'}`}><Copy className="h-3 w-3" />Copy</button>
                 {((mine && !isAi) || isAdmin) && <button type="button" onClick={() => setDeletingMessage(item)} className="inline-flex items-center gap-1 text-[10px] font-black text-red-500 transition hover:text-red-700"><Trash2 className="h-3 w-3" />Xóa</button>}
                 {['👍', '😂', '❤️'].map((emoji) => <button key={emoji} type="button" onClick={() => toggleReaction(item.id, emoji)} className={`text-[11px] ${mine ? 'hover:bg-white/50 dark:hover:bg-white/10' : 'hover:bg-slate-100 dark:hover:bg-slate-700'} rounded-full px-1`}>{emoji}</button>)}
+                <span className="relative"><button type="button" onClick={() => setReactionPickerId((current) => current === item.id ? null : item.id)} className={`rounded-full px-1.5 text-[11px] font-black ${mine ? 'text-emerald-700 hover:bg-white/50 dark:text-emerald-300' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>+</button><AnimatePresence>{reactionPickerId === item.id && <motion.div initial={{ opacity: 0, y: 5, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 4, scale: 0.96 }} className={`absolute bottom-full z-40 mb-2 grid w-52 grid-cols-8 gap-1 rounded-2xl border border-slate-100 bg-white p-2 shadow-2xl dark:border-slate-700 dark:bg-slate-800 ${mine ? 'right-0' : 'left-0'}`}>{[...emojiGroups['Cảm xúc'].slice(0, 12), ...emojiGroups['Cử chỉ'].slice(0, 12)].map((emoji) => <motion.button whileHover={reduceMotion ? undefined : { scale: 1.2 }} whileTap={reduceMotion ? undefined : { scale: 0.85 }} key={emoji} type="button" onClick={() => { void toggleReaction(item.id, emoji); setReactionPickerId(null); }} className="flex h-6 w-6 items-center justify-center rounded-lg text-sm hover:bg-indigo-50 dark:hover:bg-slate-700">{emoji}</motion.button>)}</motion.div>}</AnimatePresence></span>
               </div>
             </div>
             </motion.div>
@@ -890,9 +1162,10 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
           <button type="button" onClick={() => setReplyTo(null)} className="rounded-full px-2 py-1 text-xs font-black text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">Hủy</button>
         </motion.div>}</AnimatePresence>
         <div className="relative mb-2">
-          <div className="flex flex-wrap gap-2"><button type="button" onClick={() => setEmojiOpen((open) => !open)} disabled={sending} className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 transition hover:bg-indigo-50 hover:text-indigo-600 disabled:opacity-50 dark:hover:bg-indigo-950 dark:hover:text-indigo-300"><Smile className="h-3.5 w-3.5" />Biểu cảm</button><button type="button" onClick={() => { const next = !drivePickerOpen; setDrivePickerOpen(next); setEmojiOpen(false); if (next && driveShares.length === 0) void loadDriveShares(); }} disabled={sending || roomLockedForUser} className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest transition disabled:opacity-50 ${drivePickerOpen ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950 dark:hover:text-indigo-300'}`}><Paperclip className="h-3.5 w-3.5" />Drive</button></div>
-          <AnimatePresence>{emojiOpen && <motion.div initial={reduceMotion ? false : { opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.98 }} transition={{ duration: reduceMotion ? 0 : 0.16 }} className="absolute bottom-full left-0 z-20 mb-2 flex max-w-[min(92vw,420px)] gap-2 overflow-x-auto rounded-2xl border border-sky-100 bg-white p-3 shadow-2xl shadow-sky-200/60 dark:border-slate-700 dark:bg-slate-800 dark:shadow-black/40">
-            {quickEmojis.map((emoji) => <motion.button whileHover={reduceMotion ? undefined : { y: -3, scale: 1.12 }} whileTap={reduceMotion ? undefined : { scale: 0.9 }} key={emoji} type="button" onClick={() => addEmoji(emoji)} disabled={sending} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-lg shadow-sm transition hover:bg-sky-100 disabled:opacity-50 dark:bg-slate-700 dark:hover:bg-slate-600">{emoji}</motion.button>)}
+          <div className="flex flex-wrap gap-2"><button type="button" onClick={() => { setEmojiOpen((open) => !open); setDrivePickerOpen(false); }} disabled={sending} className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest transition disabled:opacity-50 ${emojiOpen ? 'bg-fuchsia-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-fuchsia-50 hover:text-fuchsia-600 dark:hover:bg-fuchsia-950 dark:hover:text-fuchsia-300'}`}><Smile className="h-3.5 w-3.5" />Biểu cảm</button><button type="button" onClick={() => { const next = !drivePickerOpen; setDrivePickerOpen(next); setEmojiOpen(false); if (next && driveShares.length === 0) void loadDriveShares(); }} disabled={sending || roomLockedForUser} className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-[10px] font-black uppercase tracking-widest transition disabled:opacity-50 ${drivePickerOpen ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-indigo-950 dark:hover:text-indigo-300'}`}><Paperclip className="h-3.5 w-3.5" />Drive</button><button type="button" onClick={() => { setPollComposerOpen(true); setEmojiOpen(false); setDrivePickerOpen(false); }} disabled={sending || roomLockedForUser} className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-slate-500 transition hover:bg-violet-50 hover:text-violet-600 disabled:opacity-50 dark:hover:bg-violet-950 dark:hover:text-violet-300"><BarChart3 className="h-3.5 w-3.5" />Bình chọn</button></div>
+          <AnimatePresence>{emojiOpen && <motion.div initial={reduceMotion ? false : { opacity: 0, y: 10, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 7, scale: 0.98 }} transition={{ duration: reduceMotion ? 0 : 0.18 }} className="absolute bottom-full left-0 z-40 mb-2 w-[min(92vw,28rem)] overflow-hidden rounded-[1.5rem] border border-fuchsia-100 bg-white shadow-2xl shadow-fuchsia-200/60 dark:border-slate-700 dark:bg-slate-800 dark:shadow-black/50">
+            <div className="grid grid-cols-2 border-b border-slate-100 p-2 dark:border-slate-700"><button type="button" onClick={() => setPickerTab('emoji')} className={`flex items-center justify-center gap-2 rounded-xl py-2 text-xs font-black transition ${pickerTab === 'emoji' ? 'bg-fuchsia-600 text-white' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700'}`}><Smile className="h-4 w-4" />Biểu cảm</button><button type="button" onClick={() => setPickerTab('sticker')} className={`flex items-center justify-center gap-2 rounded-xl py-2 text-xs font-black transition ${pickerTab === 'sticker' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700'}`}><Sticker className="h-4 w-4" />Nhãn dán</button></div>
+            {pickerTab === 'emoji' ? <div><div className="flex gap-1 overflow-x-auto border-b border-slate-100 px-2 py-2 dark:border-slate-700">{(Object.keys(emojiGroups) as Array<keyof typeof emojiGroups>).map((group) => group !== 'Gần đây' || recentEmojis.length > 0 ? <button key={group} type="button" onClick={() => setEmojiGroup(group)} className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[10px] font-black transition ${emojiGroup === group ? 'bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-950 dark:text-fuchsia-300' : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>{group}</button> : null)}</div><div className="grid max-h-56 grid-cols-8 gap-1 overflow-y-auto p-3">{displayedEmojis.map((emoji) => <motion.button whileHover={reduceMotion ? undefined : { y: -3, scale: 1.16 }} whileTap={reduceMotion ? undefined : { scale: 0.86 }} key={emoji} type="button" onClick={() => addEmoji(emoji)} className="flex h-10 w-10 items-center justify-center rounded-xl text-xl transition hover:bg-fuchsia-50 dark:hover:bg-slate-700">{emoji}</motion.button>)}</div></div> : <div className="grid max-h-72 grid-cols-3 gap-2 overflow-y-auto p-3 sm:grid-cols-4">{stickerCatalog.map((sticker) => <motion.button whileHover={reduceMotion ? undefined : { y: -4, scale: 1.03 }} whileTap={reduceMotion ? undefined : { scale: 0.93 }} key={sticker.id} type="button" onClick={() => void sendSticker(sticker.id)} className={`relative flex min-h-28 flex-col items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br ${sticker.accent} p-2 text-white shadow-md`}><motion.span animate={reduceMotion ? undefined : sticker.motion === 'shake' ? { x: [0, -3, 3, 0] } : sticker.motion === 'wobble' ? { rotate: [0, -7, 7, 0] } : { y: [0, -6, 0] }} transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 0.3 }} className="text-4xl drop-shadow">{sticker.emoji}</motion.span><span className="mt-2 rounded-full bg-black/20 px-2 py-1 text-[8px] font-black uppercase tracking-wider">{sticker.label}</span></motion.button>)}</div>}
           </motion.div>}</AnimatePresence>
           <AnimatePresence>{drivePickerOpen && <motion.div initial={reduceMotion ? false : { opacity: 0, y: 8, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.98 }} className="absolute bottom-full left-0 z-30 mb-2 w-full max-w-md overflow-hidden rounded-2xl border border-indigo-100 bg-white shadow-2xl shadow-indigo-200/50 dark:border-slate-700 dark:bg-slate-800 dark:shadow-black/50">
             <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-700"><div className="flex items-center gap-2"><HardDrive className="h-4 w-4 text-indigo-600" /><div><p className="text-xs font-black text-slate-800 dark:text-white">Chia sẻ từ Drive</p><p className="text-[9px] font-bold text-slate-400">Chỉ file có link công khai</p></div></div><button type="button" onClick={() => setDrivePickerOpen(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700"><X className="h-4 w-4" /></button></div>
@@ -925,6 +1198,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
         <div className="mt-6 grid grid-cols-2 gap-3"><button type="button" disabled={deleting} onClick={() => setDeletingMessage(null)} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">Hủy</button><button type="button" disabled={deleting} onClick={deleteMessage} className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3 text-sm font-black text-white transition hover:bg-red-700 disabled:opacity-60">{deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}{deleting ? 'Đang xóa...' : 'Xóa tin nhắn'}</button></div>
       </motion.div>
     </motion.div>}</AnimatePresence>
+    <AnimatePresence>{pollComposerOpen && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[80] flex items-end justify-center bg-slate-950/55 p-4 backdrop-blur-sm sm:items-center" onMouseDown={(event) => { if (event.target === event.currentTarget && !pollSaving) setPollComposerOpen(false); }}><motion.div initial={reduceMotion ? false : { opacity: 0, y: 24, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 18, scale: 0.98 }} className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-[1.75rem] bg-white p-5 shadow-2xl dark:bg-slate-900 sm:p-6"><div className="flex items-start justify-between gap-4"><div><span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-violet-50 text-violet-600 dark:bg-violet-950 dark:text-violet-300"><BarChart3 className="h-5 w-5" /></span><h3 className="mt-4 text-xl font-black text-slate-900 dark:text-white">Tạo bình chọn</h3><p className="mt-1 text-xs text-slate-500">Hỏi ý kiến mọi người trong #{activeRoom?.name}.</p></div><button type="button" onClick={() => setPollComposerOpen(false)} disabled={pollSaving} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"><X className="h-5 w-5" /></button></div><label className="mt-5 block"><span className="text-xs font-black text-slate-700 dark:text-slate-200">Câu hỏi</span><textarea value={pollQuestion} onChange={(event) => setPollQuestion(event.target.value)} maxLength={240} rows={2} placeholder="Bạn muốn hỏi điều gì?" className="mt-2 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-bold text-slate-800 outline-none focus:border-violet-400 focus:ring-4 focus:ring-violet-50 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:focus:ring-violet-950" /></label><div className="mt-4 space-y-2"><div className="flex items-center justify-between"><span className="text-xs font-black text-slate-700 dark:text-slate-200">Lựa chọn</span><span className="text-[10px] font-bold text-slate-400">{pollOptions.length}/6</span></div>{pollOptions.map((option, index) => <div key={index} className="flex items-center gap-2"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-50 text-xs font-black text-violet-600 dark:bg-violet-950 dark:text-violet-300">{index + 1}</span><input value={option} onChange={(event) => setPollOptions((current) => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} maxLength={120} placeholder={`Lựa chọn ${index + 1}`} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm font-bold text-slate-800 outline-none focus:border-violet-400 dark:border-slate-700 dark:bg-slate-800 dark:text-white" />{pollOptions.length > 2 && <button type="button" onClick={() => setPollOptions((current) => current.filter((_item, itemIndex) => itemIndex !== index))} className="rounded-lg p-2 text-red-400 hover:bg-red-50 dark:hover:bg-red-950"><X className="h-4 w-4" /></button>}</div>)}{pollOptions.length < 6 && <button type="button" onClick={() => setPollOptions((current) => [...current, ''])} className="inline-flex items-center gap-2 rounded-xl border border-dashed border-violet-200 px-3 py-2 text-xs font-black text-violet-600 hover:bg-violet-50 dark:border-violet-800 dark:text-violet-300 dark:hover:bg-violet-950"><Plus className="h-4 w-4" />Thêm lựa chọn</button>}</div><div className="mt-5 grid gap-3 sm:grid-cols-2"><label className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"><span>Cho phép chọn nhiều</span><input type="checkbox" checked={pollMultiple} onChange={(event) => setPollMultiple(event.target.checked)} className="h-4 w-4 accent-violet-600" /></label><label className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800"><span className="block text-[10px] font-black text-slate-500">Thời hạn</span><select value={pollDuration} onChange={(event) => setPollDuration(event.target.value)} className="mt-1 w-full bg-transparent text-xs font-bold text-slate-700 outline-none dark:text-slate-200"><option value="1">1 giờ</option><option value="6">6 giờ</option><option value="24">24 giờ</option><option value="72">3 ngày</option><option value="168">7 ngày</option><option value="720">30 ngày</option><option value="never">Không giới hạn</option></select></label></div><div className="mt-6 grid grid-cols-2 gap-3"><button type="button" onClick={() => setPollComposerOpen(false)} disabled={pollSaving} className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-600 dark:border-slate-700 dark:text-slate-300">Hủy</button><button type="button" onClick={createPoll} disabled={pollSaving || !pollQuestion.trim() || pollOptions.filter((option) => option.trim()).length < 2} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-3 text-sm font-black text-white transition hover:bg-violet-700 disabled:opacity-50">{pollSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <BarChart3 className="h-4 w-4" />}{pollSaving ? 'Đang tạo...' : 'Đăng bình chọn'}</button></div></motion.div></motion.div>}</AnimatePresence>
   </motion.div>;
 };
 

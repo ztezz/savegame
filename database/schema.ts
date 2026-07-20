@@ -196,6 +196,39 @@ export const sqliteSchema = `
   );
   CREATE INDEX IF NOT EXISTS idx_community_messages_room_id ON community_messages(room_id, id DESC);
   CREATE INDEX IF NOT EXISTS idx_community_messages_created ON community_messages(created_at DESC);
+  CREATE TABLE IF NOT EXISTS community_read_states (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    room_id INTEGER NOT NULL REFERENCES community_rooms(id) ON DELETE CASCADE,
+    last_read_message_id INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, room_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_community_read_states_room ON community_read_states(room_id, user_id);
+  CREATE TABLE IF NOT EXISTS community_polls (
+    id INTEGER PRIMARY KEY,
+    room_id INTEGER NOT NULL REFERENCES community_rooms(id) ON DELETE CASCADE,
+    message_id INTEGER UNIQUE REFERENCES community_messages(id) ON DELETE CASCADE,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    question TEXT NOT NULL,
+    allow_multiple INTEGER NOT NULL DEFAULT 0 CHECK(allow_multiple IN (0, 1)),
+    closes_at TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE IF NOT EXISTS community_poll_options (
+    id INTEGER PRIMARY KEY,
+    poll_id INTEGER NOT NULL REFERENCES community_polls(id) ON DELETE CASCADE,
+    label TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE IF NOT EXISTS community_poll_votes (
+    poll_id INTEGER NOT NULL REFERENCES community_polls(id) ON DELETE CASCADE,
+    option_id INTEGER NOT NULL REFERENCES community_poll_options(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (poll_id, option_id, user_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_community_polls_room ON community_polls(room_id, id DESC);
+  CREATE INDEX IF NOT EXISTS idx_community_poll_votes_poll ON community_poll_votes(poll_id, option_id);
   CREATE TABLE IF NOT EXISTS community_ai_memories (
     room_id INTEGER PRIMARY KEY REFERENCES community_rooms(id) ON DELETE CASCADE,
     summary TEXT NOT NULL DEFAULT '',
