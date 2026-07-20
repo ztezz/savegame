@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 interface TurnstileApi {
   render: (container: HTMLElement, options: Record<string, unknown>) => string;
   remove: (widgetId: string) => void;
+  reset: (widgetId: string) => void;
 }
 
 declare global {
@@ -50,6 +51,8 @@ export default function TurnstileWidget({
   onToken: (token: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const widgetIdRef = useRef<string | null>(null);
+  const previousResetKeyRef = useRef(resetKey);
   const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
@@ -76,8 +79,10 @@ export default function TurnstileWidget({
         'error-callback': () => {
           onToken('');
           setLoadError('Xác minh Cloudflare gặp lỗi. Vui lòng thử lại.');
+          return true;
         },
       });
+      widgetIdRef.current = widgetId;
     }).catch((error: Error) => {
       if (!cancelled) setLoadError(error.message);
     });
@@ -85,8 +90,17 @@ export default function TurnstileWidget({
     return () => {
       cancelled = true;
       if (widgetId && window.turnstile) window.turnstile.remove(widgetId);
+      if (widgetIdRef.current === widgetId) widgetIdRef.current = null;
     };
-  }, [siteKey, resetKey, darkMode, onToken]);
+  }, [siteKey, darkMode, onToken]);
+
+  useEffect(() => {
+    if (previousResetKeyRef.current === resetKey) return;
+    previousResetKeyRef.current = resetKey;
+    onToken('');
+    setLoadError('');
+    if (widgetIdRef.current && window.turnstile) window.turnstile.reset(widgetIdRef.current);
+  }, [resetKey, onToken]);
 
   return (
     <div className={`space-y-3 border p-3 ${darkMode ? 'border-cyan-300/25 bg-cyan-300/[0.04]' : 'border-cyan-700/20 bg-cyan-50/70'}`}>
