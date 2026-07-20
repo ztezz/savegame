@@ -1,9 +1,8 @@
 ﻿import { Router } from "express";
 import jwt from "jsonwebtoken";
 import * as bcrypt from "bcryptjs";
-import { randomBytes } from "crypto";
 import { pool, isUsingDatabase } from "../config/database.js";
-import { JWT_SECRET } from "../config/environment.js";
+import { JWT_SECRET, NODE_ENV, TURNSTILE_ALLOWED_HOSTNAMES, TURNSTILE_SECRET_KEY } from "../config/environment.js";
 import { User } from "../database/types.js";
 import { authenticateToken, isAdmin } from "../middleware/auth.js";
 import { writeAudit } from "../utils/audit.js";
@@ -21,13 +20,11 @@ let nextId = 2;
 
 export const authRouter = Router();
 
-const MAX_LOGIN_FAILURES_BEFORE_CAPTCHA = 3;
-const CAPTCHA_TTL_MS = 5 * 60 * 1000;
+const MAX_LOGIN_FAILURES_BEFORE_TURNSTILE = 3;
 const DEFAULT_ALLOW_SELF_REGISTER = false;
 const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const AUTH_RATE_LIMIT_MAX = 30;
 const loginFailures = new Map<string, { count: number; lastFailedAt: number }>();
-const captchaChallenges = new Map<string, { answer: string; expiresAt: number; key: string }>();
 const authRateLimits = new Map<string, { count: number; resetAt: number }>();
 
 function authRateLimit(req: any, res: any, next: any) {
@@ -74,35 +71,42 @@ function recordLoginFailure(key: string): number {
   return next.count;
 }
 
-function createCaptcha(key: string) {
-  const left = Math.floor(Math.random() * 8) + 2;
-  const right = Math.floor(Math.random() * 8) + 2;
-  const token = randomBytes(18).toString("hex");
-  captchaChallenges.set(token, {
-    answer: String(left + right),
-    expiresAt: Date.now() + CAPTCHA_TTL_MS,
-    key,
-  });
-  return { token, question: `${left} + ${right} = ?`, expiresInSeconds: CAPTCHA_TTL_MS / 1000 };
-}
-
-function verifyCaptcha(key: string, token: unknown, answer: unknown): boolean {
-  if (typeof token !== "string" || typeof answer !== "string") return false;
-  const challenge = captchaChallenges.get(token);
-  captchaChallenges.delete(token);
-  if (!challenge || challenge.key !== key || challenge.expiresAt < Date.now()) return false;
-  return challenge.answer === answer.trim();
-}
-
-function captchaError(res: any, key: string, error = "Vui lòng nhập mã xác minh") {
+function turnstileError(res: any, error = "Vui lòng hoàn thành xác minh Cloudflare") {
   return res.status(403).json({
     error,
-    captchaRequired: true,
-    captcha: createCaptcha(key),
+    turnstileRequired: true,
   });
 }
 
+async function verifyTurnstile(token: unknown, remoteIp?: string): Promise<boolean> {
+  if (typeof token !== "string" || !token || token.length > 2048) return false;
 
+  const body = new URLSearchParams({
+    secret: TURNSTILE_SECRET_KEY,
+    response: token,
+  });
+  if (remoteIp) body.set("remoteip", remoteIp);
+
+  try {
+    const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!response.ok) return false;
+
+    const result = await response.json() as { success?: boolean; action?: string; hostname?: string };
+    if (!result.success || (NODE_ENV === "production" && result.action !== "login")) return false;
+    if (TURNSTILE_ALLOWED_HOSTNAMES.size > 0 && !TURNSTILE_ALLOWED_HOSTNAMES.has(String(result.hostname || "").toLowerCase())) {
+      return false;
+    }
+    return true;
+  } catch (err: any) {
+    console.error("Turnstile validation failed:", err?.message || err);
+    return false;
+  }
+}
 
 function logAuthAudit(userId: number | null, action: string, detail: any) {
   void writeAudit(userId, action, "auth", detail).catch((err: any) => {
@@ -176,7 +180,7 @@ authRouter.post("/api/auth/register", authRateLimit, async (req, res) => {
 });
 
 authRouter.post("/api/auth/login", authRateLimit, async (req, res) => {
-  const { username, password, captchaToken, captchaAnswer } = req.body;
+  const { username, password, turnstileToken } = req.body;
 
   if (!username || !password) {
     console.log('Login: Missing username or password');
@@ -186,9 +190,9 @@ authRouter.post("/api/auth/login", authRateLimit, async (req, res) => {
 
   const loginKey = getLoginKey(req, username);
   const failureCount = loginFailures.get(loginKey)?.count ?? 0;
-  if (failureCount >= MAX_LOGIN_FAILURES_BEFORE_CAPTCHA && !verifyCaptcha(loginKey, captchaToken, captchaAnswer)) {
-    logAuthAudit(null, 'AUTH_LOGIN_FAILED', { username, reason: 'captcha_failed' });
-    return captchaError(res, loginKey, "Mã xác minh không đúng hoặc đã hết hạn");
+  if (failureCount >= MAX_LOGIN_FAILURES_BEFORE_TURNSTILE && !(await verifyTurnstile(turnstileToken, req.ip))) {
+    logAuthAudit(null, 'AUTH_LOGIN_FAILED', { username, reason: 'turnstile_failed' });
+    return turnstileError(res, "Xác minh Cloudflare không hợp lệ hoặc đã hết hạn");
   }
 
   const rejectLogin = () => {
@@ -197,10 +201,10 @@ authRouter.post("/api/auth/login", authRateLimit, async (req, res) => {
       username,
       reason: 'invalid_credentials',
       failedCount,
-      captchaRequired: failedCount >= MAX_LOGIN_FAILURES_BEFORE_CAPTCHA,
+      turnstileRequired: failedCount >= MAX_LOGIN_FAILURES_BEFORE_TURNSTILE,
     });
-    if (failedCount >= MAX_LOGIN_FAILURES_BEFORE_CAPTCHA) {
-      return captchaError(res, loginKey, "Tên đăng nhập hoặc mật khẩu không đúng");
+    if (failedCount >= MAX_LOGIN_FAILURES_BEFORE_TURNSTILE) {
+      return turnstileError(res, "Tên đăng nhập hoặc mật khẩu không đúng");
     }
     return res.status(401).json({ error: "Tên đăng nhập hoặc mật khẩu không đúng" });
   };

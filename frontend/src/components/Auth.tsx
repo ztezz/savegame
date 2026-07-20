@@ -10,7 +10,6 @@ import {
   EyeOff,
   Loader2,
   Lock,
-  RefreshCw,
   ShieldCheck,
   RadioTower,
   User,
@@ -18,12 +17,9 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence, useMotionTemplate, useMotionValue, useReducedMotion, useSpring, useTransform } from 'motion/react';
 import { useToast } from '../context/ToastContext';
+import TurnstileWidget from './TurnstileWidget';
 
-interface CaptchaChallenge {
-  token: string;
-  question: string;
-  expiresInSeconds: number;
-}
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || (import.meta.env.DEV ? '1x00000000000000000000AA' : '');
 
 export default function Auth({ onLogin }: { onLogin: (token: string, user: any) => void }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -32,8 +28,9 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [captcha, setCaptcha] = useState<CaptchaChallenge | null>(null);
-  const [captchaAnswer, setCaptchaAnswer] = useState('');
+  const [turnstileRequired, setTurnstileRequired] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const { showToast } = useToast();
   const reduceMotion = useReducedMotion();
   const pointerX = useMotionValue(50);
@@ -56,12 +53,12 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
   const canSubmit =
     trimmedUsername.length > 0 &&
     password.trim().length > 0 &&
-    (!captcha || captchaAnswer.trim().length > 0) &&
+    (!turnstileRequired || Boolean(turnstileToken)) &&
     !loading;
 
-  const clearCaptcha = () => {
-    setCaptcha(null);
-    setCaptchaAnswer('');
+  const clearTurnstile = () => {
+    setTurnstileRequired(false);
+    setTurnstileToken('');
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -85,16 +82,13 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
     try {
       const endpoint = isLogin ? '/auth/login' : '/auth/register';
       const payload: any = { username: trimmedUsername, password };
-      if (captcha) {
-        payload.captchaToken = captcha.token;
-        payload.captchaAnswer = captchaAnswer.trim();
-      }
+      if (turnstileRequired) payload.turnstileToken = turnstileToken;
       const res = await api.post(endpoint, payload);
 
       if (isLogin) {
         localStorage.setItem('token', res.data.token);
         localStorage.setItem('user', JSON.stringify(res.data.user));
-        clearCaptcha();
+        clearTurnstile();
         onLogin(res.data.token, res.data.user);
         showToast('Đăng nhập thành công!', 'success', 2000);
       } else {
@@ -103,14 +97,14 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
         setUsername('');
         setPassword('');
         setShowPassword(false);
-        clearCaptcha();
+        clearTurnstile();
       }
     } catch (err: any) {
       const errorMsg = err.response?.data?.error || 'Xác thực thất bại';
-      const nextCaptcha = err.response?.data?.captcha;
-      if (err.response?.data?.captchaRequired && nextCaptcha) {
-        setCaptcha(nextCaptcha);
-        setCaptchaAnswer('');
+      if (turnstileRequired || err.response?.data?.turnstileRequired) {
+        setTurnstileRequired(true);
+        setTurnstileToken('');
+        setTurnstileResetKey((current) => current + 1);
       }
       setError(errorMsg);
       showToast(errorMsg, 'error', 3000);
@@ -124,12 +118,7 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
     setError('');
     setPassword('');
     setShowPassword(false);
-    clearCaptcha();
-  };
-
-  const refreshCaptcha = () => {
-    setError('Nhập sai lại thông tin đăng nhập để nhận mã xác minh mới.');
-    setCaptchaAnswer('');
+    clearTurnstile();
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLElement>) => {
@@ -235,7 +224,7 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
               <label htmlFor="username" className="ml-1 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-200/70">ID người dùng</label>
               <div className="relative">
                 <User className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-300/60" />
-                <input id="username" type="text" required autoComplete="username" value={username} onChange={(e) => { setUsername(e.target.value); setError(''); clearCaptcha(); }} placeholder="Nhập tên đăng nhập" className={`w-full border bg-[#02050b]/75 py-4 pl-12 pr-4 font-mono text-sm text-slate-100 outline-none transition placeholder:text-slate-700 hover:border-slate-600 focus:border-cyan-400 focus:bg-cyan-400/[0.03] focus:ring-1 focus:ring-cyan-400/30 ${error && !trimmedUsername ? 'border-rose-400/70 bg-rose-500/5' : 'border-slate-700'}`} />
+                <input id="username" type="text" required autoComplete="username" value={username} onChange={(e) => { setUsername(e.target.value); setError(''); clearTurnstile(); }} placeholder="Nhập tên đăng nhập" className={`w-full border bg-[#02050b]/75 py-4 pl-12 pr-4 font-mono text-sm text-slate-100 outline-none transition placeholder:text-slate-700 hover:border-slate-600 focus:border-cyan-400 focus:bg-cyan-400/[0.03] focus:ring-1 focus:ring-cyan-400/30 ${error && !trimmedUsername ? 'border-rose-400/70 bg-rose-500/5' : 'border-slate-700'}`} />
               </div>
             </div>
 
@@ -251,21 +240,7 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
               {!isLogin && <p className="ml-1 font-mono text-[10px] text-slate-500">Yêu cầu hệ thống: tối thiểu 6 ký tự.</p>}
             </div>
 
-            {captcha && isLogin && (
-              <div className="space-y-3 border border-amber-300/30 bg-amber-300/[0.06] p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">Security challenge</p>
-                    <p className="mt-1 text-sm text-amber-100">Nhập kết quả phép tính: <strong>{captcha.question}</strong></p>
-                  </div>
-                  <button type="button" onClick={refreshCaptcha} className="p-2 text-amber-300 transition hover:bg-amber-300/10" title="Làm mới mã">
-                    <RefreshCw className="w-4 h-4" />
-                  </button>
-                </div>
-                <label htmlFor="captcha-answer" className="sr-only">Mã xác minh</label>
-                <input id="captcha-answer" value={captchaAnswer} onChange={(e) => setCaptchaAnswer(e.target.value)} inputMode="numeric" placeholder="Nhập mã xác minh" className="w-full border border-amber-300/30 bg-[#02050b]/70 px-4 py-3 font-mono text-sm font-bold text-amber-100 outline-none placeholder:text-amber-900 focus:border-amber-300 focus:ring-1 focus:ring-amber-300/30" />
-              </div>
-            )}
+            {turnstileRequired && isLogin && <TurnstileWidget siteKey={TURNSTILE_SITE_KEY} resetKey={turnstileResetKey} onToken={setTurnstileToken} />}
 
             <motion.button whileHover={canSubmit && !reduceMotion ? { y: -2, scale: 1.01 } : undefined} whileTap={canSubmit && !reduceMotion ? { scale: 0.98 } : undefined} type="submit" disabled={!canSubmit} className="group relative flex w-full items-center justify-center gap-3 overflow-hidden border border-cyan-300/70 bg-cyan-300 py-4 font-mono text-sm font-bold uppercase tracking-wider text-[#021016] shadow-[0_0_28px_rgba(34,211,238,0.18)] transition hover:bg-cyan-200 hover:shadow-[0_0_38px_rgba(34,211,238,0.3)] disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500 disabled:shadow-none">
               {loading ? (
