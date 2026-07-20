@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Copy, ExternalLink, File, Link2, Search, ShieldCheck, Trash2 } from 'lucide-react';
+import { Copy, ExternalLink, File, Link2, RefreshCw, Search, ShieldCheck, Trash2 } from 'lucide-react';
 import api from '../../../utils/api';
 import { copyToClipboard } from '../../../utils/clipboard';
 import { useToast } from '../../../context/ToastContext';
@@ -10,17 +10,29 @@ const SharedLinksTab: React.FC = () => {
   const { showToast } = useToast();
   const [shares, setShares] = useState<DriveShare[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [removingId, setRemovingId] = useState<number | null>(null);
 
+  const loadShares = async () => {
+    setLoading(true);
+    setLoadError('');
+    try {
+      const response = await api.get('/drive/shares');
+      const data = Array.isArray(response.data) ? response.data : response.data?.shares;
+      if (!Array.isArray(data)) throw new Error('Invalid Drive shares response');
+      setShares(data.filter((share): share is DriveShare => Boolean(share && share.file_id && share.token && share.original_name)));
+    } catch (error: any) {
+      setShares([]);
+      setLoadError(error.response?.data?.error || 'Không tải được danh sách link chia sẻ.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    let active = true;
-    api.get('/drive/shares')
-      .then((response) => { if (active) setShares(response.data || []); })
-      .catch((error) => { if (active) showToast(error.response?.data?.error || 'Không tải được link chia sẻ', 'error'); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [showToast]);
+    loadShares();
+  }, []);
 
   const getShareUrl = (token: string) => `${window.location.origin}/share/${encodeURIComponent(token)}`;
   const visibleShares = shares.filter((share) => share.original_name.toLocaleLowerCase('vi').includes(search.trim().toLocaleLowerCase('vi')));
@@ -59,6 +71,7 @@ const SharedLinksTab: React.FC = () => {
       </div>
 
       {loading ? <div className="grid min-h-64 place-items-center"><div className="text-center"><span className="mx-auto block h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-emerald-600" /><p className="mt-3 text-sm font-bold text-slate-500">Đang tải link chia sẻ...</p></div></div>
+        : loadError ? <div className="grid min-h-64 place-items-center p-8 text-center"><div><span className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-red-50 text-red-500"><Link2 className="h-8 w-8" /></span><p className="mt-4 font-black text-slate-800 dark:text-white">Không tải được link chia sẻ</p><p className="mt-1 text-sm text-slate-500">{loadError}</p><button type="button" onClick={loadShares} className="mt-5 inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-xs font-black text-white transition hover:bg-emerald-700"><RefreshCw className="h-4 w-4" /> Thử tải lại</button></div></div>
         : visibleShares.length === 0 ? <div className="grid min-h-64 place-items-center p-8 text-center"><div><span className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-50 text-emerald-500"><ShieldCheck className="h-8 w-8" /></span><p className="mt-4 font-black text-slate-800 dark:text-white">{shares.length ? 'Không tìm thấy file phù hợp' : 'Chưa có link chia sẻ nào'}</p><p className="mt-1 text-sm text-slate-500">{shares.length ? 'Thử tìm bằng một tên khác.' : 'Mở Drive và chọn biểu tượng link trên file để chia sẻ.'}</p></div></div>
         : <div className="divide-y divide-slate-100 dark:divide-slate-800">{visibleShares.map((share) => <article key={share.file_id} className="flex flex-col gap-4 p-4 transition hover:bg-slate-50/70 dark:hover:bg-slate-800/40 sm:flex-row sm:items-center sm:justify-between sm:p-5">
           <div className="flex min-w-0 items-center gap-3"><span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600"><File className="h-5 w-5" /></span><div className="min-w-0"><p className="truncate font-black text-slate-900 dark:text-white">{share.original_name}</p><p className="mt-1 text-xs font-medium text-slate-500">{formatFileType({ id: share.file_id, original_name: share.original_name, mime_type: share.mime_type, file_size: share.file_size, note: null, created_at: share.created_at })} · {formatFileSize(Number(share.file_size))} · Tạo {new Date(share.created_at).toLocaleString('vi-VN')}</p><p className="mt-1 truncate font-mono text-[11px] text-emerald-600">{getShareUrl(share.token)}</p>{share.expires_at && <p className="mt-1 text-[11px] font-bold text-amber-600">Hết hạn {new Date(share.expires_at).toLocaleString('vi-VN')}</p>}</div></div>
