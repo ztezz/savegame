@@ -36,7 +36,7 @@ export default function DeviceLinkPage({ linkToken, token, onLogin, onDone }: De
   }, [linkToken]);
 
   if (!token) {
-    return <Auth onLogin={onLogin} />;
+    return <Auth onLogin={onLogin} darkMode />;
   }
 
   const handleConfirm = async () => {

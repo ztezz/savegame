@@ -21,14 +21,13 @@ import TurnstileWidget from './TurnstileWidget';
 
 const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || (import.meta.env.DEV ? '1x00000000000000000000AA' : '');
 
-export default function Auth({ onLogin }: { onLogin: (token: string, user: any) => void }) {
+export default function Auth({ onLogin, darkMode }: { onLogin: (token: string, user: any) => void; darkMode: boolean }) {
   const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [turnstileRequired, setTurnstileRequired] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState('');
   const [turnstileResetKey, setTurnstileResetKey] = useState(0);
   const { showToast } = useToast();
@@ -53,12 +52,12 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
   const canSubmit =
     trimmedUsername.length > 0 &&
     password.trim().length > 0 &&
-    (!turnstileRequired || Boolean(turnstileToken)) &&
+    (!isLogin || Boolean(turnstileToken)) &&
     !loading;
 
   const clearTurnstile = () => {
-    setTurnstileRequired(false);
     setTurnstileToken('');
+    setTurnstileResetKey((current) => current + 1);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -82,7 +81,7 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
     try {
       const endpoint = isLogin ? '/auth/login' : '/auth/register';
       const payload: any = { username: trimmedUsername, password };
-      if (turnstileRequired) payload.turnstileToken = turnstileToken;
+      if (isLogin) payload.turnstileToken = turnstileToken;
       const res = await api.post(endpoint, payload);
 
       if (isLogin) {
@@ -101,8 +100,7 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
       }
     } catch (err: any) {
       const errorMsg = err.response?.data?.error || 'Xác thực thất bại';
-      if (turnstileRequired || err.response?.data?.turnstileRequired) {
-        setTurnstileRequired(true);
+      if (isLogin) {
         setTurnstileToken('');
         setTurnstileResetKey((current) => current + 1);
       }
@@ -134,20 +132,20 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
   };
 
   return (
-    <main onPointerMove={handlePointerMove} onPointerLeave={resetPointer} className="relative grid min-h-screen overflow-hidden bg-[#02050b] font-sans text-slate-100 lg:grid-cols-[1.08fr_0.92fr]">
+    <main onPointerMove={handlePointerMove} onPointerLeave={resetPointer} className={`relative grid min-h-screen overflow-hidden font-sans lg:grid-cols-[1.08fr_0.92fr] ${darkMode ? 'bg-[#02050b] text-slate-100' : 'auth-light bg-slate-100 text-slate-900'}`}>
       <div aria-hidden className="auth-cyber-grid pointer-events-none absolute inset-0 opacity-45" />
       <div aria-hidden className="auth-scanlines pointer-events-none absolute inset-0 z-40 opacity-25" />
       <motion.div aria-hidden style={{ background: spotlight }} className="pointer-events-none absolute inset-0 z-20" />
 
-      <section className="relative hidden items-center justify-center overflow-hidden border-r border-cyan-400/15 text-white lg:flex">
+      <section className="auth-cyber-hero relative hidden items-center justify-center overflow-hidden border-r border-cyan-400/15 text-white lg:flex">
         <motion.div aria-hidden style={{ x: leftParallaxX, y: leftParallaxY }} className="absolute -inset-8 bg-[radial-gradient(circle_at_20%_16%,rgba(217,70,239,0.22),transparent_30%),radial-gradient(circle_at_76%_68%,rgba(6,182,212,0.2),transparent_32%)]" />
         <motion.div aria-hidden style={{ x: gridParallaxX, y: gridParallaxY }} className="absolute -inset-8 bg-[linear-gradient(to_right,rgba(34,211,238,0.07)_1px,transparent_1px),linear-gradient(to_bottom,rgba(34,211,238,0.07)_1px,transparent_1px)] bg-[size:48px_48px] [mask-image:linear-gradient(to_bottom,black,transparent_94%)]" />
         <motion.div aria-hidden animate={reduceMotion ? undefined : { x: [0, 40, 0], y: [0, -28, 0], scale: [1, 1.12, 1] }} transition={{ duration: 14, repeat: Infinity, ease: 'easeInOut' }} className="absolute -bottom-32 -right-28 h-96 w-96 rounded-full bg-cyan-400/10 blur-3xl" />
 
-        <motion.div aria-hidden style={{ x: statusParallaxX, y: statusParallaxY }} className="absolute right-[7%] top-[10%] z-10 border border-cyan-300/30 bg-[#06111b]/80 px-4 py-3 shadow-[0_0_30px_rgba(34,211,238,0.12)] backdrop-blur-xl [clip-path:polygon(0_0,calc(100%-12px)_0,100%_12px,100%_100%,0_100%)]">
+        <motion.div aria-hidden style={{ x: statusParallaxX, y: statusParallaxY }} className="auth-cyber-float absolute right-[7%] top-[10%] z-10 border border-cyan-300/30 bg-[#06111b]/80 px-4 py-3 shadow-[0_0_30px_rgba(34,211,238,0.12)] backdrop-blur-xl [clip-path:polygon(0_0,calc(100%-12px)_0,100%_12px,100%_100%,0_100%)]">
           <div className="flex items-center gap-2 font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-200"><span className="h-2 w-2 animate-pulse bg-emerald-400 shadow-[0_0_10px_#34d399]" />Node status: online</div>
         </motion.div>
-        <motion.div aria-hidden style={{ x: saveParallaxX, y: saveParallaxY }} className="absolute bottom-[10%] left-[7%] z-10 border-l-2 border-fuchsia-400 bg-[#090813]/85 p-4 shadow-[0_0_32px_rgba(217,70,239,0.12)] backdrop-blur-xl">
+        <motion.div aria-hidden style={{ x: saveParallaxX, y: saveParallaxY }} className="auth-cyber-float absolute bottom-[10%] left-[7%] z-10 border-l-2 border-fuchsia-400 bg-[#090813]/85 p-4 shadow-[0_0_32px_rgba(217,70,239,0.12)] backdrop-blur-xl">
           <Database className="mb-2 h-5 w-5 text-fuchsia-300" /><p className="font-mono text-xs font-bold text-fuchsia-100">VAULT // SECURED</p><p className="mt-1 text-[10px] text-slate-500">Bản lưu đã mã hóa và đồng bộ</p>
         </motion.div>
 
@@ -169,20 +167,20 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
           </p>
 
           <div className="mt-12 grid grid-cols-3 gap-px bg-cyan-300/15">
-            <motion.div whileHover={reduceMotion ? undefined : { y: -4 }} className="bg-[#050a12]/95 p-5">
+            <motion.div whileHover={reduceMotion ? undefined : { y: -4 }} className="auth-cyber-feature bg-[#050a12]/95 p-5">
               <Cloud className="mb-4 h-5 w-5 text-cyan-300" /><div className="mb-1 text-sm font-bold">Đồng bộ nhanh</div><p className="font-mono text-[10px] leading-5 text-slate-500">SYNC // MULTI-NODE</p>
             </motion.div>
-            <motion.div whileHover={reduceMotion ? undefined : { y: -4 }} className="bg-[#050a12]/95 p-5">
+            <motion.div whileHover={reduceMotion ? undefined : { y: -4 }} className="auth-cyber-feature bg-[#050a12]/95 p-5">
               <ShieldCheck className="mb-4 h-5 w-5 text-emerald-300" /><div className="mb-1 text-sm font-bold">Lớp bảo vệ</div><p className="font-mono text-[10px] leading-5 text-slate-500">AUTH // VERIFIED</p>
             </motion.div>
-            <motion.div whileHover={reduceMotion ? undefined : { y: -4 }} className="bg-[#050a12]/95 p-5">
+            <motion.div whileHover={reduceMotion ? undefined : { y: -4 }} className="auth-cyber-feature bg-[#050a12]/95 p-5">
               <Zap className="mb-4 h-5 w-5 text-fuchsia-300" /><div className="mb-1 text-sm font-bold">Khôi phục ngay</div><p className="font-mono text-[10px] leading-5 text-slate-500">RESTORE // READY</p>
             </motion.div>
           </div>
         </motion.div>
       </section>
 
-      <section className="relative flex items-center justify-center overflow-hidden px-5 py-10 sm:px-8 lg:px-12 xl:px-16">
+      <section className="auth-cyber-form relative flex items-center justify-center overflow-hidden px-5 py-10 sm:px-8 lg:px-12 xl:px-16">
         <div aria-hidden className="absolute inset-0 bg-[radial-gradient(circle_at_100%_0%,rgba(217,70,239,0.13),transparent_32%),radial-gradient(circle_at_0%_100%,rgba(6,182,212,0.12),transparent_34%)]" />
         <div aria-hidden className="absolute right-5 top-5 font-mono text-[9px] uppercase tracking-[0.24em] text-cyan-300/40 sm:right-8 sm:top-8">CSH // AUTH_GATE_01</div>
         <motion.div initial={reduceMotion ? false : { opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.45 }} style={{ rotateX: formRotateX, rotateY: formRotateY, transformPerspective: 1200 }} className="auth-cyber-panel relative z-30 w-full max-w-md border border-cyan-300/25 bg-[#07101b]/90 p-6 shadow-[0_0_70px_rgba(6,182,212,0.09),0_24px_80px_rgba(0,0,0,0.65)] backdrop-blur-xl sm:p-8">
@@ -224,7 +222,7 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
               <label htmlFor="username" className="ml-1 font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-200/70">ID người dùng</label>
               <div className="relative">
                 <User className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-cyan-300/60" />
-                <input id="username" type="text" required autoComplete="username" value={username} onChange={(e) => { setUsername(e.target.value); setError(''); clearTurnstile(); }} placeholder="Nhập tên đăng nhập" className={`w-full border bg-[#02050b]/75 py-4 pl-12 pr-4 font-mono text-sm text-slate-100 outline-none transition placeholder:text-slate-700 hover:border-slate-600 focus:border-cyan-400 focus:bg-cyan-400/[0.03] focus:ring-1 focus:ring-cyan-400/30 ${error && !trimmedUsername ? 'border-rose-400/70 bg-rose-500/5' : 'border-slate-700'}`} />
+                <input id="username" type="text" required autoComplete="username" value={username} onChange={(e) => { setUsername(e.target.value); setError(''); }} placeholder="Nhập tên đăng nhập" className={`w-full border bg-[#02050b]/75 py-4 pl-12 pr-4 font-mono text-sm text-slate-100 outline-none transition placeholder:text-slate-700 hover:border-slate-600 focus:border-cyan-400 focus:bg-cyan-400/[0.03] focus:ring-1 focus:ring-cyan-400/30 ${error && !trimmedUsername ? 'border-rose-400/70 bg-rose-500/5' : 'border-slate-700'}`} />
               </div>
             </div>
 
@@ -240,7 +238,7 @@ export default function Auth({ onLogin }: { onLogin: (token: string, user: any) 
               {!isLogin && <p className="ml-1 font-mono text-[10px] text-slate-500">Yêu cầu hệ thống: tối thiểu 6 ký tự.</p>}
             </div>
 
-            {turnstileRequired && isLogin && <TurnstileWidget siteKey={TURNSTILE_SITE_KEY} resetKey={turnstileResetKey} onToken={setTurnstileToken} />}
+            {isLogin && <TurnstileWidget siteKey={TURNSTILE_SITE_KEY} resetKey={turnstileResetKey} darkMode={darkMode} onToken={setTurnstileToken} />}
 
             <motion.button whileHover={canSubmit && !reduceMotion ? { y: -2, scale: 1.01 } : undefined} whileTap={canSubmit && !reduceMotion ? { scale: 0.98 } : undefined} type="submit" disabled={!canSubmit} className="group relative flex w-full items-center justify-center gap-3 overflow-hidden border border-cyan-300/70 bg-cyan-300 py-4 font-mono text-sm font-bold uppercase tracking-wider text-[#021016] shadow-[0_0_28px_rgba(34,211,238,0.18)] transition hover:bg-cyan-200 hover:shadow-[0_0_38px_rgba(34,211,238,0.3)] disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500 disabled:shadow-none">
               {loading ? (

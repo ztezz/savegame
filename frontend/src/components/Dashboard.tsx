@@ -33,19 +33,12 @@ const UserDetailModal = lazy(() => import('./dashboard/Modals/UserDetailModal'))
 
 // Types and Constants
 import { GameSave, UserAccount, RestoreStatusItem } from './dashboard/types';
+import { isThemeDark, normalizeThemeMode, ThemeMode } from '../utils/theme';
 
 const DASHBOARD_TABS: DashboardTab[] = ['dashboard', 'library', 'drive', 'community', 'devices', 'settings', 'logs', 'users', 'activation', 'category', 'account', 'sqlite'];
 const ADMIN_TABS: DashboardTab[] = ['logs', 'users', 'sqlite'];
-type ThemeMode = 'light' | 'dark' | 'auto';
-
-const isAutoDarkTime = () => {
-  const hour = new Date().getHours();
-  return hour < 6 || hour >= 18;
-};
-
 const getAccountThemeMode = (user: any): ThemeMode => {
-  const mode = user?.theme_mode;
-  return mode === 'light' || mode === 'dark' || mode === 'auto' ? mode : 'auto';
+  return normalizeThemeMode(user?.theme_mode);
 };
 
 const getInitialDashboardTab = (): DashboardTab => {
@@ -122,7 +115,7 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [changePasswordLoading, setChangePasswordLoading] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => getAccountThemeMode(currentUser));
-  const [darkMode, setDarkMode] = useState(() => themeMode === 'dark' || (themeMode === 'auto' && isAutoDarkTime()));
+  const [darkMode, setDarkMode] = useState(() => isThemeDark(themeMode));
 
   // User Detail Modal State
   const [showUserDetailModal, setShowUserDetailModal] = useState(false);
@@ -147,7 +140,7 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
 
   useEffect(() => {
     const applyTheme = () => {
-      const nextDarkMode = themeMode === 'dark' || (themeMode === 'auto' && isAutoDarkTime());
+      const nextDarkMode = isThemeDark(themeMode);
       setDarkMode(nextDarkMode);
     };
     applyTheme();

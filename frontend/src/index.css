@@ -35,6 +35,69 @@
     clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 22px 100%, 0 calc(100% - 22px));
   }
 
+  .auth-light .auth-cyber-hero {
+    background-color: rgb(224 242 254 / 0.84);
+  }
+
+  .auth-light .auth-cyber-form {
+    background-color: rgb(248 250 252 / 0.76);
+  }
+
+  .auth-light .auth-cyber-float,
+  .auth-light .auth-cyber-feature {
+    background-color: rgb(255 255 255 / 0.82);
+  }
+
+  .auth-light .auth-cyber-panel {
+    border-color: rgb(8 145 178 / 0.3);
+    background-color: rgb(255 255 255 / 0.92);
+    box-shadow: 0 0 70px rgb(6 182 212 / 0.1), 0 24px 80px rgb(15 23 42 / 0.16);
+  }
+
+  .auth-light .auth-cyber-panel input {
+    border-color: rgb(148 163 184 / 0.65);
+    background-color: rgb(248 250 252 / 0.9);
+    color: rgb(15 23 42);
+  }
+
+  .auth-light .auth-cyber-panel input::placeholder {
+    color: rgb(148 163 184);
+  }
+
+  .auth-light .text-white,
+  .auth-light .text-slate-100 {
+    color: rgb(15 23 42);
+  }
+
+  .auth-light .text-slate-400,
+  .auth-light .text-slate-500,
+  .auth-light .text-slate-600 {
+    color: rgb(71 85 105);
+  }
+
+  .auth-light .text-cyan-200,
+  .auth-light .text-cyan-300,
+  .auth-light .text-cyan-300\/70,
+  .auth-light .text-cyan-200\/70 {
+    color: rgb(14 116 144);
+  }
+
+  .auth-light .text-fuchsia-100,
+  .auth-light .text-fuchsia-200,
+  .auth-light .text-fuchsia-300 {
+    color: rgb(162 28 175);
+  }
+
+  .auth-light .text-emerald-300,
+  .auth-light .text-emerald-400 {
+    color: rgb(4 120 87);
+  }
+
+  .auth-light .auth-cyber-panel .bg-\[\#02050b\]\/80,
+  .auth-light .auth-cyber-panel .bg-\[\#02050b\]\/75 {
+    background-color: rgb(241 245 249 / 0.9);
+  }
+
   .dark .admin-dark-surface {
     color-scheme: dark;
   }

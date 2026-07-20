@@ -7,6 +7,7 @@ import ToastContainer from './components/ToastContainer';
 import { ToastProvider } from './context/ToastContext';
 import api from './utils/api';
 import { clearAuthSession, getTokenExpiresAt, isTokenExpired } from './utils/authSession';
+import { cacheThemeMode, getCachedThemeMode, isThemeDark, normalizeThemeMode } from './utils/theme';
 
 const getStoredUser = () => {
   try {
@@ -30,6 +31,7 @@ const getStoredToken = () => {
 export default function App() {
   const [token, setToken] = useState<string | null>(getStoredToken);
   const [user, setUser] = useState<any>(getStoredUser);
+  const [loginDarkMode, setLoginDarkMode] = useState(() => isThemeDark(getCachedThemeMode()));
   const [deviceLinkToken, setDeviceLinkToken] = useState<string | null>(
     new URLSearchParams(window.location.search).get('device_link')
   );
@@ -37,8 +39,14 @@ export default function App() {
   const shareToken = shareMatch ? decodeURIComponent(shareMatch[1]) : null;
 
   const handleLogin = (newToken: string, newUser: any) => {
+    cacheThemeMode(newUser?.theme_mode);
     setToken(newToken);
     setUser(newUser);
+  };
+
+  const handleUserUpdate = (nextUser: any) => {
+    cacheThemeMode(nextUser?.theme_mode);
+    setUser(nextUser);
   };
 
   const handleLogout = () => {
@@ -72,6 +80,17 @@ export default function App() {
     return () => window.clearTimeout(expiryTimer);
   }, [token]);
 
+  useEffect(() => {
+    const applyTheme = () => {
+      const mode = user?.theme_mode !== undefined ? normalizeThemeMode(user.theme_mode) : getCachedThemeMode();
+      cacheThemeMode(mode);
+      setLoginDarkMode(isThemeDark(mode));
+    };
+    applyTheme();
+    const timer = window.setInterval(applyTheme, 60_000);
+    return () => window.clearInterval(timer);
+  }, [user?.theme_mode]);
+
   const handleLeaveDeviceLink = () => {
     const url = new URL(window.location.href);
     url.searchParams.delete('device_link');
@@ -101,13 +120,13 @@ export default function App() {
             </footer>
           </div>
         ) : token ? (
-          <Dashboard onLogout={handleLogout} currentUser={user} onUserUpdate={setUser} />
+          <Dashboard onLogout={handleLogout} currentUser={user} onUserUpdate={handleUserUpdate} />
         ) : (
           <div className="min-h-screen flex flex-col">
             <div className="flex-1">
-              <Auth onLogin={handleLogin} />
+              <Auth onLogin={handleLogin} darkMode={loginDarkMode} />
             </div>
-            <footer className="border-t border-cyan-400/10 bg-[#02050b] py-6 text-center font-mono text-[10px] uppercase tracking-widest text-slate-600">
+            <footer className={`border-t py-6 text-center font-mono text-[10px] uppercase tracking-widest ${loginDarkMode ? 'border-cyan-400/10 bg-[#02050b] text-slate-600' : 'border-cyan-700/15 bg-slate-100 text-slate-500'}`}>
               <div className="max-w-7xl mx-auto px-4">
                 © 2026 CloudSave Hub. Tất cả quyền được bảo lưu.
               </div>

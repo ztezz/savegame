@@ -44,10 +44,12 @@ function loadTurnstileScript() {
 export default function TurnstileWidget({
   siteKey,
   resetKey,
+  darkMode,
   onToken,
 }: {
   siteKey: string;
   resetKey: number;
+  darkMode: boolean;
   onToken: (token: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -70,7 +72,7 @@ export default function TurnstileWidget({
         if (cancelled || !containerRef.current || !window.turnstile) return;
         widgetId = window.turnstile.render(containerRef.current, {
           sitekey: siteKey,
-          theme: 'dark',
+          theme: darkMode ? 'dark' : 'light',
           size: 'flexible',
           action: 'login',
           callback: (token: string) => onToken(token),
@@ -90,13 +92,13 @@ export default function TurnstileWidget({
       cancelled = true;
       if (widgetId && window.turnstile) window.turnstile.remove(widgetId);
     };
-  }, [siteKey, resetKey, onToken]);
+  }, [siteKey, resetKey, darkMode, onToken]);
 
   return (
-    <div className="space-y-3 border border-cyan-300/25 bg-cyan-300/[0.04] p-3">
+    <div className={`space-y-3 border p-3 ${darkMode ? 'border-cyan-300/25 bg-cyan-300/[0.04]' : 'border-cyan-700/20 bg-cyan-50/70'}`}>
       <div className="flex items-center justify-between gap-3">
-        <p className="font-mono text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-300">Cloudflare verification</p>
-        <span className="font-mono text-[9px] uppercase tracking-wider text-slate-600">Anti-bot active</span>
+        <p className={`font-mono text-[10px] font-bold uppercase tracking-[0.2em] ${darkMode ? 'text-cyan-300' : 'text-cyan-800'}`}>Cloudflare verification</p>
+        <span className={`font-mono text-[9px] uppercase tracking-wider ${darkMode ? 'text-slate-600' : 'text-slate-500'}`}>Anti-bot active</span>
       </div>
       <div ref={containerRef} className="min-h-[65px] w-full" />
       {loadError && <p role="alert" className="text-xs font-semibold text-rose-300">{loadError}</p>}

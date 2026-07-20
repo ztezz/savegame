@@ -20,7 +20,6 @@ let nextId = 2;
 
 export const authRouter = Router();
 
-const MAX_LOGIN_FAILURES_BEFORE_TURNSTILE = 3;
 const DEFAULT_ALLOW_SELF_REGISTER = false;
 const AUTH_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const AUTH_RATE_LIMIT_MAX = 30;
@@ -189,8 +188,7 @@ authRouter.post("/api/auth/login", authRateLimit, async (req, res) => {
   }
 
   const loginKey = getLoginKey(req, username);
-  const failureCount = loginFailures.get(loginKey)?.count ?? 0;
-  if (failureCount >= MAX_LOGIN_FAILURES_BEFORE_TURNSTILE && !(await verifyTurnstile(turnstileToken, req.ip))) {
+  if (!(await verifyTurnstile(turnstileToken, req.ip))) {
     logAuthAudit(null, 'AUTH_LOGIN_FAILED', { username, reason: 'turnstile_failed' });
     return turnstileError(res, "Xác minh Cloudflare không hợp lệ hoặc đã hết hạn");
   }
@@ -201,12 +199,9 @@ authRouter.post("/api/auth/login", authRateLimit, async (req, res) => {
       username,
       reason: 'invalid_credentials',
       failedCount,
-      turnstileRequired: failedCount >= MAX_LOGIN_FAILURES_BEFORE_TURNSTILE,
+      turnstileRequired: true,
     });
-    if (failedCount >= MAX_LOGIN_FAILURES_BEFORE_TURNSTILE) {
-      return turnstileError(res, "Tên đăng nhập hoặc mật khẩu không đúng");
-    }
-    return res.status(401).json({ error: "Tên đăng nhập hoặc mật khẩu không đúng" });
+    return res.status(401).json({ error: "Tên đăng nhập hoặc mật khẩu không đúng", turnstileRequired: true });
   };
 
   let user: User | null = null;
