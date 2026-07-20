@@ -21,6 +21,7 @@ type CommunityEvent =
   | { type: 'message_updated'; roomId: number; messageId: number; changes: Record<string, any> }
   | { type: 'message_deleted'; roomId: number; messageId: number }
   | { type: 'room_changed' }
+  | { type: 'presence'; userIds: number[] }
   | { type: 'typing'; roomId: number; userId: number; displayName: string; typing: boolean };
 
 type EventClient = { res: any; userId: number; role: string };
@@ -41,6 +42,11 @@ function broadcastCommunityEvent(event: CommunityEvent, roomLocked = false) {
       eventClients.delete(client);
     }
   }
+}
+
+function broadcastCommunityPresence() {
+  const userIds = Array.from(new Set(Array.from(eventClients, (client) => client.userId)));
+  broadcastCommunityEvent({ type: 'presence', userIds });
 }
 
 async function getActiveBan(userId: number) {
@@ -333,6 +339,7 @@ communityRouter.get("/api/community/events", async (req: any, res) => {
   res.write('event: ready\ndata: {"ok":true}\n\n');
   const client: EventClient = { res, userId: ticket.userId, role: ticket.role };
   eventClients.add(client);
+  broadcastCommunityPresence();
 
   const keepAlive = setInterval(() => {
     res.write(': keep-alive\n\n');
@@ -341,6 +348,7 @@ communityRouter.get("/api/community/events", async (req: any, res) => {
   res.on('close', () => {
     clearInterval(keepAlive);
     eventClients.delete(client);
+    broadcastCommunityPresence();
   });
 });
 
@@ -532,10 +540,34 @@ communityRouter.get("/api/community/members", authenticateToken, async (_req: an
   }
 });
 
+communityRouter.post("/api/community/drive-shares/metadata", authenticateToken, async (req: any, res) => {
+  if (!isUsingDatabase()) return res.json([]);
+  const tokens: string[] = Array.from(new Set<string>(Array.isArray(req.body?.tokens) ? req.body.tokens.map((token: any) => String(token)) : []))
+    .filter((token) => /^[a-f0-9]{48}$/i.test(token))
+    .slice(0, 20);
+  if (tokens.length === 0) return res.json([]);
+
+  try {
+    const placeholders = tokens.map((_token, index) => `$${index + 1}`).join(', ');
+    const { rows } = await pool.query(
+      `SELECT ds.token, df.original_name, df.mime_type, df.file_size
+       FROM drive_shares ds
+       JOIN drive_files df ON df.id = ds.file_id
+       WHERE ds.token IN (${placeholders}) AND ds.disabled_at IS NULL AND df.deleted_at IS NULL
+         AND (ds.expires_at IS NULL OR ds.expires_at > CURRENT_TIMESTAMP)`,
+      tokens
+    );
+    res.json(rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to load shared Drive files" });
+  }
+});
+
 communityRouter.get("/api/community/messages", authenticateToken, async (req: any, res) => {
   if (!isUsingDatabase()) return res.json([]);
 
   const afterId = Number(req.query.afterId || 0);
+  const beforeId = Number(req.query.beforeId || 0);
   const limit = Math.min(Math.max(Number(req.query.limit || 80), 1), 200);
   const roomId = Math.max(1, Number(req.query.roomId || 1));
 
@@ -549,6 +581,10 @@ communityRouter.get("/api/community/messages", authenticateToken, async (req: an
     if (Number.isInteger(afterId) && afterId > 0) {
       params.push(afterId);
       where += ` AND cm.id > $${params.length}`;
+    }
+    if (Number.isInteger(beforeId) && beforeId > 0) {
+      params.push(beforeId);
+      where += ` AND cm.id < $${params.length}`;
     }
     params.push(limit);
 
@@ -569,6 +605,66 @@ communityRouter.get("/api/community/messages", authenticateToken, async (req: an
     res.json(rows.reverse());
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to load messages" });
+  }
+});
+
+communityRouter.get("/api/community/messages/search", authenticateToken, async (req: any, res) => {
+  if (!isUsingDatabase()) return res.json([]);
+  const roomId = Math.max(1, Number(req.query.roomId || 1));
+  const query = String(req.query.q || '').trim().slice(0, 100);
+  if (query.length < 2) return res.json([]);
+
+  try {
+    const room = await ensureRoom(roomId);
+    if (!room) return res.status(404).json({ error: "Room not found" });
+    if (room.is_locked && req.user.role !== 'Admin') return res.status(403).json({ error: "Phòng chat đang bị khóa" });
+    const { rows } = await pool.query(
+      `SELECT cm.id, cm.room_id, cm.user_id, cm.message, cm.sender_type, cm.reply_to_id, cm.reactions_json, cm.edited_at, cm.pinned_at, cm.created_at,
+              COALESCE(u.username, 'ai-bot') AS username,
+              COALESCE(cm.display_name, u.display_name) AS display_name,
+              COALESCE(u.role, CASE WHEN cm.sender_type = 'ai' THEN 'AI' ELSE NULL END) AS role,
+              u.avatar_url
+       FROM community_messages cm
+       LEFT JOIN users u ON u.id = cm.user_id
+       WHERE cm.room_id = $1 AND (cm.message LIKE $2 COLLATE NOCASE OR COALESCE(cm.display_name, u.display_name, u.username, '') LIKE $2 COLLATE NOCASE)
+       ORDER BY cm.id DESC
+       LIMIT 40`,
+      [roomId, `%${query}%`]
+    );
+    res.json(rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to search messages" });
+  }
+});
+
+communityRouter.get("/api/community/messages/:id/context", authenticateToken, async (req: any, res) => {
+  if (!isUsingDatabase()) return res.json([]);
+  const id = Number(req.params.id);
+  const roomId = Math.max(1, Number(req.query.roomId || 1));
+  if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid message id" });
+
+  try {
+    const room = await ensureRoom(roomId);
+    if (!room) return res.status(404).json({ error: "Room not found" });
+    if (room.is_locked && req.user.role !== 'Admin') return res.status(403).json({ error: "Phòng chat đang bị khóa" });
+    const target = await pool.query("SELECT id FROM community_messages WHERE id = $1 AND room_id = $2", [id, roomId]);
+    if (!target.rows[0]) return res.status(404).json({ error: "Message not found" });
+    const { rows } = await pool.query(
+      `SELECT cm.id, cm.room_id, cm.user_id, cm.message, cm.sender_type, cm.reply_to_id, cm.reactions_json, cm.edited_at, cm.pinned_at, cm.created_at,
+              COALESCE(u.username, 'ai-bot') AS username,
+              COALESCE(cm.display_name, u.display_name) AS display_name,
+              COALESCE(u.role, CASE WHEN cm.sender_type = 'ai' THEN 'AI' ELSE NULL END) AS role,
+              u.avatar_url
+       FROM community_messages cm
+       LEFT JOIN users u ON u.id = cm.user_id
+       WHERE cm.room_id = $1 AND cm.id BETWEEN $2 AND $3
+       ORDER BY cm.id ASC
+       LIMIT 121`,
+      [roomId, Math.max(1, id - 60), id + 60]
+    );
+    res.json(rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to load message context" });
   }
 });
 
