@@ -2,7 +2,7 @@
 import jwt from "jsonwebtoken";
 import * as bcrypt from "bcryptjs";
 import { pool, isUsingDatabase } from "../config/database.js";
-import { JWT_SECRET, NODE_ENV, TURNSTILE_ALLOWED_HOSTNAMES, TURNSTILE_SECRET_KEY } from "../config/environment.js";
+import { JWT_SECRET, TURNSTILE_ALLOWED_HOSTNAMES, TURNSTILE_SECRET_KEY } from "../config/environment.js";
 import { User } from "../database/types.js";
 import { authenticateToken, isAdmin } from "../middleware/auth.js";
 import { writeAudit } from "../utils/audit.js";
@@ -78,6 +78,10 @@ function turnstileError(res: any, error = "Vui lòng hoàn thành xác minh Clou
 }
 
 async function verifyTurnstile(token: unknown, remoteIp?: string): Promise<boolean> {
+  if (!TURNSTILE_SECRET_KEY) {
+    console.error("Turnstile is not configured: TURNSTILE_SECRET_KEY is missing");
+    return false;
+  }
   if (typeof token !== "string" || !token || token.length > 2048) return false;
 
   const body = new URLSearchParams({
@@ -108,7 +112,7 @@ async function verifyTurnstile(token: unknown, remoteIp?: string): Promise<boole
       console.error("Turnstile Siteverify rejected token:", result["error-codes"] || []);
       return false;
     }
-    if (NODE_ENV === "production" && result.action !== "login") {
+    if (result.action !== "login") {
       console.error("Turnstile action mismatch:", { expected: "login", received: result.action || null });
       return false;
     }

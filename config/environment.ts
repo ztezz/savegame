@@ -6,12 +6,8 @@ if (NODE_ENV === "production" && (!configuredJwtSecret || configuredJwtSecret ==
 }
 export const JWT_SECRET = configuredJwtSecret || insecureJwtSecret;
 
-const TURNSTILE_TEST_SECRET_KEY = "1x0000000000000000000000000000000AA";
 const configuredTurnstileSecret = process.env.TURNSTILE_SECRET_KEY;
-if (NODE_ENV === "production" && !configuredTurnstileSecret) {
-  throw new Error("TURNSTILE_SECRET_KEY is required in production");
-}
-export const TURNSTILE_SECRET_KEY = configuredTurnstileSecret || TURNSTILE_TEST_SECRET_KEY;
+export const TURNSTILE_SECRET_KEY = configuredTurnstileSecret || "";
 export const TURNSTILE_ALLOWED_HOSTNAMES = new Set(
   (process.env.TURNSTILE_ALLOWED_HOSTNAMES || "")
     .split(",")
