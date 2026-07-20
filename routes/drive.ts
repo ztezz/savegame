@@ -389,6 +389,7 @@ driveRouter.get("/api/drive/files", authenticateToken, async (req: any, res) => 
         `SELECT df.id, df.original_name, df.mime_type, df.file_size, df.note, df.created_at, df.deleted_at, ds.token AS share_token, ds.expires_at AS share_expires_at
          FROM drive_files df
          LEFT JOIN drive_shares ds ON ds.file_id = df.id AND ds.user_id = df.user_id AND ds.disabled_at IS NULL
+           AND (ds.expires_at IS NULL OR ds.expires_at > CURRENT_TIMESTAMP)
          WHERE df.user_id = $1 AND df.deleted_at IS NOT NULL AND ($2 = '' OR df.original_name LIKE $3 COLLATE NOCASE OR COALESCE(df.note, '') LIKE $3 COLLATE NOCASE)
          ORDER BY df.deleted_at DESC`,
         [req.user.id, search, likeSearch]
@@ -412,6 +413,7 @@ driveRouter.get("/api/drive/files", authenticateToken, async (req: any, res) => 
       `SELECT df.id, df.original_name, df.mime_type, df.file_size, df.note, df.created_at, df.deleted_at, ds.token AS share_token, ds.expires_at AS share_expires_at
        FROM drive_files df
        LEFT JOIN drive_shares ds ON ds.file_id = df.id AND ds.user_id = df.user_id AND ds.disabled_at IS NULL
+         AND (ds.expires_at IS NULL OR ds.expires_at > CURRENT_TIMESTAMP)
        WHERE df.user_id = $1 AND df.deleted_at IS NULL
           AND ($2 = '' OR df.original_name LIKE $3 COLLATE NOCASE OR COALESCE(df.note, '') LIKE $3 COLLATE NOCASE)
          AND ($2 != '' OR ${folderId ? "df.folder_id = $4" : "df.folder_id IS NULL"})
@@ -792,6 +794,26 @@ driveRouter.post("/api/drive/files/:id/share", authenticateToken, async (req: an
     res.status(201).json({ token: rows[0].token, expiresAt: rows[0].expires_at });
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Drive share failed" });
+  }
+});
+
+driveRouter.get("/api/drive/shares", authenticateToken, async (req: any, res) => {
+  if (!isUsingDatabase()) return res.json([]);
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT df.id AS file_id, df.original_name, df.mime_type, df.file_size,
+              ds.token, ds.created_at, ds.expires_at
+       FROM drive_shares ds
+       JOIN drive_files df ON df.id = ds.file_id AND df.user_id = ds.user_id
+       WHERE ds.user_id = $1 AND ds.disabled_at IS NULL AND df.deleted_at IS NULL
+         AND (ds.expires_at IS NULL OR ds.expires_at > CURRENT_TIMESTAMP)
+       ORDER BY ds.created_at DESC`,
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to list Drive shares" });
   }
 });
 

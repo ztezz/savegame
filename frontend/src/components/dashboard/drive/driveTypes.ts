@@ -18,6 +18,16 @@ export interface DriveFolder {
   deleted_at?: string | null;
 }
 
+export interface DriveShare {
+  file_id: number;
+  original_name: string;
+  mime_type: string | null;
+  file_size: number;
+  token: string;
+  created_at: string;
+  expires_at: string | null;
+}
+
 export interface DriveUsage {
   activeBytes: number;
   trashBytes: number;

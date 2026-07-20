@@ -18,6 +18,7 @@ const AccountTab = lazy(() => import('./dashboard/Tabs/AccountTab'));
 const ActivationTab = lazy(() => import('./dashboard/Tabs/ActivationTab'));
 const CategoryTab = lazy(() => import('./dashboard/Tabs/CategoryTab'));
 const DriveTab = lazy(() => import('./dashboard/Tabs/DriveTab'));
+const SharedLinksTab = lazy(() => import('./dashboard/Tabs/SharedLinksTab'));
 const CommunityChatTab = lazy(() => import('./dashboard/Tabs/CommunityChatTab'));
 const SqliteAdminTab = lazy(() => import('./dashboard/Tabs/SqliteAdminTab'));
 import { ActivationFile } from './dashboard/Tabs/ActivationTab';
@@ -35,7 +36,7 @@ const UserDetailModal = lazy(() => import('./dashboard/Modals/UserDetailModal'))
 import { GameSave, UserAccount, RestoreStatusItem } from './dashboard/types';
 import { isThemeDark, normalizeThemeMode, ThemeMode } from '../utils/theme';
 
-const DASHBOARD_TABS: DashboardTab[] = ['dashboard', 'library', 'drive', 'community', 'devices', 'settings', 'logs', 'users', 'activation', 'category', 'account', 'sqlite'];
+const DASHBOARD_TABS: DashboardTab[] = ['dashboard', 'library', 'drive', 'shared-links', 'community', 'devices', 'settings', 'logs', 'users', 'activation', 'category', 'account', 'sqlite'];
 const ADMIN_TABS: DashboardTab[] = ['logs', 'users', 'sqlite'];
 const getAccountThemeMode = (user: any): ThemeMode => {
   return normalizeThemeMode(user?.theme_mode);
@@ -161,6 +162,10 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
     drive: {
       title: 'Drive cá nhân',
       description: 'Lưu trữ, tải xuống và quản lý file cá nhân của bạn.',
+    },
+    'shared-links': {
+      title: 'Link chia sẻ bên ngoài',
+      description: 'Theo dõi và quản lý các file Drive đang được chia sẻ công khai.',
     },
     community: {
       title: 'Chat cộng đồng',
@@ -1035,6 +1040,12 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
           {activeTab === 'drive' && (
             <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải Drive...</div>}>
               <DriveTab />
+            </Suspense>
+          )}
+
+          {activeTab === 'shared-links' && (
+            <Suspense fallback={<div className="col-span-12 flex items-center justify-center py-8">Đang tải link chia sẻ...</div>}>
+              <SharedLinksTab />
             </Suspense>
           )}
 

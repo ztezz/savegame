@@ -1,10 +1,10 @@
 import React from 'react';
 import {
   Database, FileText, HardDrive, KeyRound, Laptop, LayoutDashboard,
-  Library, MessageCircle, Settings, Tags, User, Users, X,
+  Library, Link2, MessageCircle, Settings, Tags, User, Users, X,
 } from 'lucide-react';
 
-export type TabType = 'dashboard' | 'library' | 'drive' | 'community' | 'devices' | 'settings' | 'logs' | 'users' | 'activation' | 'category' | 'account' | 'sqlite';
+export type TabType = 'dashboard' | 'library' | 'drive' | 'shared-links' | 'community' | 'devices' | 'settings' | 'logs' | 'users' | 'activation' | 'category' | 'account' | 'sqlite';
 
 interface SidebarProps {
   activeTab: TabType;
@@ -19,6 +19,7 @@ const primaryItems = [
   { tab: 'library', label: 'Thư viện Game', icon: Library },
   { tab: 'category', label: 'Quản lý thể loại', icon: Tags },
   { tab: 'drive', label: 'Drive cá nhân', icon: HardDrive },
+  { tab: 'shared-links', label: 'Link chia sẻ', icon: Link2 },
   { tab: 'community', label: 'Chat cộng đồng', icon: MessageCircle },
   { tab: 'devices', label: 'Thiết bị kết nối', icon: Laptop },
   { tab: 'activation', label: 'File kích hoạt', icon: KeyRound },

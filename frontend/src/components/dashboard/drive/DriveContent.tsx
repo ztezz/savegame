@@ -1,5 +1,5 @@
 import React from 'react';
-import { File, Folder, FolderOpen, Inbox } from 'lucide-react';
+import { File, Folder, FolderOpen, Inbox, Share2 } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { DriveFile, DriveFolder, FileFilter } from './driveTypes';
 import { formatFileSize, getFileVisual } from './driveUtils';
@@ -47,7 +47,7 @@ const DriveContent: React.FC<Props> = ({ loading, trashMode, empty, filteredEmpt
       {visibleFiles.map((file, index) => {
         const visual = getFileVisual(file);
         return <motion.div layout initial={itemInitial} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} transition={{ ...itemTransition, delay: reduceMotion ? 0 : Math.min((visibleFolders.length + index) * 0.035, 0.25) }} key={`file-${file.id}`} className={`group rounded-2xl border bg-white p-4 transition-colors duration-200 ${selected.has(`file-${file.id}`) ? 'border-indigo-400 bg-indigo-50/40 ring-2 ring-indigo-100 shadow-lg shadow-indigo-100 dark:ring-indigo-950 dark:shadow-none' : 'border-slate-200 hover:border-indigo-200 hover:shadow-xl hover:shadow-slate-200/60 dark:hover:shadow-black/20'}`}>
-          <div className="flex items-start justify-between gap-2"><div className={`mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl ${visual.iconClass}`}><File className="h-6 w-6" /></div><input aria-label={`Chọn file ${file.original_name}`} type="checkbox" checked={selected.has(`file-${file.id}`)} onChange={() => onToggleSelected('file', file.id)} className="h-4 w-4 rounded accent-indigo-600" /></div>
+          <div className="flex items-start justify-between gap-2"><div className="flex items-start gap-2"><div className={`mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl ${visual.iconClass}`}><File className="h-6 w-6" /></div>{file.share_token && <span title="Đang chia sẻ bằng link công khai" aria-label="Đang chia sẻ bằng link công khai" className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 ring-4 ring-emerald-50"><Share2 className="h-3.5 w-3.5" /></span>}</div><input aria-label={`Chọn file ${file.original_name}`} type="checkbox" checked={selected.has(`file-${file.id}`)} onChange={() => onToggleSelected('file', file.id)} className="h-4 w-4 rounded accent-indigo-600" /></div>
           <p className="min-h-12 break-words font-black leading-5 text-slate-900 line-clamp-2">{file.original_name}</p>
           <div className="mt-3 flex flex-wrap items-center gap-2"><span className={`rounded-full border px-2 py-1 text-[10px] font-black ${visual.className}`}>{visual.label}</span><span className="text-xs font-bold text-slate-500">{formatFileSize(Number(file.file_size))}</span></div>
           {file.note && <p className="text-xs text-slate-400 mt-3 line-clamp-2">{file.note}</p>}
@@ -60,7 +60,7 @@ const DriveContent: React.FC<Props> = ({ loading, trashMode, empty, filteredEmpt
         {renderActions('folder', folder)}
       </motion.div>)}
       {visibleFiles.map((file, index) => <motion.div layout initial={itemInitial} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ ...itemTransition, delay: reduceMotion ? 0 : Math.min((visibleFolders.length + index) * 0.025, 0.2) }} key={`file-${file.id}`} className={`p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 hover:bg-slate-50 ${selected.has(`file-${file.id}`) ? 'bg-indigo-50' : ''}`}>
-        <div className="min-w-0 flex items-center gap-3"><input type="checkbox" checked={selected.has(`file-${file.id}`)} onChange={() => onToggleSelected('file', file.id)} className="w-4 h-4" /><File className="w-6 h-6 text-slate-500 shrink-0" /><div className="min-w-0"><p className="font-bold text-slate-800 truncate">{file.original_name}</p><p className="text-xs text-slate-500">{getFileVisual(file).label} · {formatFileSize(Number(file.file_size))} · {new Date(file.created_at).toLocaleString('vi-VN')}</p></div></div>
+        <div className="min-w-0 flex items-center gap-3"><input type="checkbox" checked={selected.has(`file-${file.id}`)} onChange={() => onToggleSelected('file', file.id)} className="w-4 h-4" /><File className="w-6 h-6 text-slate-500 shrink-0" /><div className="min-w-0"><p className="flex items-center gap-2 font-bold text-slate-800"><span className="truncate">{file.original_name}</span>{file.share_token && <Share2 title="Đang chia sẻ bằng link công khai" aria-label="Đang chia sẻ bằng link công khai" className="h-4 w-4 shrink-0 text-emerald-500" />}</p><p className="text-xs text-slate-500">{getFileVisual(file).label} · {formatFileSize(Number(file.file_size))} · {new Date(file.created_at).toLocaleString('vi-VN')}</p></div></div>
         {renderActions('file', file)}
       </motion.div>)}
     </motion.div>}</AnimatePresence>
