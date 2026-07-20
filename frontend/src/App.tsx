@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
 import DeviceLinkPage from './components/DeviceLinkPage';
@@ -8,6 +8,11 @@ import { ToastProvider } from './context/ToastContext';
 import api from './utils/api';
 import { clearAuthSession, getTokenExpiresAt, isTokenExpired } from './utils/authSession';
 import { cacheThemeMode, getCachedThemeMode, isThemeDark, normalizeThemeMode } from './utils/theme';
+
+const DEFAULT_SITE_NAME = 'CloudSave Hub';
+const SITE_NAME_CACHE_KEY = 'siteName';
+
+const getCachedSiteName = () => localStorage.getItem(SITE_NAME_CACHE_KEY)?.trim() || DEFAULT_SITE_NAME;
 
 const getStoredUser = () => {
   try {
@@ -32,7 +37,7 @@ export default function App() {
   const [token, setToken] = useState<string | null>(getStoredToken);
   const [user, setUser] = useState<any>(getStoredUser);
   const [loginDarkMode, setLoginDarkMode] = useState(() => isThemeDark(getCachedThemeMode()));
-  const [siteName, setSiteName] = useState('CloudSave Hub');
+  const [siteName, setSiteName] = useState(getCachedSiteName);
   const [deviceLinkToken, setDeviceLinkToken] = useState<string | null>(
     new URLSearchParams(window.location.search).get('device_link')
   );
@@ -57,17 +62,32 @@ export default function App() {
     setUser(null);
   };
 
+  const handleSiteNameChange = useCallback((nextSiteName: string) => {
+    const normalized = nextSiteName.trim();
+    if (!normalized) return;
+    localStorage.setItem(SITE_NAME_CACHE_KEY, normalized);
+    setSiteName(normalized);
+  }, []);
+
   useEffect(() => {
     window.addEventListener('auth:logout', handleLogout);
     return () => window.removeEventListener('auth:logout', handleLogout);
-  }, []);
+  }, [handleSiteNameChange]);
 
   useEffect(() => {
     api.get('/public/auth-settings').then(({ data }) => {
       const nextSiteName = String(data?.siteName || '').trim();
-      if (nextSiteName) setSiteName(nextSiteName);
+      if (nextSiteName) handleSiteNameChange(nextSiteName);
     }).catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    api.get('/system/settings').then(({ data }) => {
+      const nextSiteName = String(data?.ui?.siteName || '').trim();
+      if (nextSiteName) handleSiteNameChange(nextSiteName);
+    }).catch(() => undefined);
+  }, [handleSiteNameChange, token]);
 
   useEffect(() => {
     if (!shareToken) document.title = siteName;
@@ -133,7 +153,7 @@ export default function App() {
             </footer>
           </div>
         ) : token ? (
-          <Dashboard onLogout={handleLogout} currentUser={user} onUserUpdate={handleUserUpdate} siteName={siteName} onSiteNameChange={setSiteName} />
+          <Dashboard onLogout={handleLogout} currentUser={user} onUserUpdate={handleUserUpdate} siteName={siteName} onSiteNameChange={handleSiteNameChange} />
         ) : (
           <div className="min-h-screen flex flex-col">
             <div className="flex-1">

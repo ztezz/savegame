@@ -20,7 +20,7 @@ const DriveHeader: React.FC<Props> = ({ viewMode, trashMode, onSetViewMode, onTo
         <div className="mb-5 flex items-center gap-3">
           <motion.span animate={reduceMotion ? undefined : { y: [0, -3, 0] }} transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }} className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-white/15 bg-white/10 shadow-inner shadow-white/10 backdrop-blur"><Cloud className="h-5 w-5 text-cyan-300" /></motion.span>
           <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.28em] text-indigo-200">CloudSave Workspace</p>
+            <p className="text-[11px] font-black uppercase tracking-[0.28em] text-indigo-200">Drive Workspace</p>
             <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-slate-400"><ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />Không gian lưu trữ riêng tư</p>
           </div>
         </div>

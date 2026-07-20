@@ -406,7 +406,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
               </div>
               <span className="hidden items-center gap-1 rounded-full bg-emerald-400/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-emerald-300 sm:inline-flex"><Radio className="h-2.5 w-2.5" />Live</span>
             </div>
-            <p className="mt-1 truncate text-xs text-slate-400">{activeRoom?.description || 'Không gian trò chuyện của cộng đồng CloudSave.'}</p>
+            <p className="mt-1 truncate text-xs text-slate-400">{activeRoom?.description || 'Không gian trò chuyện của cộng đồng.'}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 text-[10px] font-black">

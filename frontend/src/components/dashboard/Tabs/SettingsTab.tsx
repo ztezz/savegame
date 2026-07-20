@@ -112,6 +112,8 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       try {
         const res = await api.get('/system/settings');
         setSettings({ ...defaultSettings, ...res.data, ui: { ...defaultSettings.ui, ...(res.data?.ui || {}) } });
+        const storedSiteName = String(res.data?.ui?.siteName || '').trim();
+        if (storedSiteName) onSiteNameChange(storedSiteName);
         setAgentVersion(res.data?.windowsAgent?.version || '');
       } catch {
         showToast('Không tải được cài đặt hệ thống', 'error');
@@ -134,7 +136,7 @@ const SettingsTab: React.FC<SettingsTabProps> = ({
       }
     };
     load();
-  }, [isAdmin, showToast]);
+  }, [isAdmin, onSiteNameChange, showToast]);
 
   const saveSettings = async () => {
     if (!isAdmin) return;
