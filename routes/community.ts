@@ -515,6 +515,23 @@ communityRouter.get("/api/community/stats", authenticateToken, isAdmin, async (r
   }
 });
 
+communityRouter.get("/api/community/members", authenticateToken, async (_req: any, res) => {
+  if (!isUsingDatabase()) return res.json([]);
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, username, display_name, avatar_url, role
+       FROM users
+       WHERE status = 'Active'
+       ORDER BY COALESCE(display_name, username) ASC
+       LIMIT 200`
+    );
+    res.json(rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || "Failed to load community members" });
+  }
+});
+
 communityRouter.get("/api/community/messages", authenticateToken, async (req: any, res) => {
   if (!isUsingDatabase()) return res.json([]);
 
@@ -539,7 +556,8 @@ communityRouter.get("/api/community/messages", authenticateToken, async (req: an
       `SELECT cm.id, cm.user_id, cm.message, cm.sender_type, cm.reply_to_id, cm.reactions_json, cm.edited_at, cm.pinned_at, cm.created_at,
               COALESCE(u.username, 'ai-bot') AS username,
               COALESCE(cm.display_name, u.display_name) AS display_name,
-              COALESCE(u.role, CASE WHEN cm.sender_type = 'ai' THEN 'AI' ELSE NULL END) AS role
+              COALESCE(u.role, CASE WHEN cm.sender_type = 'ai' THEN 'AI' ELSE NULL END) AS role,
+              u.avatar_url
        FROM community_messages cm
        LEFT JOIN users u ON u.id = cm.user_id
        ${where}
@@ -585,7 +603,7 @@ communityRouter.post("/api/community/messages", authenticateToken, async (req: a
       [roomId, req.user.id, message, replyToId]
     );
 
-    const userMessage = { ...rows[0], username: req.user.username, display_name: req.user.display_name || req.user.username, role: req.user.role };
+    const userMessage = { ...rows[0], username: req.user.username, display_name: req.user.display_name || req.user.username, avatar_url: req.user.avatar_url || null, role: req.user.role };
     res.status(201).json({ message: userMessage, aiMessage: null });
     broadcastCommunityEvent({ type: 'message_created', roomId, message: userMessage }, room.is_locked);
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowDown, Bot, ChevronDown, Copy, Hash, Loader2, Lock, Menu, Pin, Radio, Search, Send, Shield, Smile, Sparkles, Trash2, X } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import api, { API_BASE_URL } from '../../../utils/api';
+import api, { API_BASE_URL, API_ORIGIN } from '../../../utils/api';
 import { useToast } from '../../../context/ToastContext';
 
 const chatPattern = {
@@ -19,6 +19,7 @@ interface ChatMessage {
   user_id: number;
   username: string;
   display_name?: string | null;
+  avatar_url?: string | null;
   role?: string;
   sender_type?: 'user' | 'ai';
   reply_to_id?: number | null;
@@ -49,6 +50,14 @@ interface CommunityChatTabProps {
   onOpenMenu: () => void;
 }
 
+interface ChatMember {
+  id: number;
+  username: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  role?: string;
+}
+
 const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpenMenu }) => {
   const { showToast } = useToast();
   const reduceMotion = useReducedMotion();
@@ -71,6 +80,10 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
   const [deletingMessage, setDeletingMessage] = useState<ChatMessage | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [newMessageCount, setNewMessageCount] = useState(0);
+  const [members, setMembers] = useState<ChatMember[]>([]);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionStart, setMentionStart] = useState<number | null>(null);
+  const [activeMentionIndex, setActiveMentionIndex] = useState(0);
   const listRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const lastMessageIdRef = useRef(0);
@@ -88,6 +101,10 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
     ? messages.filter((item) => `${item.display_name || item.username} ${item.message}`.toLowerCase().includes(chatSearch.trim().toLowerCase()))
     : messages;
   const pinnedMessages = messages.filter((item) => item.pinned_at).slice(-3).reverse();
+  const mentionSuggestions = mentionQuery === null ? [] : members
+    .filter((member) => member.id !== currentUser?.id)
+    .filter((member) => `${member.username} ${member.display_name || ''}`.toLocaleLowerCase('vi').includes(mentionQuery.toLocaleLowerCase('vi')))
+    .slice(0, 6);
 
   const isNearBottom = () => {
     const el = listRef.current;
@@ -192,6 +209,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
 
   useEffect(() => {
     fetchRooms();
+    api.get('/community/members').then((response) => setMembers(Array.isArray(response.data) ? response.data : [])).catch(() => undefined);
     const timer = window.setInterval(fetchRooms, 30000);
     return () => window.clearInterval(timer);
   }, []);
@@ -292,6 +310,8 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
     setEditingText('');
     setDeletingMessage(null);
     setNewMessageCount(0);
+    setMentionQuery(null);
+    setMentionStart(null);
     lastMessageIdRef.current = 0;
     setLoading(true);
     setTypingUsers((current) => ({ ...current, [activeRoomId]: {} }));
@@ -341,14 +361,41 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
   };
 
   const handleMessageKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionSuggestions.length > 0 && mentionQuery !== null) {
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        setActiveMentionIndex((index) => event.key === 'ArrowDown' ? (index + 1) % mentionSuggestions.length : (index - 1 + mentionSuggestions.length) % mentionSuggestions.length);
+        return;
+      }
+      if (event.key === 'Tab' || event.key === 'Enter') {
+        event.preventDefault();
+        insertMention(mentionSuggestions[activeMentionIndex]);
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMentionQuery(null);
+        setMentionStart(null);
+        return;
+      }
+    }
     if (event.key !== 'Enter' || event.shiftKey) return;
     event.preventDefault();
     if (!message.trim() || sending) return;
     event.currentTarget.form?.requestSubmit();
   };
 
-  const handleMessageChange = (value: string) => {
+  const handleMessageChange = (value: string, cursorPosition = value.length) => {
     setMessage(value);
+    const match = value.slice(0, cursorPosition).match(/(?:^|\s)@([^\s@]{0,30})$/);
+    if (match) {
+      setMentionQuery(match[1]);
+      setMentionStart(cursorPosition - match[1].length - 1);
+      setActiveMentionIndex(0);
+    } else {
+      setMentionQuery(null);
+      setMentionStart(null);
+    }
     if (roomLockedForUser) return;
     if (!typingActiveRef.current) {
       typingActiveRef.current = true;
@@ -367,6 +414,15 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
   };
 
   const avatarLabel = (item: ChatMessage) => (item.display_name || item.username || '?').slice(0, 1).toUpperCase();
+
+  const renderMessageText = (text: string) => {
+    const ownUsername = String(currentUser?.username || '').toLocaleLowerCase('vi');
+    return text.split(/(@[\w.-]+)/g).map((part, index) => {
+      if (!part.startsWith('@')) return <React.Fragment key={index}>{part}</React.Fragment>;
+      const isMe = part.slice(1).toLocaleLowerCase('vi') === ownUsername;
+      return <span key={index} className={`rounded-md px-1 py-0.5 font-black ${isMe ? 'bg-amber-300 text-amber-950 ring-2 ring-amber-200/60' : 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-200'}`}>{part}</span>;
+    });
+  };
 
   const startEdit = (item: ChatMessage) => {
     setEditingMessageId(item.id);
@@ -414,6 +470,25 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Không cập nhật được tin ghim', 'error');
     }
+  };
+
+  const insertMention = (member: ChatMember) => {
+    if (mentionStart === null) return;
+    const textarea = composerRef.current;
+    const cursor = textarea?.selectionStart ?? message.length;
+    const mention = `@${member.username} `;
+    const nextMessage = `${message.slice(0, mentionStart)}${mention}${message.slice(cursor)}`;
+    setMessage(nextMessage);
+    setMentionQuery(null);
+    setMentionStart(null);
+    requestAnimationFrame(() => {
+      if (!textarea) return;
+      const nextCursor = mentionStart + mention.length;
+      textarea.focus();
+      textarea.setSelectionRange(nextCursor, nextCursor);
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 128)}px`;
+    });
   };
 
   const deleteMessage = async () => {
@@ -470,6 +545,15 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
         </div>
       </div>
 
+      {rooms.length > 1 && <div className="hidden gap-2 overflow-x-auto border-b border-slate-100 bg-white px-4 py-3 sm:flex dark:border-slate-800 dark:bg-slate-900">
+        {rooms.map((room) => <motion.button layout key={room.id} type="button" onClick={() => setActiveRoomId(room.id)} className={`group relative flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-xs font-black transition ${activeRoomId === room.id ? 'border-indigo-200 bg-indigo-600 text-white shadow-md shadow-indigo-100 dark:shadow-none' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-indigo-200 hover:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}>
+          <Hash className={`h-3.5 w-3.5 ${activeRoomId === room.id ? 'text-indigo-200' : 'text-slate-400 group-hover:text-indigo-500'}`} />
+          <span>{room.name}</span>
+          {unreadByRoom[room.id] > 0 && <motion.span initial={{ scale: 0.7 }} animate={{ scale: 1 }} className={`min-w-5 rounded-full px-1.5 py-0.5 text-[9px] ${activeRoomId === room.id ? 'bg-white text-indigo-700' : 'bg-rose-500 text-white'}`}>{Math.min(unreadByRoom[room.id], 99)}</motion.span>}
+          {room.is_locked && <Lock className="h-3 w-3 text-amber-400" />}
+        </motion.button>)}
+      </div>}
+
       <AnimatePresence initial={false}>{searchOpen && <motion.div initial={reduceMotion ? false : { height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.18 }} className="overflow-hidden border-b border-slate-100 bg-white">
         <div className="px-4 py-3">
         <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-sm transition focus-within:border-indigo-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-100/60 dark:focus-within:bg-slate-800 dark:focus-within:ring-indigo-950">
@@ -504,8 +588,8 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
           return <React.Fragment key={item.id}>
             {showDay && <div className="flex justify-center py-2"><span className="rounded-full border border-white/80 bg-white px-3 py-1 text-[11px] font-black text-sky-700 shadow-sm dark:border-slate-600 dark:bg-slate-800 dark:text-sky-300">{formatDay(item.created_at)}</span></div>}
             <motion.div layout initial={reduceMotion ? false : { opacity: 0, x: mine ? 10 : -10, scale: 0.98 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }} transition={{ duration: reduceMotion ? 0 : 0.2 }} className={`flex items-end gap-2 ${mine ? 'justify-end' : 'justify-start'}`}>
-            {!mine && <div className={`mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[10px] font-black text-white shadow-sm ${isAi ? 'bg-gradient-to-br from-violet-500 to-indigo-600' : 'bg-slate-800'}`}>{isAi ? <Bot className="h-4 w-4" /> : avatarLabel(item)}</div>}
-            <div className={`relative max-w-[88%] px-4 py-3 shadow-sm sm:max-w-[72%] ${mine ? 'rounded-2xl rounded-br-md border border-emerald-200/80 bg-emerald-100 text-slate-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-50' : isAi ? 'rounded-2xl rounded-bl-md border border-violet-100 bg-violet-50 text-slate-800 dark:border-violet-800 dark:bg-violet-950/90 dark:text-violet-100' : 'rounded-2xl rounded-bl-md border border-white/80 bg-white text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100'}`}>
+            {!mine && <div className={`mb-1 flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl text-[10px] font-black text-white shadow-sm ring-2 ring-white/70 ${isAi ? 'bg-gradient-to-br from-violet-500 to-indigo-600' : 'bg-slate-800'}`}>{isAi ? <Bot className="h-4 w-4" /> : item.avatar_url ? <img src={`${API_ORIGIN}${item.avatar_url}`} alt={item.display_name || item.username} className="h-full w-full object-cover" onError={(event) => { event.currentTarget.style.display = 'none'; event.currentTarget.nextElementSibling?.classList.remove('hidden'); }} /> : null}{!isAi && <span className={item.avatar_url ? 'hidden' : ''}>{avatarLabel(item)}</span>}</div>}
+            <div className={`relative max-w-[88%] px-4 py-3 shadow-sm sm:max-w-[72%] ${item.message.toLocaleLowerCase('vi').includes(`@${String(currentUser?.username || '').toLocaleLowerCase('vi')}`) ? 'ring-2 ring-amber-300 ring-offset-2' : ''} ${mine ? 'rounded-2xl rounded-br-md border border-emerald-200/80 bg-emerald-100 text-slate-800 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-50' : isAi ? 'rounded-2xl rounded-bl-md border border-violet-100 bg-violet-50 text-slate-800 dark:border-violet-800 dark:bg-violet-950/90 dark:text-violet-100' : 'rounded-2xl rounded-bl-md border border-white/80 bg-white text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100'}`}>
               <div className="flex items-center justify-between gap-3 mb-1">
                 <span className={`text-xs font-black ${mine ? 'text-emerald-800 dark:text-emerald-200' : isAi ? 'text-violet-700 dark:text-violet-300' : 'text-slate-700 dark:text-slate-200'}`}>{item.display_name || item.username}{item.role === 'Admin' && <Shield className="inline w-3 h-3 ml-1" />}{isAi && <span className="ml-1 rounded-full bg-violet-200 px-1.5 py-0.5 text-[9px] text-violet-800 dark:bg-violet-900 dark:text-violet-200">AI</span>}</span>
                 <span className={`text-[10px] ${mine ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>{item.pinned_at && <Pin className="mr-1 inline h-3 w-3" />}{new Date(item.created_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span>
@@ -520,7 +604,7 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
                   <button type="button" onClick={saveEdit} className="rounded-lg bg-emerald-500 px-3 py-1 text-xs font-black text-white">Lưu</button>
                   <button type="button" onClick={() => { setEditingMessageId(null); setEditingText(''); }} className="rounded-lg bg-slate-100 px-3 py-1 text-xs font-black text-slate-600 dark:bg-slate-700 dark:text-slate-200">Hủy</button>
                 </div>
-              </div> : <p className="text-sm whitespace-pre-wrap break-words leading-6">{item.message}</p>}
+              </div> : <p className="text-sm whitespace-pre-wrap break-words leading-6">{renderMessageText(item.message)}</p>}
               {item.edited_at && <p className={`mt-1 text-[10px] font-semibold ${mine ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>đã sửa</p>}
               {item.reactions_json && Object.keys(item.reactions_json).length > 0 && <div className="mt-2 flex flex-wrap gap-1">
                 {Object.entries(item.reactions_json as Record<string, string[]>).map(([emoji, users]) => <button key={emoji} type="button" onClick={() => toggleReaction(item.id, emoji)} className={`rounded-full px-2 py-0.5 text-xs font-bold ${mine ? 'bg-white/60 text-emerald-800 dark:bg-white/10 dark:text-emerald-100' : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-200'}`}>{emoji} {users.length}</button>)}
@@ -558,9 +642,19 @@ const CommunityChatTab: React.FC<CommunityChatTabProps> = ({ currentUser, onOpen
             {quickEmojis.map((emoji) => <motion.button whileHover={reduceMotion ? undefined : { y: -3, scale: 1.12 }} whileTap={reduceMotion ? undefined : { scale: 0.9 }} key={emoji} type="button" onClick={() => addEmoji(emoji)} disabled={sending} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-lg shadow-sm transition hover:bg-sky-100 disabled:opacity-50 dark:bg-slate-700 dark:hover:bg-slate-600">{emoji}</motion.button>)}
           </motion.div>}</AnimatePresence>
         </div>
+        <div className="relative">
+          <AnimatePresence>{mentionQuery !== null && mentionSuggestions.length > 0 && <motion.div initial={reduceMotion ? false : { opacity: 0, y: 8, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 6, scale: 0.98 }} className="absolute bottom-full left-0 z-30 mb-2 w-full max-w-sm overflow-hidden rounded-2xl border border-indigo-100 bg-white p-2 shadow-2xl shadow-indigo-200/50 dark:border-slate-700 dark:bg-slate-800 dark:shadow-black/50">
+            <p className="px-3 py-2 text-[10px] font-black uppercase tracking-widest text-indigo-500">Nhắc thành viên</p>
+            {mentionSuggestions.map((member, index) => <button key={member.id} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => insertMention(member)} className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left transition ${activeMentionIndex === index ? 'bg-indigo-50 dark:bg-indigo-950/70' : 'hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-xs font-black text-white">{member.avatar_url ? <img src={`${API_ORIGIN}${member.avatar_url}`} alt="" className="h-full w-full object-cover" /> : (member.display_name || member.username).slice(0, 1).toUpperCase()}</span>
+              <span className="min-w-0 flex-1"><span className="block truncate text-sm font-black text-slate-800 dark:text-white">{member.display_name || member.username}</span><span className="block truncate text-xs font-medium text-slate-400">@{member.username}{member.role === 'Admin' ? ' · Admin' : ''}</span></span>
+            </button>)}
+            <p className="px-3 pb-1 pt-2 text-[9px] font-bold text-slate-400">↑ ↓ để chọn · Enter hoặc Tab để chèn</p>
+          </motion.div>}</AnimatePresence>
         <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-2 transition focus-within:border-indigo-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-100/60 dark:border-slate-700 dark:bg-slate-800 dark:focus-within:bg-slate-800 dark:focus-within:ring-indigo-950">
-          <textarea ref={composerRef} value={message} onChange={(e) => { handleMessageChange(e.target.value); e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`; }} onKeyDown={handleMessageKeyDown} maxLength={1000} rows={1} disabled={roomLockedForUser} placeholder={roomLockedForUser ? 'Phòng đang bị khóa' : `Nhắn tin tới #${activeRoom?.name || 'cộng đồng'}`} className="max-h-32 min-h-11 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-sm font-medium text-slate-800 caret-indigo-600 outline-none placeholder:text-slate-400 disabled:text-slate-400 dark:!bg-transparent dark:text-white dark:caret-indigo-400 dark:placeholder:text-slate-500" />
+          <textarea ref={composerRef} value={message} onChange={(e) => { handleMessageChange(e.target.value, e.target.selectionStart); e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight, 128)}px`; }} onKeyDown={handleMessageKeyDown} maxLength={1000} rows={1} disabled={roomLockedForUser} placeholder={roomLockedForUser ? 'Phòng đang bị khóa' : `Nhắn tin tới #${activeRoom?.name || 'cộng đồng'}`} className="max-h-32 min-h-11 flex-1 resize-none overflow-y-auto bg-transparent px-2 py-2.5 text-sm font-medium text-slate-800 caret-indigo-600 outline-none placeholder:text-slate-400 disabled:text-slate-400 dark:!bg-transparent dark:text-white dark:caret-indigo-400 dark:placeholder:text-slate-500" />
           <motion.button whileTap={reduceMotion ? undefined : { scale: 0.92 }} type="submit" disabled={!message.trim() || sending || roomLockedForUser} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-lg shadow-indigo-200 transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none dark:shadow-none dark:disabled:bg-slate-700 dark:disabled:text-slate-400"><Send className="h-4 w-4" /></motion.button>
+        </div>
         </div>
         <div className="mt-2 flex items-center justify-between px-1 text-[10px] font-semibold text-slate-400"><span>Enter để gửi · Shift + Enter để xuống dòng</span><span>{message.length}/1000</span></div>
       </form>
