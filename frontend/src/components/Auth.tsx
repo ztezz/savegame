@@ -19,7 +19,7 @@ import { motion, AnimatePresence, useMotionTemplate, useMotionValue, useReducedM
 import { useToast } from '../context/ToastContext';
 import TurnstileWidget from './TurnstileWidget';
 
-const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || (import.meta.env.DEV ? '1x00000000000000000000AA' : '');
+const TURNSTILE_SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY || (import.meta.env.DEV ? '3x00000000000000000000FF' : '');
 
 export default function Auth({ onLogin, darkMode }: { onLogin: (token: string, user: any) => void; darkMode: boolean }) {
   const [isLogin, setIsLogin] = useState(true);
