@@ -42,7 +42,7 @@ usersRouter.get("/api/users/me", authenticateToken, async (req: any, res) => {
   if (isUsingDatabase()) {
     try {
       const { rows } = await pool.query(
-        'SELECT id, username, display_name, email, role, status, drive_quota_mb, avatar_url, created_at FROM users WHERE id = $1',
+        'SELECT id, username, display_name, email, role, status, drive_quota_mb, avatar_url, theme_mode, created_at FROM users WHERE id = $1',
         [userId]
       );
       if (rows.length === 0) return res.status(404).json({ error: "User not found" });
@@ -61,7 +61,7 @@ usersRouter.get("/api/users/me", authenticateToken, async (req: any, res) => {
 // ─── PUT /api/users/me ────────────────────────────────────────────────────────
 usersRouter.put("/api/users/me", authenticateToken, async (req: any, res) => {
   const userId = req.user?.id;
-  const { display_name, email } = req.body;
+  const { display_name, email, theme_mode } = req.body;
   if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
   if (display_name !== undefined && String(display_name).trim().length < 2) {
@@ -70,12 +70,15 @@ usersRouter.put("/api/users/me", authenticateToken, async (req: any, res) => {
   if (email !== undefined && String(email).trim() && !/^\S+@\S+\.\S+$/.test(String(email).trim())) {
     return res.status(400).json({ error: "Invalid email" });
   }
+  if (theme_mode !== undefined && !['light', 'dark', 'auto'].includes(theme_mode)) {
+    return res.status(400).json({ error: "Invalid theme mode" });
+  }
 
   if (isUsingDatabase()) {
     try {
       const { rows } = await pool.query(
-        'UPDATE users SET display_name = COALESCE($1, display_name), email = COALESCE($2, email) WHERE id = $3 RETURNING id, username, display_name, email, role, status, avatar_url, created_at',
-        [display_name ? String(display_name).trim() : null, email ? String(email).trim() : null, userId]
+        'UPDATE users SET display_name = COALESCE($1, display_name), email = COALESCE($2, email), theme_mode = COALESCE($3, theme_mode) WHERE id = $4 RETURNING id, username, display_name, email, role, status, avatar_url, theme_mode, created_at',
+        [display_name ? String(display_name).trim() : null, email ? String(email).trim() : null, theme_mode ?? null, userId]
       );
       if (rows.length === 0) return res.status(404).json({ error: "User not found" });
       return res.json({ user: { ...rows[0], name: rows[0].display_name, createdAt: rows[0].created_at } });
@@ -88,8 +91,9 @@ usersRouter.put("/api/users/me", authenticateToken, async (req: any, res) => {
   if (idx === -1) return res.status(404).json({ error: "User not found" });
   (users[idx] as any).display_name = display_name ? String(display_name).trim() : (users[idx] as any).display_name;
   users[idx].email = email ? String(email).trim() : users[idx].email;
+  if (theme_mode !== undefined) users[idx].themeMode = theme_mode;
   const { passwordHash, ...safeUser } = users[idx] as any;
-  return res.json({ user: safeUser });
+  return res.json({ user: { ...safeUser, theme_mode: users[idx].themeMode ?? 'auto' } });
 });
 
 // ─── POST /api/users/me/avatar ────────────────────────────────────────────────

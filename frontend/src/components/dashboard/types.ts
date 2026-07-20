@@ -36,6 +36,7 @@ export interface UserAccount {
   drive_file_count?: number;
   save_count?: number;
   avatar_url?: string | null;
+  theme_mode?: 'light' | 'dark' | 'auto';
   createdAt: string;
 }
 

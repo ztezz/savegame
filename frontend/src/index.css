@@ -19,6 +19,22 @@
 }
 
 @layer utilities {
+  .auth-cyber-grid {
+    background-image:
+      linear-gradient(rgb(34 211 238 / 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgb(34 211 238 / 0.035) 1px, transparent 1px);
+    background-size: 36px 36px;
+    mask-image: radial-gradient(circle at center, black 15%, transparent 82%);
+  }
+
+  .auth-scanlines {
+    background: repeating-linear-gradient(to bottom, transparent 0, transparent 3px, rgb(2 6 23 / 0.3) 4px);
+  }
+
+  .auth-cyber-panel {
+    clip-path: polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 22px 100%, 0 calc(100% - 22px));
+  }
+
   .dark .admin-dark-surface {
     color-scheme: dark;
   }

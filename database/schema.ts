@@ -11,6 +11,7 @@ export const sqliteSchema = `
     password_hash TEXT NOT NULL,
     drive_quota_mb INTEGER,
     avatar_url TEXT,
+    theme_mode TEXT NOT NULL DEFAULT 'auto' CHECK(theme_mode IN ('light', 'dark', 'auto')),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   );
   CREATE TABLE IF NOT EXISTS login_history (
@@ -231,7 +232,10 @@ export async function initializeSchema() {
     pool.exec(sqliteSchema);
     await addMissingColumns("saves", { sha256: "TEXT", original_filename: "TEXT" });
     await addMissingColumns("restore_commands", { lease_token: "TEXT", lease_expires_at: "TEXT" });
-    await addMissingColumns("users", { avatar_url: "TEXT" });
+    await addMissingColumns("users", {
+      avatar_url: "TEXT",
+      theme_mode: "TEXT NOT NULL DEFAULT 'auto' CHECK(theme_mode IN ('light', 'dark', 'auto'))",
+    });
     pool.exec(leaseIndexesSchema);
     await pool.query("UPDATE users SET role = 'Admin' WHERE username = 'admin' AND role != 'Admin'");
     await pool.query("UPDATE users SET display_name = username WHERE display_name IS NULL");

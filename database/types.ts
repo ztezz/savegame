@@ -6,6 +6,7 @@ export interface User {
   role: string; 
   status: string; 
   passwordHash: string; 
+  themeMode?: 'light' | 'dark' | 'auto';
   createdAt: string; 
 }
 

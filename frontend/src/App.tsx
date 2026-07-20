@@ -107,7 +107,7 @@ export default function App() {
             <div className="flex-1">
               <Auth onLogin={handleLogin} />
             </div>
-            <footer className="border-t border-slate-200 bg-slate-50 py-6 text-center text-xs text-slate-500">
+            <footer className="border-t border-cyan-400/10 bg-[#02050b] py-6 text-center font-mono text-[10px] uppercase tracking-widest text-slate-600">
               <div className="max-w-7xl mx-auto px-4">
                 © 2026 CloudSave Hub. Tất cả quyền được bảo lưu.
               </div>

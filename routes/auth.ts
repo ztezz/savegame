@@ -238,6 +238,7 @@ authRouter.post("/api/auth/login", authRateLimit, async (req, res) => {
         role: dbUser.role,
         status: dbUser.status,
         passwordHash: dbUser.password_hash,
+        themeMode: dbUser.theme_mode ?? 'auto',
         createdAt: dbUser.created_at
       };
     } catch (err: any) {
@@ -264,7 +265,7 @@ authRouter.post("/api/auth/login", authRateLimit, async (req, res) => {
   loginFailures.delete(loginKey);
   await writeAudit(user.id, 'AUTH_LOGIN_SUCCESS', 'auth', { username, role: user.role });
   if (isUsingDatabase()) await recordLoginHistory(user.id, req, 'success');
-  res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+  res.json({ token, user: { id: user.id, username: user.username, role: user.role, theme_mode: user.themeMode ?? 'auto' } });
 });
 
 authRouter.post("/api/auth/change-password", authenticateToken, async (req: any, res: any) => {

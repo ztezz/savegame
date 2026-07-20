@@ -43,10 +43,9 @@ const isAutoDarkTime = () => {
   return hour < 6 || hour >= 18;
 };
 
-const getInitialThemeMode = (): ThemeMode => {
-  const saved = localStorage.getItem('dashboardThemeMode');
-  if (saved === 'light' || saved === 'dark' || saved === 'auto') return saved;
-  return localStorage.getItem('dashboardDarkMode') === '1' ? 'dark' : 'light';
+const getAccountThemeMode = (user: any): ThemeMode => {
+  const mode = user?.theme_mode;
+  return mode === 'light' || mode === 'dark' || mode === 'auto' ? mode : 'auto';
 };
 
 const getInitialDashboardTab = (): DashboardTab => {
@@ -122,7 +121,7 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
   // Change Password State
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [changePasswordLoading, setChangePasswordLoading] = useState(false);
-  const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialThemeMode);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => getAccountThemeMode(currentUser));
   const [darkMode, setDarkMode] = useState(() => themeMode === 'dark' || (themeMode === 'auto' && isAutoDarkTime()));
 
   // User Detail Modal State
@@ -143,12 +142,14 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
   }, [activeTab, isAdmin]);
 
   useEffect(() => {
+    setThemeMode(getAccountThemeMode(currentUser));
+  }, [currentUser?.id, currentUser?.theme_mode]);
+
+  useEffect(() => {
     const applyTheme = () => {
       const nextDarkMode = themeMode === 'dark' || (themeMode === 'auto' && isAutoDarkTime());
       setDarkMode(nextDarkMode);
-      localStorage.setItem('dashboardDarkMode', nextDarkMode ? '1' : '0');
     };
-    localStorage.setItem('dashboardThemeMode', themeMode);
     applyTheme();
     if (themeMode !== 'auto') return;
     const timer = window.setInterval(applyTheme, 60_000);
@@ -294,6 +295,21 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
     } catch (err: any) {
       showToast(err.response?.data?.error || 'Không thể cập nhật tài khoản', 'error', 3000);
       throw err;
+    }
+  };
+
+  const handleThemeModeChange = async (nextMode: ThemeMode) => {
+    if (nextMode === themeMode) return;
+    const previousMode = themeMode;
+    setThemeMode(nextMode);
+    try {
+      const res = await api.put('/users/me', { theme_mode: nextMode });
+      const nextUser = { ...(currentUser || {}), ...res.data.user };
+      localStorage.setItem('user', JSON.stringify(nextUser));
+      onUserUpdate(nextUser);
+    } catch (err: any) {
+      setThemeMode(previousMode);
+      showToast(err.response?.data?.error || 'Không thể lưu chế độ giao diện', 'error', 3000);
     }
   };
 
@@ -854,7 +870,7 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
               </>
             )}
             <button
-              onClick={() => setThemeMode(darkMode ? 'light' : 'dark')}
+              onClick={() => handleThemeModeChange(darkMode ? 'light' : 'dark')}
               className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
               title={darkMode ? 'Tắt dark mode' : 'Bật dark mode'}
               aria-label={darkMode ? 'Tắt chế độ tối' : 'Bật chế độ tối'}
@@ -1065,7 +1081,7 @@ export default function Dashboard({ onLogout, currentUser, onUserUpdate }: { onL
                  setSyncInterval={setSyncInterval}
                  darkMode={darkMode}
                  themeMode={themeMode}
-                 setThemeMode={setThemeMode}
+                 setThemeMode={handleThemeModeChange}
                />
             </Suspense>
           )}
