@@ -168,8 +168,8 @@ syncRouter.post("/api/restore", authenticateToken, async (req: any, res) => {
 
       const saveRow = saveRes.rows[0];
       const queued = await pool.query(
-        `INSERT INTO restore_commands (user_id, game_id, save_id, game_name, device_name, save_path, status, retry_count, max_retries)
-         VALUES ($1, $2, $3, $4, $5, $6, 'Pending', 0, 2)
+        `INSERT INTO restore_commands (user_id, game_id, save_id, game_name, device_name, save_path, status, retry_count, max_retries, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'Pending', 0, 2, CURRENT_TIMESTAMP)
          RETURNING id, game_id, save_id, game_name, device_name, save_path, status, created_at`,
         [req.user.id, saveRow.game_id, saveRow.save_id, saveRow.game_name, deviceId, saveRow.save_path || null]
       );
@@ -429,8 +429,8 @@ syncRouter.post("/api/sync/restore/:gameId", authenticateToken, async (req: any,
       }
 
       const insertRes = await pool.query(
-        `INSERT INTO restore_commands (user_id, game_id, save_id, game_name, device_name, save_path, status, max_retries)
-         VALUES ($1, $2, $3, $4, $5, $6, 'Pending', $7)
+        `INSERT INTO restore_commands (user_id, game_id, save_id, game_name, device_name, save_path, status, max_retries, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, 'Pending', $7, CURRENT_TIMESTAMP)
          RETURNING id, game_name, save_id, save_path, status, created_at, device_name, retry_count, max_retries`,
         [req.user.id, row.game_id, row.save_id, row.game_name, deviceName || null, row.custom_file_path || null, normalizedMaxRetries]
       );

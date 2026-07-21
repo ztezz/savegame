@@ -67,8 +67,6 @@ export const sqliteSchema = `
     lease_expires_at TEXT,
     completed_at TEXT
   );
-  CREATE INDEX IF NOT EXISTS idx_restore_commands_user_status_created ON restore_commands(user_id, status, created_at DESC);
-  CREATE INDEX IF NOT EXISTS idx_restore_commands_user_device_status_created ON restore_commands(user_id, device_name, status, created_at);
   CREATE TABLE IF NOT EXISTS activation_files (
     id INTEGER PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -245,7 +243,11 @@ export const sqliteSchema = `
   CREATE INDEX IF NOT EXISTS idx_community_bans_until ON community_bans(banned_until);
 `;
 
-const leaseIndexesSchema = `
+const restoreIndexesSchema = `
+  CREATE INDEX IF NOT EXISTS idx_restore_commands_user_status_created
+  ON restore_commands(user_id, status, created_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_restore_commands_user_device_status_created
+  ON restore_commands(user_id, device_name, status, created_at);
   CREATE INDEX IF NOT EXISTS idx_restore_commands_active_lease
   ON restore_commands(user_id, device_name, status, lease_expires_at);
 `;
@@ -263,13 +265,33 @@ export async function initializeSchema() {
   try {
     const { pool } = await import("../config/database.js");
     pool.exec(sqliteSchema);
-    await addMissingColumns("saves", { sha256: "TEXT", original_filename: "TEXT" });
-    await addMissingColumns("restore_commands", { lease_token: "TEXT", lease_expires_at: "TEXT" });
+    await addMissingColumns("saves", {
+      custom_file_path: "TEXT",
+      sha256: "TEXT",
+      original_filename: "TEXT",
+    });
+    await addMissingColumns("restore_commands", {
+      user_id: "INTEGER REFERENCES users(id) ON DELETE CASCADE",
+      game_id: "INTEGER REFERENCES games(id) ON DELETE CASCADE",
+      save_id: "INTEGER REFERENCES saves(id) ON DELETE CASCADE",
+      game_name: "TEXT",
+      device_name: "TEXT",
+      save_path: "TEXT",
+      status: "TEXT NOT NULL DEFAULT 'Pending'",
+      error_message: "TEXT",
+      retry_count: "INTEGER NOT NULL DEFAULT 0",
+      max_retries: "INTEGER NOT NULL DEFAULT 2",
+      created_at: "TEXT",
+      claimed_at: "TEXT",
+      lease_token: "TEXT",
+      lease_expires_at: "TEXT",
+      completed_at: "TEXT",
+    });
     await addMissingColumns("users", {
       avatar_url: "TEXT",
       theme_mode: "TEXT NOT NULL DEFAULT 'auto' CHECK(theme_mode IN ('light', 'dark', 'auto'))",
     });
-    pool.exec(leaseIndexesSchema);
+    pool.exec(restoreIndexesSchema);
     await pool.query("UPDATE users SET role = 'Admin' WHERE username = 'admin' AND role != 'Admin'");
     await pool.query("UPDATE users SET display_name = username WHERE display_name IS NULL");
     console.log("✅ Đã khởi tạo SQLite schema thành công!");
