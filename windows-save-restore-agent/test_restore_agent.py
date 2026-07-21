@@ -188,29 +188,33 @@ class RestoreAgentSecurityTests(unittest.TestCase):
 
             self.assertEqual((target / "profile").read_bytes(), b"existing file")
 
-    def test_restore_rolls_back_when_staging_commit_fails(self) -> None:
+    def test_restore_never_moves_or_deletes_the_target_directory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             target = root / "game-save"
             target.mkdir()
             (target / "original.dat").write_bytes(b"original")
             archive = self.make_zip(root, {"replacement.dat": b"replacement"})
-            real_move = self.agent._move_directory
-            calls = 0
 
-            def fail_staging_commit(source: object, destination: object) -> None:
-                nonlocal calls
-                calls += 1
-                if calls == 2:
-                    raise OSError("simulated commit failure")
-                real_move(Path(source), Path(destination))
-
-            with patch.object(self.agent, "_move_directory", side_effect=fail_staging_commit):
-                with self.assertRaisesRegex(OSError, "simulated commit failure"):
-                    self.agent.apply_restore(archive, str(target), None)
+            with patch.object(self.agent, "_move_directory") as move_directory:
+                self.agent.apply_restore(archive, str(target), None)
 
             self.assertEqual((target / "original.dat").read_bytes(), b"original")
-            self.assertFalse((target / "replacement.dat").exists())
+            self.assertEqual((target / "replacement.dat").read_bytes(), b"replacement")
+            move_directory.assert_not_called()
+
+    def test_restore_to_broad_path_preserves_sibling_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "all-game-saves"
+            (target / "other-game").mkdir(parents=True)
+            (target / "other-game" / "save.dat").write_bytes(b"other")
+            archive = self.make_zip(root, {"selected-game/save.dat": b"selected"})
+
+            self.agent.apply_restore(archive, str(target), None)
+
+            self.assertEqual((target / "selected-game" / "save.dat").read_bytes(), b"selected")
+            self.assertEqual((target / "other-game" / "save.dat").read_bytes(), b"other")
 
     def test_process_task_requires_save_path_before_download(self) -> None:
         self.agent.device_id = "test-device"

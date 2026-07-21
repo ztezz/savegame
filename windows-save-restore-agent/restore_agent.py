@@ -752,36 +752,46 @@ class RestoreAgent:
     def _move_directory(self, source: Path, destination: Path) -> None:
         durable_replace(source, destination)
 
-    def _merge_existing_files(self, source: Path, destination: Path,
-                              lease: Optional[LeaseKeeper] = None) -> None:
-        destination_entries = {entry.name.casefold(): entry for entry in destination.iterdir()}
+    def _validate_restore_overlay(self, source: Path, destination: Path,
+                                  lease: Optional[LeaseKeeper] = None) -> None:
+        destination_entries = ({entry.name.casefold(): entry for entry in destination.iterdir()}
+                               if destination.exists() else {})
         for source_entry in source.iterdir():
             if lease:
                 lease.ensure_owned()
             if self.stop_event.is_set():
-                raise InterruptedError("Restore cancelled while preserving existing files")
+                raise InterruptedError("Restore cancelled while validating existing files")
             if self._is_reparse(source_entry):
-                raise ValueError(f"Refusing to preserve a reparse point: {source_entry}")
+                raise ValueError(f"Refusing to restore a reparse point: {source_entry}")
 
             mode = source_entry.stat(follow_symlinks=False).st_mode
             destination_entry = destination_entries.get(source_entry.name.casefold())
             if stat.S_ISDIR(mode):
-                if destination_entry is None:
-                    destination_entry = destination / source_entry.name
-                    destination_entry.mkdir()
-                    destination_entries[source_entry.name.casefold()] = destination_entry
-                elif not destination_entry.is_dir() or self._is_reparse(destination_entry):
+                if destination_entry is not None and (not destination_entry.is_dir() or
+                                                       self._is_reparse(destination_entry)):
                     raise ValueError(f"Restore file/directory conflict: {source_entry.name}")
-                self._merge_existing_files(source_entry, destination_entry, lease)
-                shutil.copystat(source_entry, destination_entry, follow_symlinks=False)
+                self._validate_restore_overlay(
+                    source_entry, destination_entry or destination / source_entry.name, lease)
             elif stat.S_ISREG(mode):
-                if destination_entry is None:
-                    shutil.copy2(source_entry, destination / source_entry.name)
-                elif not destination_entry.is_file() or self._is_reparse(destination_entry):
+                if destination_entry is not None and (not destination_entry.is_file() or
+                                                       self._is_reparse(destination_entry)):
                     raise ValueError(f"Restore file/directory conflict: {source_entry.name}")
-                # The restored artifact wins when both trees contain the same file.
             else:
-                raise ValueError(f"Refusing to preserve a special file: {source_entry}")
+                raise ValueError(f"Refusing to restore a special file: {source_entry}")
+
+    def _publish_restore_overlay(self, source: Path, destination: Path,
+                                 lease: Optional[LeaseKeeper] = None) -> None:
+        destination.mkdir(parents=True, exist_ok=True)
+        for source_entry in source.iterdir():
+            if lease:
+                lease.ensure_owned()
+            destination_entry = destination / source_entry.name
+            if source_entry.is_dir():
+                self._publish_restore_overlay(source_entry, destination_entry, lease)
+                shutil.copystat(source_entry, destination_entry, follow_symlinks=False)
+            else:
+                # Replace only this save file. Never rename or delete the containing save directory.
+                durable_replace(source_entry, destination_entry)
 
     def _transaction_path(self, target: Path) -> Path:
         return target.parent / f".{target.name}.restore-transaction.json"
@@ -920,9 +930,7 @@ class RestoreAgent:
             if journal_path.exists() or indexed:
                 raise RuntimeError(f"Unresolved restore transaction exists for target: {journal_path}")
         staging = Path(tempfile.mkdtemp(prefix=f".{target_dir.name}.staging-", dir=str(target_dir.parent)))
-        backup = target_dir.parent / f".{target_dir.name}.backup-{uuid.uuid4().hex}"
-        transaction: Optional[Dict[str, Any]] = None
-        committed = False
+        published = False
         try:
             if zipfile.is_zipfile(archive_path):
                 self._extract_zip(archive_path, staging, lease)
@@ -935,64 +943,27 @@ class RestoreAgent:
                 if free < artifact_size:
                     raise OSError(f"Insufficient staging space: need {artifact_size} bytes, have {free}")
                 shutil.copy2(archive_path, staging / original_filename)
-            if target_dir.exists():
-                self._merge_existing_files(target_dir, staging, lease)
+            self._validate_restore_overlay(staging, target_dir, lease)
             if lease:
                 lease.ensure_owned()
             if self.stop_event.is_set():
                 raise InterruptedError("Restore cancelled before commit")
-            if task_id is not None and lease_token is not None and artifact_hash is not None:
-                transaction = {
-                    "task_id": task_id, "device_id": self.device_id, "lease_token": lease_token,
-                    "sha256": artifact_hash, "target": str(target_dir), "staging": str(staging),
-                    "backup": str(backup), "original_existed": target_dir.exists(), "phase": "staged",
-                }
-                self._register_transaction(journal_path)
-                self._write_transaction(journal_path, transaction, "staged")
             if lease:
                 lease.renew_now()
-            # Cancellation is deliberately ignored after this atomic commit sequence starts.
-            if target_dir.exists():
-                if transaction:
-                    self._write_transaction(journal_path, transaction, "backup_pending")
-                self._move_directory(target_dir, backup)
-                if transaction:
-                    self._write_transaction(journal_path, transaction, "backup_moved")
+            # Each file replacement is atomic. An interrupted task is safe to retry and cannot
+            # remove unrelated files or sibling directories from an overly broad save path.
             try:
-                if transaction:
-                    self._write_transaction(journal_path, transaction, "publish_pending")
-                self._move_directory(staging, target_dir)
-                committed = True
-                if transaction:
-                    self._write_transaction(journal_path, transaction, "published")
+                self._publish_restore_overlay(staging, target_dir, lease)
+                published = True
+                if task_id is not None and lease_token is not None and artifact_hash is not None:
                     self.queue_ack(task_id, True, lease_token=lease_token)
             except Exception as exc:
-                if backup.exists() and not target_dir.exists():
-                    self._move_directory(backup, target_dir)
-                    if staging.exists():
-                        shutil.rmtree(staging)
-                    if transaction:
-                        journal_path.unlink(missing_ok=True)
-                        self._forget_transaction(journal_path)
-                        transaction = None
-                elif committed:
+                if published:
                     raise CommitPublishedError(
                         f"Restore was published but durable acknowledgement could not be queued: {exc}") from exc
                 raise
-            if backup.exists():
-                try:
-                    shutil.rmtree(backup)
-                except Exception as exc:
-                    logging.warning("Restore committed, but old backup cleanup failed at %s: %s", backup, exc)
-            if transaction:
-                try:
-                    journal_path.unlink(missing_ok=True)
-                    self._forget_transaction(journal_path)
-                except Exception as exc:
-                    raise CommitPublishedError(
-                        f"Restore was published but transaction cleanup is pending: {exc}") from exc
         finally:
-            if not committed and staging.exists() and transaction is None:
+            if staging.exists():
                 shutil.rmtree(staging, ignore_errors=True)
 
     @staticmethod
