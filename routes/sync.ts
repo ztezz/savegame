@@ -84,8 +84,6 @@ async function isKnownDeviceForUser(userId: number, deviceId: string): Promise<b
             SELECT device_name FROM device_api_keys WHERE user_id = $1
             UNION
             SELECT device_name FROM restore_commands WHERE user_id = $1
-           UNION
-           SELECT device_name FROM sync_logs WHERE user_id = $1
          ) d
          WHERE d.device_name = $2
        ) AS known`,
